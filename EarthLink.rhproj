@@ -193,6 +193,14 @@
     {
       "id": "1a842a68-8013-53a5-b3be-a0fbeb7f4e6d",
       "uri": "shared/viewer/vendor/rapier.mjs"
+    },
+    {
+      "id": "bc3e682e-52c2-5f6a-93e5-7c8ba149c55c",
+      "uri": "shared/viewer/map-contacts.js"
+    },
+    {
+      "id": "6fc56c10-9ce4-5cf0-a9a4-e574b6852e8d",
+      "uri": "shared/viewer/walking.js"
     }
   ]
 }

@@ -8,3 +8,4 @@ test('courtyard is preserved when decomposed for Cesium 1.140',()=>{assert.ok(F)
 test('disconnected pieces do not cut the gap',()=>{assert.ok(F);const p=F.derive(mesh([[0,0,1,1],[10,0,1,1]]));assert.equal(area(p),2);assert.equal(p.some(r=>hit(r,5,.5)),false);});
 test('vertical and degenerate triangles make no map hole',()=>{assert.ok(F);assert.deepEqual(F.derive({schema:1,vertices:[[0,0,0],[0,0,1],[1,0,1]],indices:[0,1,2]}),[]);});
 test('invalid meshes fail instead of clipping their bounds',()=>{assert.ok(F);assert.throws(()=>F.derive({schema:1,vertices:[[0,0,0]],indices:[0,1,2]}));});
+test('a single projected triangle retains its exact area',()=>{assert.ok(F);assert.equal(area(F.derive({schema:1,vertices:[[0,0,0],[1,0,0],[0,1,0]],indices:[0,1,2]})),.5);});

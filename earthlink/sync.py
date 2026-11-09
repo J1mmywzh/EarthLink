@@ -18,7 +18,7 @@ from earthlink import env, views, core
 
 _STICKY = "earthlink_sync_timer"
 _S = {"doc_sn": None, "known": {}, "project": None, "last_cam": None, "was_linked": False,
-      "slow": 0.0, "anchor": None, "live": {}, "follow": set(), "sun_utc": None, "sun_seen": 0.0, "errors": 0}
+      "slow": 0.0, "anchor": None, "live": {}, "follow": set(), "sun_utc": None, "sun_linked": False, "sun_seen": 0.0, "errors": 0}
 
 
 def _doc():
@@ -243,33 +243,39 @@ def _sync_sun(doc):
     path = env.live_file("sun.json")
     f = env.read_json(path, {}) or {}
     rh = _utc_str(sun.GetDateTime(System.DateTimeKind.Utc))
-    if f.get("source") == "viewer" and f.get("t", 0) > _S["sun_seen"]:
+    project = core.project_id(doc)
+    state = (rh, bool(sun.Enabled))
+    if _S["sun_utc"] is None:    # Rhino owns the sun on first connection/reconnection.
+        t = time.time()
+        _S["sun_utc"], _S["sun_seen"] = state, t
+        env.write_json(path, {"utc": rh, "enabled": state[1], "project": project, "source": "rhino", "t": t})
+        env.save_settings({"sun_enabled": state[1], "sun_utc": rh})
+        return
+    if f.get("source") == "viewer" and f.get("project", project) == project and f.get("t", 0) > _S["sun_seen"]:
         _S["sun_seen"] = f["t"]
         u = f.get("utc", "")
         try:
             y, mo, d = int(u[0:4]), int(u[5:7]), int(u[8:10])
             h, mi = int(u[11:13]), int(u[14:16])
-            # Unspecified kind: Rhino would shift a Utc-kind DateTime into the computer's time zone a second time
             dt = System.DateTime(y, mo, d, h, mi, 0, System.DateTimeKind.Unspecified)
-
             def apply():
-                if f.get("tz") is not None:          # the viewer's clock offset, so Rhino's Sun panel shows the same time
+                if f.get("tz") is not None:
                     sun.TimeZone = float(f["tz"]) / 60.0
                     sun.DaylightSavingOn = False
                 sun.SetDateTime(dt, System.DateTimeKind.Utc)
+                if isinstance(f.get("enabled"), bool):
+                    sun.Enabled = f["enabled"]
             _change(sun, apply)
-            _S["sun_utc"] = _utc_str(sun.GetDateTime(System.DateTimeKind.Utc))
+            _S["sun_utc"] = (_utc_str(sun.GetDateTime(System.DateTimeKind.Utc)), bool(sun.Enabled))
         except Exception as ex:
             log("could not set the Rhino Sun: %s" % ex)
         return
-    if _S["sun_utc"] is None:
-        _S["sun_utc"] = rh
-        return
-    if rh != _S["sun_utc"]:                   # changed in Rhino's Sun panel
-        _S["sun_utc"] = rh
+    if state != _S["sun_utc"]:
+        _S["sun_utc"] = state
         t = time.time()
         _S["sun_seen"] = t
-        env.write_json(path, {"utc": rh, "source": "rhino", "t": t})
+        env.write_json(path, {"utc": rh, "enabled": state[1], "project": project, "source": "rhino", "t": t})
+        env.save_settings({"sun_enabled": state[1], "sun_utc": rh})
 
 
 # ------------------------------------------------------------------ timer
@@ -293,7 +299,11 @@ def _tick(sender, e):
                     _apply_requests(doc)
                     _watch_sets(doc)
                 _watch_live(doc)
-                if s.get("sync_sun", True) and _shown(doc):
+                sun_linked = bool(s.get("sync_sun", True) and _shown(doc))
+                if sun_linked and not _S.get("sun_linked"):
+                    _S["sun_utc"] = None
+                _S["sun_linked"] = sun_linked
+                if sun_linked:
                     _sync_sun(doc)
                 if s.get("sync_views", True) and _shown(doc):
                     pid = core.project_id(doc)
@@ -316,7 +326,7 @@ def start(doc):
     """Start (or retarget) syncing for `doc`. Safe to call repeatedly."""
     if _S["doc_sn"] != doc.RuntimeSerialNumber:
         _S.update(doc_sn=doc.RuntimeSerialNumber, known={}, project=None, last_cam=None, anchor=None,
-                  live={}, follow=set(), sun_utc=None, errors=0)
+                  live={}, follow=set(), sun_utc=None, sun_linked=False, errors=0)
     old = sc.sticky.get(_STICKY)
     if old is not None and old.get("sid") == id(_S):
         return

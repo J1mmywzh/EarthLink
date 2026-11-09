@@ -17,8 +17,8 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from earthlink import env  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
-                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles")
-VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js",
+                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
+VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js", "map-contacts.js",
                  "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/rapier.mjs",
                  "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt", "vendor/LICENSE-rapier.txt")
 
@@ -340,10 +340,23 @@ def serve(viewer_dir, port):
             elif path == "/api/anchor":
                 self._json(_anchor_request(data))
             elif path == "/api/sun":
-                sj = {"utc": str(data.get("utc", ""))[:20], "source": "viewer", "t": time.time()}
+                import datetime
+                enabled = data.get("enabled", env.load_settings().get("sun_enabled", True))
+                utc = data.get("utc")
+                try:
+                    if not isinstance(enabled, bool) or not isinstance(utc, str) or len(utc) != 20 or not utc.endswith("Z"):
+                        raise ValueError()
+                    datetime.datetime.strptime(utc, "%Y-%m-%dT%H:%M:%SZ")
+                    tz = data.get("tz")
+                    if tz is not None and (isinstance(tz, bool) or not isinstance(tz, (int,float)) or not -840 <= tz <= 840):
+                        raise ValueError()
+                except (ValueError, TypeError):
+                    return self._json({"error":"Invalid sun settings"}, 400)
+                sj = {"utc": utc, "enabled": enabled, "project": env.current_project(), "source": "viewer", "t": time.time()}
                 if isinstance(data.get("tz"), (int, float)):
                     sj["tz"] = int(data["tz"])
                 env.write_json(env.live_file("sun.json"), sj)
+                env.save_settings({"sun_enabled": enabled, "sun_utc": utc})
                 self._json({"ok": True})
             elif path == "/api/export_share":
                 self._json(_export_share(viewer_dir, bool(data.get("embed_token"))))

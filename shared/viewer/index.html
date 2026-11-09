@@ -73,7 +73,8 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--fg2); font-size: 12px; }
   .switch { position: relative; width: 42px; height: 25px; flex: none; }
-  .switch input { display: none; }
+  .switch input { position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;z-index:1;cursor:pointer; }
+  .switch input:focus-visible + span {outline:2px solid var(--accent);outline-offset:3px;}
   .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--fill-hover); transition: background .2s; cursor: pointer; }
   .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
   .switch input:checked + span { background: var(--green); }
@@ -86,10 +87,7 @@
   .stack button:hover { background: var(--fill); }
   .stack button.on { color: var(--accent); }
 
-  #timebar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 6; border-radius: 999px; padding: 8px 16px; display: flex; align-items: center; gap: 12px; width: min(520px, calc(100% - 360px)); min-width: 300px; }
-  #timebar input[type=date] { background: transparent; padding: 2px 0; width: 120px; }
   #hourLbl { min-width: 44px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-  #timebar .sun { color: var(--orange); }
 
   .pop { position: absolute; top: 12px; right: 64px; width: 320px; border-radius: 14px; z-index: 7; padding: 14px 16px 16px; display: none; max-height: calc(100% - 24px); overflow-y: auto; }
   .pop.open { display: block; }
@@ -123,7 +121,7 @@
   .cesium-widget-credits { left: auto !important; right: 12px !important; bottom: 6px !important; }
   body.picking .cesium-widget canvas { cursor: crosshair; }
   body.measuring .cesium-widget canvas { cursor: crosshair; }
-  @media (max-width: 760px) { #sidebar { width: calc(100% - 76px); } #timebar { width: calc(100% - 24px); min-width: 0; bottom: 12px; } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
+  @media (max-width: 760px) { #sidebar { width: calc(100% - 76px); } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
 </style>
 </head>
 <body>
@@ -180,18 +178,18 @@
         <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
         <div class="item" id="fovRow"><span class="grow">Lens</span><span class="val" id="fovLbl"></span></div>
         <div class="item" id="fovSlider"><input type="range" id="fov" min="15" max="100" step="1"></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino viewport</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync named views</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync sun with Rhino</div></span><label class="switch"><input type="checkbox" id="syncSun"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync views</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
+        
       </div>
     </div>
     <div class="group">
-      <div class="ghead">Site <button id="editSite" class="link rhinoOnly">Edit Location</button></div>
+      <div class="ghead">Site <button id="editSite" class="link rhinoOnly">Edit</button></div>
       <div class="card">
-        <div class="item"><span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-pin"/></svg></span><span class="grow"><div class="t" id="siteLatLon">—</div><div class="s" id="siteInfo"></div></span></div>
-        <div class="item"><span class="grow">Height adjustment</span><span class="val" id="hval"></span></div>
+        <div class="item"><span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-pin"/></svg></span><span class="grow"><div class="t" id="siteLatLon">—</div></span></div>
+        <div class="item"><span class="grow">Height</span><span class="val" id="hval"></span></div>
         <div class="item"><div class="row" style="gap:6px"><button class="pill" data-n="-1">−1 m</button><button class="pill" data-n="-0.1">−0.1</button><button class="pill" data-n="0.1">+0.1</button><button class="pill" data-n="1">+1 m</button></div></div>
-        <div class="item"><span class="grow s" id="hinfo"></span><button class="link" id="resample">Re-sample</button></div>
+        <div class="item"><button class="link" id="resample">Re-sample</button></div>
       </div>
     </div>
   </div>
@@ -200,7 +198,7 @@
 <div id="controls">
   <div class="stack glass"><button id="toggleSide" title="Show or hide the sidebar"><svg class="i"><use href="#i-side"/></svg></button></div>
   <div class="stack glass">
-    <button id="shadows" title="Shadows"><svg class="i"><use href="#i-sun"/></svg></button>
+    <button id="shadows" title="Sun" aria-label="Sun"><svg class="i"><use href="#i-sun"/></svg></button>
     <button id="clip" title="Hide map under model"><svg class="i"><use href="#i-cut"/></svg></button>
     <button id="measureBtn" title="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
   </div>
@@ -281,11 +279,15 @@
   <div class="row" style="margin-top:14px; justify-content:flex-end"><button class="pill" id="siteCancel">Cancel</button><button class="primary" id="siteApply" disabled>Apply to Rhino</button></div>
 </div>
 
-<div id="timebar" class="glass">
-  <svg class="i sun"><use href="#i-sun"/></svg>
-  <input type="date" id="date">
-  <input type="range" id="hour" min="300" max="1260" step="5" style="flex:1">
-  <span id="hourLbl"></span>
+<div id="sunCard" class="glass pop">
+  <h3>Sun <button class="mini" data-close="sunCard" aria-label="Close sun"><svg class="i"><use href="#i-x"/></svg></button></h3>
+  <div class="item"><span class="grow">Sunlight</span><label class="switch"><input id="sunOn" type="checkbox" aria-label="Sunlight"><span></span></label></div>
+  <div id="sunControls">
+    <label class="navLabel" for="date">Date</label><input type="date" id="date" aria-label="Date" style="width:100%">
+    <label class="navLabel" for="hour">Time <span class="val" id="hourLbl"></span></label><input type="range" id="hour" aria-label="Time" min="0" max="1439" step="1" style="width:100%">
+    <div class="item"><span class="grow">Shadows</span><label class="switch"><input id="castShadows" type="checkbox" aria-label="Shadows"><span></span></label></div>
+  </div>
+  <div class="item rhinoOnly"><span class="grow">Sync with Rhino</span><label class="switch"><input type="checkbox" id="syncSun" aria-label="Sync sun with Rhino"><span></span></label></div>
 </div>
 
 <div id="toast" class="glass"></div>
@@ -308,6 +310,8 @@
 </div></div>
 
 <script src="./navigation.js"></script>
+<script src="./walking.js"></script>
+<script src="./map-contacts.js"></script>
 <script>
 (async () => {
   const $ = id => document.getElementById(id);
@@ -395,13 +399,14 @@
       tileset.shadows = Cesium.ShadowMode.ENABLED;
       scene.primitives.add(tileset);
       scene.globe.show = false;
-    } catch (e) { msg("3D tiles failed to load: " + e.message + " — check the token/key (EarthLinkSettings in Rhino).", 9000); }
+    } catch (e) { msg("Map unavailable. Check your token.", 6000); }
   }
 
   let S = await api("/api/settings");
-  const saveS = patch => { Object.assign(S, patch); api("/api/settings", patch); };
+  let settingsWrites=Promise.resolve();
+  const saveS = patch => { Object.assign(S,patch);settingsWrites=settingsWrites.catch(()=>{}).then(()=>api("/api/settings",patch)).catch(()=>msg("Could not save changes."));return settingsWrites; };
   let nav = null, walk = null;
-  let rhinoCam = null;   // last camera Rhino sent (Follow Rhino viewport)
+  let rhinoCam = null;   // last camera Rhino sent (Follow Rhino)
 
   // segmented control helper
   const seg = (id, value, onPick) => {
@@ -411,34 +416,44 @@
     sel(value); return sel;
   };
 
-  // ---------------------------------------------------------------- sun (two-way with Rhino's Sun)
-  const localISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  $("date").value = store.get("date") || localISO(new Date());
-  $("hour").value = store.get("hour") ?? 900;
-  let sunPost = null;
-  function applySun(fromRhino = false) {
-    const m = +$("hour").value, hh = String(Math.floor(m / 60)).padStart(2, "0"), mm = String(m % 60).padStart(2, "0");
-    $("hourLbl").textContent = `${hh}:${mm}`;
-    const d = new Date(`${$("date").value}T${hh}:${mm}:00`);
-    if (isNaN(d)) return;
-    viewer.clock.currentTime = Cesium.JulianDate.fromDate(d);
-    store.set("date", $("date").value); store.set("hour", m);
-    if (!fromRhino && RHINO && S.sync_sun !== false) {
-      clearTimeout(sunPost);
-      sunPost = setTimeout(() => api("/api/sun", { utc: d.toISOString().slice(0, 19) + "Z", tz: -d.getTimezoneOffset() }), 400);
-    }
+  // Sunlight is one state; shadow casting is a subordinate display preference.
+  const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  $("date").value=store.get("date")||localISO(new Date());$("hour").value=store.get("hour")??900;
+  let sunPost=null;
+  const neutralLight=new Cesium.DirectionalLight({direction:viewer.camera.directionWC.clone(),intensity:2});
+  function applyShadows(){
+    const on=S.sun_enabled!==false;
+    viewer.shadows=on&&S.shadows!==false;scene.globe.enableLighting=on;
+    scene.light=on?new Cesium.SunLight():neutralLight;
+    if(scene.sun)scene.sun.show=on;
+    $("sunOn").checked=on;$("castShadows").checked=S.shadows!==false;
+    $("sunControls").classList.toggle("hide",!on);$("shadows").classList.toggle("on",on);
   }
-  function sunFromUtc(utc) {
-    const d = new Date(utc); if (isNaN(d)) return;
-    $("date").value = localISO(d); $("hour").value = d.getHours() * 60 + d.getMinutes();
+  function applySun(fromRhino=false,postEnabled=false){
+    clearTimeout(sunPost);sunPost=null;
+    const m=+$("hour").value,hh=String(Math.floor(m/60)).padStart(2,"0"),mm=String(m%60).padStart(2,"0");
+    $("hourLbl").textContent=`${hh}:${mm}`;
+    const d=new Date(`${$("date").value}T${hh}:${mm}:00`);if(isNaN(d))return;
+    const utc=d.toISOString().slice(0,19)+"Z";
+    if(S.sun_enabled!==false)viewer.clock.currentTime=Cesium.JulianDate.fromDate(d);
+    store.set("date",$("date").value);store.set("hour",m);applyShadows();
+    if(!fromRhino){saveS({sun_utc:utc});if(RHINO&&S.sync_sun!==false&&(S.sun_enabled!==false||postEnabled)){
+      const payload={utc,enabled:S.sun_enabled!==false,tz:-d.getTimezoneOffset()};
+      sunPost=setTimeout(()=>{sunPost=null;if(S.sync_sun!==false)api("/api/sun",payload).catch(()=>msg("Rhino disconnected."));},postEnabled?0:400);
+    }}
+  }
+  function sunFromUtc(utc,enabled){
+    if(typeof enabled==="boolean")S.sun_enabled=enabled;
+    const d=new Date(utc);if(!isNaN(d)){$("date").value=localISO(d);$("hour").value=d.getHours()*60+d.getMinutes();S.sun_utc=utc;}
     applySun(true);
   }
-  $("date").oninput = $("hour").oninput = () => applySun(false);
-  applySun(true);
-  if (RHINO && S.sync_sun !== false) { const sj = await api("/api/sun"); if (sj && sj.utc) sunFromUtc(sj.utc); }   // start from the shared sun, whoever set it last
-  const applyShadows = () => { viewer.shadows = !!S.shadows; $("shadows").classList.toggle("on", !!S.shadows); };
-  $("shadows").onclick = () => { saveS({ shadows: !S.shadows }); applyShadows(); };
-  applyShadows();
+  $("date").oninput=$("hour").oninput=()=>applySun(false);
+  $("sunOn").onchange=()=>{saveS({sun_enabled:$("sunOn").checked});applySun(false,true);};
+  $("castShadows").onchange=()=>{saveS({shadows:$("castShadows").checked});applyShadows();};
+  $("shadows").onclick=()=>{const open=!$("sunCard").classList.contains("open");closePops("sunCard");$("sunCard").classList.toggle("open",open);};
+  if(S.sun_utc)sunFromUtc(S.sun_utc,S.sun_enabled);else applySun(true);
+  if(RHINO&&S.sync_sun!==false){const j=await api("/api/sun");if(j?.utc)sunFromUtc(j.utc,j.enabled);}
+  scene.preRender.addEventListener(()=>{if(S.sun_enabled===false)Cesium.Cartesian3.clone(viewer.camera.directionWC,neutralLight.direction);});
 
   // ---------------------------------------------------------------- lens & projection (perspective / two-point / parallel)
   // Two-point keeps the camera axis level and shifts the lens (like a shift lens), so verticals stay vertical.
@@ -513,6 +528,7 @@
       }
     }
     selProj(p);
+    if(nav)nav.adopt();
   }
   scene.preRender.addEventListener(() => {   // keep two-point level while orbiting
     if (projection !== "two_point" || isOrtho()) return;
@@ -528,7 +544,7 @@
     if (isOrtho()) return;
     const v = vfov(), deg = Cesium.Math.toDegrees(v);
     $("fov").value = Math.round(deg);
-    $("fovLbl").textContent = `${deg.toFixed(0)}° · ${(12 / Math.tan(v / 2)).toFixed(0)} mm`;   // 35 mm equivalent (24 mm frame height)
+    $("fovLbl").textContent = `${(12 / Math.tan(v / 2)).toFixed(0)} mm`;   // 35 mm equivalent (24 mm frame height)
   }
   $("fov").oninput = () => setVfov(Cesium.Math.toRadians(+$("fov").value));
   let keepL = null;
@@ -563,12 +579,9 @@
   function showSite() {
     const a = anchor();
     $("hval").textContent = (S.nudge >= 0 ? "+" : "") + (S.nudge || 0).toFixed(2) + " m";
-    if (!a) { $("siteLatLon").textContent = "No site location yet"; $("siteInfo").textContent = ""; return; }
+    if (!a) { $("siteLatLon").textContent = "No location"; return; }
     $("siteLatLon").textContent = `${a.lat.toFixed(6)}, ${a.lon.toFixed(6)}`;
-    const rot = ((90 - a.north) % 360 + 360) % 360;
-    $("siteInfo").textContent = `${a.zero === "GroundLevel" ? "ground" : a.zero === "MeanSeaLevel" ? "sea level" : a.zero} ${a.elev} m · model turned ${rot.toFixed(1)}°`;
-    $("hinfo").textContent = a.zero === "MeanSeaLevel" ? `geoid offset ${S.geoid_offset} m`
-      : a.zero === "GroundLevel" ? `ground ${S.ground_h == null ? "not sampled" : S.ground_h.toFixed(2) + " m"}` : "";
+
   }
 
   async function tilesSettled(maxMs) {
@@ -601,7 +614,7 @@
       }
       const hs = (await scene.sampleHeightMostDetailed(pts, Object.values(models))).map(c => c && c.height).filter(Number.isFinite).sort((x, y) => x - y);
       if (hs.length) { saveS({ ground_h: hs[Math.floor(hs.length / 2)] }); msg(""); }
-      else msg("No ground found around the site — use the height buttons.");
+      else msg("No ground found. Adjust Height.");
     } catch (e) { msg("Ground sampling failed: " + e.message); }
     if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = wasClip;
     placeModels(); showSite();
@@ -617,6 +630,7 @@
     return [T, Tp, R, Tn].reduce((a, b) => Cesium.Matrix4.multiply(a, b, new Cesium.Matrix4()));
   }
   function placeModels() {
+    if(walk)walk.exit();
     if (!anchor()) return;
     const M = frame();
     for (const [n, m] of Object.entries(models)) m.modelMatrix = Cesium.Matrix4.multiply(M, offsetMatrix(n), new Cesium.Matrix4());
@@ -694,6 +708,7 @@
   }
   function applySection() {
     const on = $("sectionOn").checked;
+    if(on&&walk)walk.exit();
     $("sectionRow").classList.toggle("hide", !on);
     const [lo, hi] = zRange(), h = lo + (hi - lo) * +$("sectionH").value;
     $("sectionLbl").textContent = `${h.toFixed(2)} m`;
@@ -707,6 +722,7 @@
 
   // ---------------------------------------------------------------- design sets
   async function loadMeta(m) {
+    if(walk)walk.exit();
     const first = !meta;
     const projectChanged = meta && meta.project !== m.project;
     meta = m;
@@ -769,12 +785,14 @@
     }
   }
   function setHidden(n, h) {
+    if(walk)walk.exit();
     const hid = hidden(); h ? hid.add(n) : hid.delete(n);
     saveS({ hidden_sets: [...hid] });
     if (models[n]) models[n].show = !h;
     renderSets(); applyClip(); applySection();
   }
-  $("flipSets").onclick = () => {   // compare: solo each set in turn
+  $("flipSets").onclick = () => {
+    if(walk)walk.exit();   // compare: solo each set in turn
     const names = Object.keys(meta.sets || {}); if (names.length < 2) return;
     const vis = names.filter(n => !hidden().has(n));
     const next = vis.length === 1 ? names[(names.indexOf(vis[0]) + 1) % names.length] : names[0];
@@ -815,6 +833,7 @@
              ...getLens(), date: $("date").value, minutes: +$("hour").value, saved_at: new Date().toISOString() };
   }
   function applyView(v, duration = 0) {
+    if(walk)walk.exit();
     if (!anchor()) return;
     const M = frame();
     if (v.date) $("date").value = v.date;
@@ -852,14 +871,14 @@
       if (RHINO) {
         const [ren, upd, del] = li.querySelectorAll("button");
         ren.onclick = async e => { e.stopPropagation();
-          const nn = await ask({ title: "Rename View", text: S.sync_views !== false ? "The Rhino named view is renamed too." : "", value: v.name, ok: "Rename" });
+          const nn = await ask({ title: "Rename View",  value: v.name, ok: "Rename" });
           if (!nn || nn === v.name) return;
           const r = await api("/api/views", { op: "rename", name: v.name, new: nn });
           if (r.error) return msg(r.error);
           refreshViews(); };
         upd.onclick = async e => { e.stopPropagation(); await api("/api/views", { op: "put", view: captureCamera(v.name) }); refreshViews(); msg(`Updated “${v.name}”`); };
         del.onclick = async e => { e.stopPropagation();
-          if (await ask({ title: `Delete “${v.name}”?`, text: S.sync_views !== false ? "It is also removed from Rhino's named views." : "", ok: "Delete", danger: true })) {
+          if (await ask({ title: `Delete “${v.name}”?`,  ok: "Delete", danger: true })) {
             await api("/api/views", { op: "delete", name: v.name }); refreshViews(); } };
       }
       $("views").appendChild(li);
@@ -879,6 +898,7 @@
   let picking = false, picked = null, marker = null;
   const geocoder = cfg.ion_token ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE }) : null;
   function openSite(first) {
+    if(walk)walk.exit();
     picking = true; picked = null; $("rot").value = 0; $("rotLbl").textContent = "0°";
     document.body.classList.add("picking");
     $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
@@ -927,7 +947,7 @@
       }
       return;
     }
-    if (!geocoder) return msg("Place search needs a Cesium ion token — enter “lat, lon” instead.");
+    if (!geocoder) return msg("Enter coordinates, or connect Cesium for search.");
     try {
       const res = await geocoder.geocode(q);
       if (!res.length) return msg("No place found.");
@@ -940,7 +960,7 @@
     if (picked) Object.assign(body, { lat: picked.lat, lon: picked.lon, ground_h: picked.h });
     const r = await api("/api/anchor", body);
     if (r.error) return msg(r.error);
-    msg("Sent to Rhino — the EarthAnchorPoint updates and the model is re-sent.", 6000);
+    msg("Updating Rhino…", 6000);
     closeSite();
   };
 
@@ -965,7 +985,7 @@
     $("setRot").value = o.rot; $("setRotLbl").textContent = `${(+o.rot).toFixed(1)}°`;
     $("setApply").disabled = !(o.dx || o.dy || o.dz || o.rot) || o.applied;
   }
-  function openSetCard(n) { editing = n; closePops("setCard"); $("setCard").classList.add("open"); showSetCard(); }
+  function openSetCard(n) { if(walk)walk.exit(); editing = n; closePops("setCard"); $("setCard").classList.add("open"); showSetCard(); }
   function closeSetCard() {
     editing = null; setDrag(false);
     $("setCard").classList.remove("open");
@@ -996,7 +1016,7 @@
     const r = await api("/api/sets", { op: "move", name: editing, dx: o.dx, dy: o.dy, dz: o.dz, rot: o.rot, pivot: o.pivot });
     if (r.error) return msg(r.error);
     o.applied = true; showSetCard();
-    msg(`Moving “${editing}” in Rhino — Undo there reverts it`, 5000);
+    msg("Updating Rhino…", 5000);
   };
   const setDrag = on => {   // while on, dragging anywhere moves the set; map navigation pauses
     $("dragOn").checked = on;
@@ -1018,6 +1038,7 @@
   let measuring = false, mPts = [], mEnt = null;
   function clearMeasure() { mPts = []; if (mEnt) { viewer.entities.remove(mEnt); mEnt = null; } $("measureLbl").style.display = "none"; }
   $("measureBtn").onclick = () => {
+    if(walk)walk.exit();
     measuring = !measuring; $("measureBtn").classList.toggle("on", measuring); document.body.classList.toggle("measuring", measuring);
     if (!measuring) clearMeasure(); 
   };
@@ -1029,6 +1050,7 @@
   // ---------------------------------------------------------------- clicks (site picking, measuring)
   const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
   handler.setInputAction(e => {
+    if(walk?.placing){placeWalker(e.position);return;}
     if (!picking && !measuring) return;
     const p = scene.pickPositionSupported ? scene.pickPosition(e.position) : undefined;
     if (!p) return msg("Click on the map surface");
@@ -1201,7 +1223,7 @@
     const [w, h] = targetSize(), passes = selectedPasses();
     if (!passes.length) { msg("Pick at least one pass."); return []; }
     const maxRb = scene.context.maximumRenderbufferSize || 8192;
-    if (w > maxRb || h > maxRb) { msg(`This browser/GPU renders up to ${maxRb}px per side.`); return []; }
+    if (w > maxRb || h > maxRb) { msg(`Use an image size below ${maxRb}px.`); return []; }
     const stage = $("cesium"), [cw, ch] = fitBox(w, h), lens = getLens();
     const keepScale = viewer.resolutionScale, keepSSE = tileset ? tileset.maximumScreenSpaceError : null;
     stage.style.width = cw + "px"; stage.style.height = ch + "px";
@@ -1212,7 +1234,7 @@
     try {
       const cam = captureCamera(viewName || "Current view");
       for (const pass of passes) {
-        $("busyText").textContent = `Capturing ${viewName ? "“" + viewName + "” · " : ""}${pass} · ${w}×${h}…`;
+        $("busyText").textContent = "Capturing…";
         const png = await renderPass(w, h, pass);
         const camera = { ...cam, pass, width: w, height: h, anchor: anchor(), model: meta.name, sets: visibleSets(),
                          frame: "pos/dir/up in metres east/north/up from the Rhino EarthAnchorPoint; vfov = vertical field of view (rad)" };
@@ -1237,7 +1259,7 @@
     try {
       if (!list) files.push(...await capture(null, sink));
       else for (const v of list) { applyView(v, 0); await sleep(150); files.push(...await capture(v.name, sink)); }
-      msg(files.length ? `Saved ${files.length} image(s)${sink.kind === "download" ? " to your browser's downloads" : ""} — ${files[files.length - 1]}` : "");
+      msg(files.length ? `Saved ${files.length} image${files.length===1?"":"s"}.` : "");
     } catch (e) { msg("Capture failed: " + e.message); }
     $("busy").style.display = "none"; $("snap").disabled = $("snapAll").disabled = false;
   }
@@ -1246,7 +1268,7 @@
 
   const selSave = seg("saveSeg", RHINO ? (S.save_mode || "folder") : "ask", v => {
     saveS({ save_mode: v }); showSaveUi();
-    if (v === "ask" && !window.showSaveFilePicker) msg("This browser can't open a save dialog for pages — images go to its Downloads (set the browser to ask). Chrome and Edge show the dialog.", 7000);
+    if (v === "ask" && !window.showSaveFilePicker) msg("Images will save to Downloads.", 7000);
   });
   function showSaveUi() {
     $("saveSeg").classList.toggle("hide", !RHINO);
@@ -1255,14 +1277,14 @@
     $("folderPath").textContent = S.snapshot_dir || ""; $("folderPath").title = S.snapshot_dir || "";
   }
   $("changeFolder").onclick = async () => {
-    msg("Choose a folder in the dialog…", 15000);
+    msg("Choose a folder…", 15000);
     const r = await api("/api/choose_folder", {});
     S.snapshot_dir = r.snapshot_dir; showSaveUi();
     msg(r.changed ? "Default folder updated." : "");
   };
   $("openFolder").onclick = () => api("/api/open_snapshots", {});
   $("shareBtn").onclick = async () => {
-    const embed = await ask({ title: "Share this scheme", text: "Exports a folder (zip) with this viewer, the current sets and views, to put on any static web host. Include your map token so visitors don't need one? If you do, restrict the token to that site in Cesium ion.",
+    const embed = await ask({ title: "Share this scheme", text: "Include your map token? Restrict it to the shared site.",
       ok: "Without token", extra: { label: "Include token", value: "embed" } });
     if (!embed) return;
     const r = await api("/api/export_share", { embed_token: embed === "embed" });
@@ -1292,33 +1314,36 @@
     const s = await api("/api/settings").catch(() => null); if (!s || typeof s !== "object") return;
     Object.assign(S, { link_viewport: !!s.link_viewport, sync_views: s.sync_views !== false, sync_sun: s.sync_sun !== false });
     $("follow").checked = S.link_viewport; $("syncViews").checked = S.sync_views; $("syncSun").checked = S.sync_sun;
+    if(S.sync_sun===false){clearTimeout(sunPost);sunPost=null;}
   }
   window.addEventListener("focus", syncToggles);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncToggles(); });
   ["follow", "syncViews", "syncSun"].forEach(id => $(id).addEventListener("change", () => { toggledAt = Date.now(); }));
   $("follow").onchange = async () => {
+    if(walk)walk.exit();
     saveS({ link_viewport: $("follow").checked });
-    msg($("follow").checked ? "Following Rhino's active viewport" : "Free camera");
+
     if ($("follow").checked && anchor()) { const c = await api("/api/camera"); if (c && c.pos) applyView(c, 0); }
   };
   $("syncViews").onchange = () => saveS({ sync_views: $("syncViews").checked });
-  $("syncSun").onchange = () => { saveS({ sync_sun: $("syncSun").checked }); if ($("syncSun").checked) applySun(false); };
+  $("syncSun").onchange = async () => { clearTimeout(sunPost);saveS({sync_sun:$("syncSun").checked});if($("syncSun").checked){const j=await api("/api/sun");if(j.source==="rhino")sunFromUtc(j.utc,j.enabled);} };
   restyle(); showSite(); showFov();
 
   // One site-local camera owns every navigation control and gesture.
   let orbit = null, pointer = null;
   const cameraCanvas = scene.canvas;
   const array = v => [v.x, v.y, v.z];
-  const navigationAllowed = () => !!anchor() && !picking && !measuring && !$("dragOn").checked && !$("busy").offsetParent && !$("ask").classList.contains("open");
+  const navigationAllowed = () => !walk && !!anchor() && !picking && !measuring && !$("dragOn").checked && !$("busy").offsetParent && !$("ask").classList.contains("open");
   const freeCamera = () => {
     if (S.link_viewport) { saveS({link_viewport:false}); $("follow").checked=false; toggledAt=Date.now(); }
     viewer.camera.cancelFlight();
   };
   function navLabels() {
+    if(walk?.body){$("tiltTitle").textContent="Look";$("navTilt").min=-85;$("navTilt").max=85;$("navTilt").value=walk.pitch;$("navTilt").setAttribute("aria-label","Look");$("tiltValue").textContent=`${walk.pitch.toFixed(0)}°`;$("navHeading").value=((walk.heading%360)+360)%360;$("headingValue").textContent=`${Math.round(+$("navHeading").value)}°`;return;}
     if (!orbit) return;
     const two=projection==="two_point";
     $("tiltTitle").textContent=two?"Vertical framing":"Tilt";
-    $("navTilt").min=two?10:0;
+    $("navTilt").min=two?10:0;$("navTilt").max=85;
     $("navTilt").value=orbit.tilt;
     $("navTilt").setAttribute("aria-label",two?"Vertical framing":"Tilt");
     $("tiltValue").textContent=`${(two?orbit.tilt-90:orbit.tilt).toFixed(0)}°`;
@@ -1349,29 +1374,132 @@
       scene.requestRender();navLabels();
     },
     fit() {
-      if(!navigationAllowed())return;
-      if(walk)walk.exit(); freeCamera();if(!orbit&&!nav.adopt())return;
+      if(walk)walk.exit();
+      if(!navigationAllowed())return; freeCamera();if(!orbit&&!nav.adopt())return;
       const bs=modelsSphere();if(!bs)return;
       orbit.target=toLocal(frame(),bs.center);orbit.distance=Math.max(.1,bs.radius/Math.sin((vfov()||.7)/2)*1.15);
       orbit.halfHeight=Math.max(.1,bs.radius*1.15/Math.min(1,aspect()));orbit.projection=projection;nav.apply();
     },
     zoom(factor) {if(!navigationAllowed()||walk)return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.zoom(factor);nav.apply();}
   };
-  $("navBtn").onclick=()=>{nav.adopt();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
-  $("northBtn").onclick=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.north();nav.apply();};
-  $("navHeading").oninput=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.heading=+$("navHeading").value;nav.apply();};
-  $("navTilt").oninput=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.tilt=+$("navTilt").value;nav.apply();};
+  $("navBtn").onclick=()=>{if(!walk)nav.adopt();else navLabels();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
+  $("northBtn").onclick=()=>{if(walk?.body){walk.heading=0;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.north();nav.apply();};
+  $("navHeading").oninput=()=>{if(walk?.body){walk.heading=+$("navHeading").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.heading=+$("navHeading").value;nav.apply();};
+  $("navTilt").oninput=()=>{if(walk?.body){walk.pitch=+$("navTilt").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.tilt=+$("navTilt").value;nav.apply();};
   $("inputDevice").value=store.get("inputDevice")||(/Mac/.test(navigator.platform)?"trackpad":"auto");
   $("inputDevice").onchange=()=>store.set("inputDevice",$("inputDevice").value);
   $("zoomIn").onclick=()=>nav.zoom(.8);$("zoomOut").onclick=()=>nav.zoom(1.25);
-  $("walkBtn").onclick=()=>msg("Walk is being tested.");
+  function walkMesh(){
+    const vertices=[],indices=[];
+    for(const name of visibleSets()){
+      const g=models[name]._elGeometry;if(!g)throw Error("Resend the model to walk.");
+      const offset=offsetMatrix(name),start=vertices.length;
+      for(const p of g.vertices)vertices.push(array(Cesium.Matrix4.multiplyByPoint(offset,new Cesium.Cartesian3(...p),new Cesium.Cartesian3())));
+      for(const i of g.indices)indices.push(i+start);
+    }
+    return{schema:1,vertices,indices};
+  }
+  function beginWalk(){
+    if(walk){walk.exit();return;}
+    if(!anchor())return msg("Send a model first.");
+    if($("sectionOn").checked)return msg("Turn off the section cut to walk.");
+    if(picking)closeSite();if(editing)closeSetCard();
+    measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");
+    freeCamera();closePops();
+    const returning=captureCamera(""),state={placing:true,keys:new Set(),body:null,cache:new Map(),context:null,pending:false,last:performance.now(),heading:0,pitch:0};
+    state.exit=()=>{
+      if(walk!==state)return;walk=null;state.body?.free();document.body.classList.remove("picking");
+      $("walkBtn").classList.remove("on");$("walkBtn").setAttribute("aria-pressed","false");
+      const {date,minutes,...camera}=returning;applyView(camera,0);pointer=null;
+    };
+    walk=state;$("walkBtn").classList.add("on");$("walkBtn").setAttribute("aria-pressed","true");$("walkBtn").blur();
+    document.body.classList.add("picking");msg("Choose a surface.",2200);
+  }
+  async function mapContacts(state,feet){
+    if(!tileset)return null;
+    if(typeof scene.pickFromRayMostDetailed!=="function")throw Error("Walk is unavailable in this browser.");
+    const M=frame(),exclude=Object.values(models);
+    const query=async(origin,direction,max)=>{
+      const ray=new Cesium.Ray(toWorld(M,origin),Cesium.Cartesian3.normalize(toWorld(M,direction,true),new Cesium.Cartesian3()));
+      const result=await scene.pickFromRayMostDetailed(ray,exclude,.05);
+      return result?.position?toLocal(M,result.position):null;
+    };
+    let timer;
+    try{return await Promise.race([EarthLinkMapContacts.sample(feet,query,state.cache),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Surface unavailable.")),5000);})]);}
+    finally{clearTimeout(timer);}
+  }
+  async function placeWalker(screen){
+    const state=walk;if(!state?.placing||state.pending)return;
+    const point=scene.pickPositionSupported?scene.pickPosition(screen):null;
+    if(!point)return msg("Choose a solid surface.");
+    state.pending=true;$("busyText").textContent="Loading…";$("busy").style.display="flex";
+    try{
+      const feet=toLocal(frame(),point),mesh=walkMesh(),context=await mapContacts(state,feet);
+      if(walk!==state)return;
+      const body=await EarthLinkWalking.create(mesh,{feet,context});
+      if(walk!==state){body.free();return;}
+      const camera=captureCamera("");state.heading=Math.atan2(camera.dir[0],camera.dir[1])*180/Math.PI;state.pitch=0;
+      state.body=body;state.context=context;state.contextTime=performance.now();state.placing=false;state.last=performance.now();
+      setProjection("perspective");state.eyeZ=body.eye[2];document.body.classList.remove("picking");msg("");drawWalk();
+    }catch(error){if(walk===state)msg(error.message==="Not enough room"?"Choose a clear surface.":error.message);}
+    finally{state.pending=false;$("busy").style.display="none";}
+  }
+  function drawWalk(dt=0){
+    if(!walk?.body)return;const eye=walk.body.eye;
+    if(walk.body.grounded&&dt&&Math.abs(eye[2]-walk.eyeZ)<.3)walk.eyeZ+=(eye[2]-walk.eyeZ)*(1-Math.exp(-dt*14));else walk.eyeZ=eye[2];
+    eye[2]=walk.eyeZ;navLabels();
+    const h=walk.heading*Math.PI/180,p=walk.pitch*Math.PI/180,M=frame();
+    const dir=[Math.sin(h)*Math.cos(p),Math.cos(h)*Math.cos(p),Math.sin(p)],up=[-Math.sin(h)*Math.sin(p),-Math.cos(h)*Math.sin(p),Math.cos(p)];
+    viewer.camera.setView({destination:toWorld(M,eye),orientation:{direction:toWorld(M,dir,true),up:toWorld(M,up,true)}});
+  }
+  async function refreshContacts(state){
+    state.pending=true;const feet=state.body.feet;
+    try{const next=await mapContacts(state,feet);if(walk===state&&next){state.body.updateContext(next);state.context=next;state.contextTime=performance.now();}}
+    catch(error){if(walk===state)state.contextTime=0;}
+    finally{state.pending=false;}
+  }
+  const stopWalkingInput=()=>{if(walk){walk.keys.clear();walk.jump=false;walk.last=performance.now();}};
+  window.addEventListener("blur",stopWalkingInput);
+  document.addEventListener("focusin",e=>{if(e.target.closest("input,textarea,select,button"))stopWalkingInput();});
+  document.addEventListener("keydown",e=>{
+    if(!walk||e.target.closest("input,textarea,select,[contenteditable=true]"))return;
+    if(e.code==="Escape"){e.preventDefault();walk.exit();return;}
+    if(!walk.body||!["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowLeft","ArrowDown","ArrowRight","ShiftLeft","ShiftRight","Space"].includes(e.code))return;
+    e.preventDefault();walk.keys.add(e.code);if(e.code==="Space"&&!e.repeat)walk.jump=true;
+  });
+  document.addEventListener("keyup",e=>{walk?.keys.delete(e.code);});
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)stopWalkingInput();});
+  scene.preUpdate.addEventListener(()=>{
+    const state=walk;if(!state?.body)return;
+    const now=performance.now(),dt=Math.min(.1,(now-state.last)/1000);state.last=now;
+    if(document.hidden||$("busy").offsetParent)return;
+    const k=state.keys,h=state.heading*Math.PI/180;
+    const forward=Number(k.has("KeyW")||k.has("ArrowUp"))-Number(k.has("KeyS")||k.has("ArrowDown"));
+    const right=Number(k.has("KeyD")||k.has("ArrowRight"))-Number(k.has("KeyA")||k.has("ArrowLeft"));
+    const input={x:forward*Math.sin(h)+right*Math.cos(h),y:forward*Math.cos(h)-right*Math.sin(h),sprint:k.has("ShiftLeft")||k.has("ShiftRight"),jump:!!state.jump};
+    const feet=state.body.feet,moving=!!(forward||right),speed=input.sprint?3.8:1.4;
+    if(tileset){
+      const context=state.context,delta=context?Math.max(Math.abs(feet[0]-context.center[0]),Math.abs(feet[1]-context.center[1])):Infinity;
+      if(!state.pending&&moving&&(delta>.12||now-state.contextTime>1500))refreshContacts(state);
+      const next=[feet[0]+input.x*speed*dt,feet[1]+input.y*speed*dt,feet[2]];
+      const outside=!context||Math.max(Math.abs(next[0]-context.center[0]),Math.abs(next[1]-context.center[1]))>context.radius;
+      if(outside){input.x=0;input.y=0;}
+    }
+    const next=[feet[0]+input.x*speed*dt,feet[1]+input.y*speed*dt,feet[2]];
+    if(moving&&state.body.grounded&&!state.body.supportedAt(next)){input.x=0;input.y=0;}
+    state.body.step(input,dt);state.jump=false;drawWalk(dt);
+  });
+  $("walkBtn").onclick=beginWalk;
   cameraCanvas.addEventListener("contextmenu",e=>e.preventDefault());
   cameraCanvas.addEventListener("pointerdown",e=>{
-    if(!navigationAllowed()||![1,2].includes(e.button)||walk)return;
+    if(walk?.body&&[1,2].includes(e.button)){pointer={id:e.pointerId,x:e.clientX,y:e.clientY,look:true};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();return;}
+    if(!navigationAllowed()||![1,2].includes(e.button))return;
     freeCamera();nav.adopt();pointer={id:e.pointerId,x:e.clientX,y:e.clientY};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();
   });
   cameraCanvas.addEventListener("pointermove",e=>{
-    if(!pointer||pointer.id!==e.pointerId||!navigationAllowed()||!orbit)return;
+    if(!pointer||pointer.id!==e.pointerId)return;
+    if(pointer.look&&walk?.body){walk.heading+=(e.clientX-pointer.x)*.2;walk.pitch=Math.max(-85,Math.min(85,walk.pitch-(e.clientY-pointer.y)*.2));pointer.x=e.clientX;pointer.y=e.clientY;drawWalk();return;}
+    if(!navigationAllowed()||!orbit)return;
     const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer.x=e.clientX;pointer.y=e.clientY;
     const pan=e.shiftKey||(projection==="parallel"&&!e.ctrlKey&&!e.metaKey);
     const units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
@@ -1380,7 +1508,8 @@
   const releasePointer=()=>{pointer=null;};
   window.addEventListener("pointerup",releasePointer);cameraCanvas.addEventListener("pointercancel",releasePointer);cameraCanvas.addEventListener("lostpointercapture",releasePointer);window.addEventListener("blur",releasePointer);
   cameraCanvas.addEventListener("wheel",e=>{
-    if(!navigationAllowed()||walk)return;
+    if(walk?.body){e.preventDefault();if(!e.ctrlKey){walk.heading+=e.deltaX*.25;walk.pitch=Math.max(-85,Math.min(85,walk.pitch-e.deltaY*.25));drawWalk();}return;}
+    if(!navigationAllowed())return;
     e.preventDefault();freeCamera();if(!orbit&&!nav.adopt())return;
     const a=EarthLinkNavigation.wheelAction(e,$("inputDevice").value),units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
     if(a.type==="zoom")orbit.zoom(a.factor);
@@ -1390,7 +1519,7 @@
   },{passive:false});
   document.addEventListener("visibilitychange",()=>{if(document.hidden)releasePointer();});
 
-  window.EL = { viewer, models, offsets, nav, get orbit(){return orbit;}, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, get orbit(){return orbit;}, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {
@@ -1402,10 +1531,10 @@
       rhinoCam = JSON.parse(e.data);
       if ($("follow").checked && anchor()) applyView(rhinoCam, 0);
     });
-    es.addEventListener("sun", e => { const j = JSON.parse(e.data); if (j.source === "rhino" && S.sync_sun !== false) sunFromUtc(j.utc); });
+    es.addEventListener("sun", e => { const j = JSON.parse(e.data); if (j.source === "rhino" && S.sync_sun !== false) sunFromUtc(j.utc,j.enabled); });
     es.addEventListener("pick", e => { pickReq = JSON.parse(e.data) || {}; if (pickReq.project) openSite(true); });
-    es.onopen = () => { $("dot").className = "live"; if (!meta) $("status").textContent = "Connected — run SendToEarth in Rhino."; };
-    es.onerror = () => { $("dot").className = ""; $("status").textContent = "Rhino not reachable — run EarthLinkViewer in Rhino."; };
+    es.onopen = () => { $("dot").className = "live"; if (!meta) $("status").textContent = "Send a model to begin."; };
+    es.onerror = () => { $("dot").className = ""; $("status").textContent = "Open EarthLinkViewer in Rhino."; };
     if (pickReq && pickReq.project) openSite(true);
     else if (!(await api("/api/meta")).sets) refreshViews();
   } else {

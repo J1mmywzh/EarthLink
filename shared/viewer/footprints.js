@@ -10,7 +10,7 @@
       if(Math.abs(area)>1e-10)polys.push([[...t,t[0]]]);
     }
     if(!polys.length)return [];
-    let level=polys;
+    let level=polys.map(p=>[p]);
     while(level.length>1){const next=[];for(let i=0;i<level.length;i+=32)next.push(clipping.union(...level.slice(i,i+32)));level=next;}
     const result=[];
     for(const polygon of level[0]){

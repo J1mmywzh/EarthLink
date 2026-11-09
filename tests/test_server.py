@@ -88,6 +88,17 @@ def test_snapshot_and_share(srv):
     assert {"navigation.js","footprints.js","footprint-worker.js","live/set_Main/v00001/geometry.json"} <= set(names)
 
 
+def test_sun_enabled_roundtrip_and_invalid_boolean(srv):
+    call(srv,'/api/sun',{'utc':'2026-06-21T16:00:00Z','enabled':False,'tz':-240})
+    sun=call(srv,'/api/sun')
+    assert sun['enabled'] is False
+    assert call(srv,'/api/settings')['sun_enabled'] is False
+    with pytest.raises(urllib.error.HTTPError) as ex:
+        call(srv,'/api/sun',{'utc':'2026-06-21T16:00:00Z','enabled':'false'})
+    assert ex.value.code==400
+    assert call(srv,'/api/sun')['enabled'] is False
+
+
 def _requests(srv):
     d = os.path.join(srv["live"], "requests")
     return [json.load(open(os.path.join(d, f))) for f in sorted(os.listdir(d))] if os.path.isdir(d) else []

@@ -1,5 +1,5 @@
 """Paths, settings and OS helpers (macOS + Windows)."""
-import os, sys, json, subprocess
+import os, sys, json, subprocess, tempfile
 
 PLUGIN_ID = "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30"   # = "id" in EarthLink.rhproj (never change it)
 PORT = int(os.environ.get("EARTHLINK_PORT", "8765"))
@@ -12,7 +12,7 @@ DEFAULTS = {
     "viewer": True, "earthpro": False,
     # viewer placement settings (also edited from the viewer page)
     "nudge": 0.0, "geoid_offset": -33.5, "ground_h": None,
-    "clip": False, "clip_margin": 0.0, "shadows": True,
+    "clip": False, "clip_margin": 0.0, "shadows": True, "sun_enabled": True, "sun_utc": None,
     # where viewer screenshots go ("" = Pictures/EarthLink); save_mode "folder" or "ask"
     "snapshot_dir": "", "save_mode": "folder",
     # Rhino sync: two-way named views, the viewer following Rhino's active viewport, Rhino Sun <-> viewer sun
@@ -68,10 +68,14 @@ def read_json(path, default=None):
 
 
 def write_json(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(data, fh, indent=1)
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(data, fh, indent=1, allow_nan=False)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def snapshot_dir():
@@ -101,10 +105,7 @@ def load_views(model_name):
 
 def save_views(model_name, views):
     p = views_path(model_name)
-    tmp = p + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump({"model": model_name, "views": views}, fh, indent=1)
-    os.replace(tmp, p)
+    write_json(p, {"model": model_name, "views": views})
 
 
 def put_view(model_name, view):
@@ -179,7 +180,10 @@ def load_settings():
     s = dict(DEFAULTS)
     try:
         with open(_settings_path()) as fh:
-            s.update(json.load(fh))
+            raw = json.load(fh)
+            s.update(raw)
+            if "sun_enabled" not in raw and "shadows" in raw:
+                s["sun_enabled"] = bool(raw["shadows"])
     except Exception:
         pass
     return s
@@ -188,10 +192,7 @@ def load_settings():
 def save_settings(patch):
     s = load_settings()
     s.update({k: v for k, v in patch.items() if k in DEFAULTS})
-    tmp = _settings_path() + ".tmp"
-    with open(tmp, "w") as fh:
-        json.dump(s, fh, indent=1)
-    os.replace(tmp, _settings_path())
+    write_json(_settings_path(), s)
     return s
 
 
