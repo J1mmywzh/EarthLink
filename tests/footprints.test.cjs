@@ -22,3 +22,11 @@ test('a model resting a few millimetres off true still cuts its base',()=>{
   const p=F.derive({schema:1,vertices:[[0,0,0.004],[2,0,0],[2,2,0.006],[0,2,0],[0,0,3],[2,0,3],[2,2,3]],indices:[0,1,2,0,2,3,4,5,6]});
   near(area(p),4,0.06);
 });
+test('a margin widens the cut; the rings keep the true base, courtyards included',()=>{
+  const m=mesh([[0,0,10,2],[0,8,10,2],[0,2,2,6],[8,2,2,6]]),a=F.deriveAll(m,0),b=F.deriveAll(m,0.4);
+  near(area(a.polygons),64);assert.ok(area(b.polygons)>area(a.polygons)+10,'wider');
+  assert.ok(b.polygons.some(r=>hit(r,-0.3,5))&&!b.polygons.some(r=>hit(r,-0.6,5)),'0.4 m past the edge, not more');
+  assert.equal(b.polygons.some(r=>hit(r,5,5)),false,'courtyard stays');
+  assert.equal(b.rings.length,2);const sa=b.rings.map(r=>r.reduce((s,p,i)=>{const q=r[(i+1)%r.length];return s+p[0]*q[1]-q[0]*p[1];},0)/2).sort((x,y)=>x-y);
+  assert.ok(Math.abs(sa[1]-100)<4&&Math.abs(sa[0]+36)<3,'outer ring counter-clockwise, courtyard ring clockwise '+sa);assert.equal(b.base,0);
+});

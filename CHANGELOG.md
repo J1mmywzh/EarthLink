@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.0-beta.8 — preview, 2026-11-09
+- **Hide map underneath** now has a clean edge and no black gap. The map is cut 0.4 m beyond a set's base, and a band redraws the map's ground from a top-down picture of it, from 3 m outside the base up to the base, then stretches its last pixels down or up to the base's own level. The cut's ragged edge is hidden, and where Google's ground is higher or lower than the model's the step is filled instead of showing black. The band follows the ground only (trees and buildings next to the cut are bridged), receives shadows, and is rebuilt when the cut changes or sharper map detail loads. It is a presentation fill, not survey data, and is left out of the model-only capture pass.
+
 ## 0.2.0-beta.6 — preview, 2026-11-09
 - Areas of the map that stayed blurry at normal viewing distances (sharp only when zoomed right in) now load full detail. Google's map contains empty placeholder tiles; Cesium refused to swap a coarse tile for its sharper sub-tiles while one of those placeholders was still too small on screen to open. Placeholders are now always opened.
 

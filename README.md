@@ -2,7 +2,7 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Preview: 0.2.0-beta.7** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+**Preview: 0.2.0-beta.8** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
@@ -78,7 +78,7 @@ Save named views in Rhino or the viewer. With view sync enabled, they appear in 
 - Send selections as separate named sets; show, hide, compare, or style them independently.
 - Materials, Clay, and Ghost control model display.
 - **Edit** a set to place it on the site: drag, nudge or rotate, then **Apply**. Placement is an EarthLink layer saved with the set in your Rhino file and applied on every update; your Rhino geometry never moves, so you can keep modelling on Rhino's grid at 0,0. **Original position** removes the placement.
-- **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved, and the outline is never short of the base. Ground is removed as well as buildings and vegetation.
+- **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved, and the outline is never short of the base. Ground is removed as well as buildings and vegetation. The cut reaches 0.4 m past the base, and a band redrawn from the map's own pixels joins the map to the base, so the edge is clean and no black gap shows where Google's ground and your model's differ in height. That band is a presentation fill, not survey data.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
 ## Capture and share

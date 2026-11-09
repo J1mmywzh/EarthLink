@@ -1,6 +1,6 @@
 # EarthLink user manual
 
-For EarthLink 0.2.0-beta.7, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
+For EarthLink 0.2.0-beta.8, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
 
 ## 1. What EarthLink does
 
@@ -95,7 +95,7 @@ Collisions use what is drawn: your exported model mesh (both face sides) and the
 
 - **Materials**, **Clay**, and **Ghost** change viewer appearance without changing Rhino materials.
 - **Section cut** clips the displayed model at a chosen local height.
-- **Hide map underneath** is chosen per design set (the scissors beside its eye in **Design Sets**). It clips Google geometry only under the set's base: every triangle is cut 1 cm above the set's lowest point and the part below is projected to plan, so overhangs, cantilevers and sets that widen upward keep the map under them. Concave outlines, disconnected pieces and courtyard holes are preserved, and ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. The outline is traced on a grid of about two million cells over the base (finer for a single building), reaching up to one grid cell past it and never short of it; gaps under 1 m² are covered. Older settings with one switch for all sets carry over as on for every set.
+- **Hide map underneath** is chosen per design set (the scissors beside its eye in **Design Sets**). It clips Google geometry only under the set's base: every triangle is cut 1 cm above the set's lowest point and the part below is projected to plan, so overhangs, cantilevers and sets that widen upward keep the map under them. Concave outlines, disconnected pieces and courtyard holes are preserved, and ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. The outline is traced on a grid of about two million cells over the base (finer for a single building), reaching up to one grid cell past it and never short of it; gaps under 1 m² are covered. Older settings with one switch for all sets carry over as on for every set. The map is cut 0.4 m beyond the base. A band then redraws the map's ground from a top-down picture of it, from 3 m outside the base to 0.1 m from it, and stretches its last pixels to the base's level, so the cut's ragged edge and any height step between Google's ground and the model are hidden. The band follows the ground only (steps over 3 m, such as trees and buildings, are bridged), and is rebuilt when the cut changes or sharper map detail loads. It is a presentation fill, not survey data.
 - **Measure** picks two visible surface points and reports distance in metres and feet/inches plus height difference. Press Esc to clear. Photorealistic mesh picking is approximate and is not a survey measurement.
 
 ## 8. Capture images
