@@ -777,7 +777,7 @@
     const visible=cutSets(),M=frame();
     if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); return; }
     const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,offsets[n]]),Array.from({length:16},(_,i)=>M[i])]);
-    if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;return;}
+    if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;if(!skirt)scheduleSkirt();return;}
     const polygons=[];
     for(const name of visible){
       const model=models[name];if(!model?._elFootprints)continue;
