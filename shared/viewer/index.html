@@ -797,7 +797,7 @@
      the map's surface (1.2 m outside the base) to the base's own level, coloured with the map's pixels at its outer
      edge, stretched inward. It hides the cut's ragged edge and the step between Google's ground and your model's:
      no black gap, whichever is higher. It is a presentation fill, not survey data. */
-  const SKIRT = { reach: CUT_MARGIN + 0.8, inset: 0.15, step: 2, under: 0.05, maxStep: 30 };
+  const SKIRT = { reach: CUT_MARGIN + 0.8, inset: 0.15, step: 2, under: 0.05, maxStep: 3 };   // steps over 3 m are trees or buildings, not ground
   function dropSkirt() { clearTimeout(skirtTimer); if (skirt) { scene.primitives.remove(skirt); skirt = null; scene.requestRender(); } skirtState = null; }
   function scheduleSkirt() { clearTimeout(skirtTimer); skirtTimer = setTimeout(buildSkirt, 250); }
   function refreshSkirt() {                              // map detail arrived: rebuild if the band was made from less
@@ -822,7 +822,7 @@
           const a = ring[i], b = ring[(i + 1) % ring.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SKIRT.step));
           for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
         }
-        const first = pos.length / 3, n = pts.length;
+        const first = pos.length / 3, n = pts.length, outer = [], inner = [], rise = [];
         for (let i = 0; i < n; i++) {
           const p = pts[i], a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
           const e1 = [p[0] - a[0], p[1] - a[1]], e2 = [b[0] - p[0], b[1] - p[1]], l1 = Math.hypot(...e1) || 1, l2 = Math.hypot(...e2) || 1;
@@ -831,13 +831,26 @@
           m = ml > 1e-6 ? [m[0] / ml, m[1] / ml] : n1;
           const k = 1 / Math.max(0.5, m[0] * n1[0] + m[1] * n1[1]);                  // mitre, limited at sharp corners
           const o = world(S2W, p[0] + m[0] * SKIRT.reach * k, p[1] + m[1] * SKIRT.reach * k, z0);
-          const inner = world(S2W, p[0] - m[0] * SKIRT.inset * k, p[1] - m[1] * SKIRT.inset * k, z0 - 0.02);
+          outer.push(o); inner.push(world(S2W, p[0] - m[0] * SKIRT.inset * k, p[1] - m[1] * SKIRT.inset * k, z0 - 0.02));
           const d = mapPick(new Cesium.Ray(C3.add(o, C3.multiplyByScalar(up, 300, new C3()), new C3()), down), 600);
-          const rise = d === null ? -SKIRT.under : Math.max(-SKIRT.maxStep, Math.min(SKIRT.maxStep, 300 - d - SKIRT.under));
-          const top = C3.add(o, C3.multiplyByScalar(up, rise, new C3()), new C3());
+          const h = d === null ? NaN : 300 - d;
+          rise.push(Math.abs(h) <= SKIRT.maxStep ? h : NaN);   // the map's ground relative to the base; NaN: unknown or not ground
+        }
+        // Follow the ground only: bridge trees, buildings and unloaded map from the ground on either side, then smooth.
+        const known = rise.map((h, i) => (Number.isNaN(h) ? -1 : i)).filter(i => i >= 0);
+        const ground = rise.map((h, i) => {
+          if (!Number.isNaN(h)) return h;
+          if (!known.length) return 0;
+          let a = known[known.length - 1] - n, b = known[0] + n;
+          for (const k of known) { if (k < i) a = k; else { b = k; break; } }
+          return rise[(a + n) % n] + (rise[b % n] - rise[(a + n) % n]) * (i - a) / (b - a);
+        });
+        for (let i = 0; i < n; i++) {
+          const o = outer[i], smooth = (ground[(i + n - 1) % n] + 2 * ground[i] + ground[(i + 1) % n]) / 4;
+          const top = C3.add(o, C3.multiplyByScalar(up, smooth - SKIRT.under, new C3()), new C3());
           const l = Cesium.Matrix4.multiplyByPoint(inv, o, new C3());
           x0 = Math.min(x0, l.x); x1 = Math.max(x1, l.x); y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y);
-          pos.push(top.x, top.y, top.z, inner.x, inner.y, inner.z); flat.push(l.x, l.y, l.x, l.y);
+          pos.push(top.x, top.y, top.z, inner[i].x, inner[i].y, inner[i].z); flat.push(l.x, l.y, l.x, l.y);
           const v = first + 2 * i, w = first + 2 * ((i + 1) % n);
           idx.push(v, v + 1, w, w, v + 1, w + 1);
         }
