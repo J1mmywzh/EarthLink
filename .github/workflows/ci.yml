@@ -8,10 +8,10 @@ jobs:
         os: [ubuntu-24.04, windows-2022, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: '3.9', architecture: x64 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '22' }
       - run: pip install pytest
       - run: python -m compileall -q earthlink commands tools
@@ -20,10 +20,10 @@ jobs:
   viewer:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: '3.9', architecture: x64 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '22' }
       - run: npm install playwright@1.65.0 && npx playwright install --with-deps chromium
       - name: fixture viewer
@@ -31,6 +31,8 @@ jobs:
         run: |
           python tests/serve_fixture.py --port 8765 &
           sleep 2
-          node tests/viewer_smoke.mjs http://127.0.0.1:8765/
-          node tests/viewer_controls.cjs http://127.0.0.1:8765/
-          node tests/viewer_review.cjs http://127.0.0.1:8765/
+          set -o pipefail
+          for t in viewer_smoke.mjs viewer_controls.cjs viewer_review.cjs; do
+            node tests/$t http://127.0.0.1:8765/ 2>&1 | tee test.log || {
+              grep -m4 -E "Error|assert|not ok|Timeout|exceeded" test.log | sed "s/^/::error title=$t::/"; exit 1; }
+          done
