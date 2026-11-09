@@ -794,10 +794,10 @@
   }
 
   /* The band that joins the cut map to the model. Around each cut set's base, the map's ground is redrawn from a
-     top-down picture of it: flat from 1.2 m outside the base to 0.1 m from it (so the cut's ragged edge cannot be
+     top-down picture of it: flat from 3 m outside the base to 0.1 m from it (so the cut's ragged edge cannot be
      seen), then its last pixels are stretched down or up to the base's own level. No black gap, whichever is
      higher. It is a presentation fill, not survey data. */
-  const SKIRT = { reach: CUT_MARGIN + 0.8, lip: 0.1, inset: 0.15, step: 2, under: 0.05, maxStep: 3 };   // steps over 3 m are trees or buildings, not ground
+  const SKIRT = { reach: CUT_MARGIN + 2.6, lip: 0.1, inset: 0.15, step: 2, under: 0.05, maxStep: 3 };   // steps over 3 m are trees or buildings, not ground
   function dropSkirt() { clearTimeout(skirtTimer); if (skirt) { scene.primitives.remove(skirt); skirt = null; scene.requestRender(); } skirtState = null; }
   function scheduleSkirt() { clearTimeout(skirtTimer); skirtTimer = setTimeout(buildSkirt, 250); }
   function refreshSkirt() {                              // map detail arrived: rebuild if the band was made from less
