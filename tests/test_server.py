@@ -106,7 +106,7 @@ def _requests(srv):
     return [json.load(open(os.path.join(d, f))) for f in sorted(os.listdir(d))] if os.path.isdir(d) else []
 
 
-def test_rename_and_move_set_are_queued_for_rhino(srv):
+def test_rename_and_placement_are_queued_for_rhino(srv):
     call(srv, "/api/settings", {"hidden_sets": ["Main"], "set_styles": {"Main": "clay"}})
     assert call(srv, "/api/sets", {"op": "rename", "name": "Main", "new": "Tower"})["ok"]
     meta = call(srv, "/api/meta")
@@ -116,7 +116,7 @@ def test_rename_and_move_set_are_queued_for_rhino(srv):
     assert call(srv, "/api/sets", {"op": "rename", "name": "Tower", "new": "Tower"}).get("error")
     assert call(srv, "/api/sets", {"op": "move", "name": "Tower", "dx": 2.5, "dy": -1, "rot": 15, "pivot": [15, 10, 0]})["ok"]
     reqs = _requests(srv)
-    assert [r["type"] for r in reqs][-2:] == ["rename_set", "move_set"]
+    assert [r["type"] for r in reqs][-2:] == ["rename_set", "place_set"]
     assert (reqs[-1]["dx"], reqs[-1]["rot"], reqs[-1]["pivot"]) == (2.5, 15.0, [15.0, 10.0, 0.0])
     assert all(r["project"] == "p-test" for r in reqs)
 

@@ -137,30 +137,33 @@ def rename_set_in_viewer(old, new):
         env.save_settings({"hidden_sets": [new if n == old else n for n in s.get("hidden_sets") or []], "set_styles": st})
 
 
-def move_set(doc, name, dx=0.0, dy=0.0, dz=0.0, rot=0.0, pivot=(0, 0, 0)):
-    """Move/turn a set's objects in the Rhino document, as one undo step.
-    dx/dy/dz are metres east/north/up; rot turns clockwise on the map (degrees) about `pivot` (ENU metres)."""
-    s = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
-    to_enu = enu_transform(doc)
-    ok, from_enu = to_enu.TryGetInverse()
-    p = rg.Point3d(pivot[0] / s, pivot[1] / s, pivot[2] / s)
-    enu_move = rg.Transform.Translation(rg.Vector3d(dx / s, dy / s, dz / s)) * \
-        rg.Transform.Rotation(math.radians(-rot), rg.Vector3d.ZAxis, p)
-    xf = from_enu * enu_move * to_enu
-    objs = set_objects(doc, name)
-    if not objs:
-        return 0
-    sn = doc.BeginUndoRecord("EarthLink: move %s" % name)
-    new_ids = []
-    try:
-        for o in objs:
-            nid = doc.Objects.Transform(o.Id, xf, True)
-            new_ids.append(nid if nid != System.Guid.Empty else o.Id)
-    finally:
-        doc.EndUndoRecord(sn)
-    put_set(doc, name, new_ids)
-    doc.Views.Redraw()
-    return len(new_ids)
+# ----------------------------------------------------------------- placement (EarthLink only; Rhino geometry never moves)
+def placement(doc, name):
+    """A set's EarthLink placement: turned `rot` degrees clockwise on the map, then moved by `t`
+    (metres east/north/up). Applied on every export, so the Rhino model keeps its own grid."""
+    p = get_sets(doc).get(name, {}).get("placement") or {}
+    return {"rot": float(p.get("rot", 0.0)), "t": [float(v) for v in (p.get("t") or [0.0, 0.0, 0.0])][:3]}
+
+
+def place_set(doc, name, dx=0.0, dy=0.0, dz=0.0, rot=0.0, pivot=(0, 0, 0)):
+    """Compose a viewer move (turn `rot` clockwise about `pivot`, then move) onto the set's placement."""
+    if name not in get_sets(doc):
+        return None
+    new = geometry.compose_placement(get_sets(doc)[name].get("placement"), dx, dy, dz, rot, pivot)
+    put_set(doc, name, placement=new)
+    return new or {}
+
+
+def reset_placement(doc, name):
+    if name in get_sets(doc):
+        put_set(doc, name, placement=None)
+
+
+def placement_transform(doc, name):
+    """Placement as a Rhino transform in the ENU frame, model units."""
+    p, s = placement(doc, name), Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
+    return rg.Transform.Translation(rg.Vector3d(*(v / s for v in p["t"]))) * \
+        rg.Transform.Rotation(math.radians(-p["rot"]), rg.Vector3d.ZAxis, rg.Point3d.Origin)
 
 
 def set_objects(doc, name):
@@ -202,9 +205,9 @@ def _display_color(doc, obj, parent_obj=None):
     return doc.Layers[a.LayerIndex].Color
 
 
-def _export_glb(doc, objs, path):
-    """Write `objs` (re-oriented to ENU) to a GLB. Returns their bounding box (model units, ENU)."""
-    xf = enu_transform(doc)
+def _export_glb(doc, objs, path, place=None):
+    """Write `objs` (re-oriented to ENU, then placed) to a GLB. Returns their bounding box (model units, ENU)."""
+    xf = enu_transform(doc) if place is None else place * enu_transform(doc)
     tmp = Rhino.RhinoDoc.CreateHeadless(None)
     bbox = rg.BoundingBox.Empty
     try:
@@ -321,13 +324,15 @@ def send_set(doc, name, to_earthpro=False):
     vd_rel = "%s/v%05d" % (sd, version)
     vd = os.path.join(live, sd, "v%05d" % version)
     os.makedirs(vd, exist_ok=True)
-    bbox = _export_glb(doc, objs, os.path.join(vd, "model.glb"))
+    bbox = _export_glb(doc, objs, os.path.join(vd, "model.glb"), placement_transform(doc, name))
     scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
     entry = {"glb": vd_rel + "/model.glb", "version": version, "objects": len(objs),
              "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],
                         [bbox.Max.X * scale, bbox.Max.Y * scale, bbox.Max.Z * scale]] if bbox.IsValid else None,
              "sent_at": time.strftime("%Y-%m-%d %H:%M:%S"),
              "live": bool(get_sets(doc).get(name, {}).get("live"))}
+    if get_sets(doc).get(name, {}).get("placement"):
+        entry["placement"] = placement(doc, name)
     msgs, master = [], None
     try:
         mesh = geometry.derive(os.path.join(vd, "model.glb"))

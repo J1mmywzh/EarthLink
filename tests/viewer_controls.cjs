@@ -1,56 +1,101 @@
-// Runs against a disposable fixture server; never needs a map key.
+// Runs against a disposable fixture server; never needs a map key. Gestures are sent as real wheel/pointer events.
 const {chromium}=require(process.env.EARTHLINK_PLAYWRIGHT||'playwright');
 const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.EARTHLINK_CHROME||undefined,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
- const page=await browser.newPage({viewport:{width:1280,height:800}});const errors=[];
+ const page=await browser.newPage({viewport:{width:1280,height:800},ignoreHTTPSErrors:!!process.env.EARTHLINK_IGNORE_HTTPS});const errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>localStorage.setItem('earthlink:skipKeys','true'));
  await page.goto(process.argv[2]||'http://127.0.0.1:8877/');
  await page.waitForFunction(()=>window.EL&&Object.keys(EL.models).length>0,null,{timeout:60000});
+ const settle=()=>page.waitForTimeout(450);
+ const wheel=(list,gap=16)=>page.evaluate(async([list,gap])=>{const c=EL.viewer.scene.canvas,r=c.getBoundingClientRect();
+   for(const w of list){c.dispatchEvent(new WheelEvent('wheel',{deltaX:w.x||0,deltaY:w.y||0,deltaMode:0,shiftKey:!!w.shift,ctrlKey:!!w.ctrl,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true}));if(gap>=0)await new Promise(f=>setTimeout(f,gap));}},[list,gap]);
+ const cam=()=>page.evaluate(()=>{EL.viewer.render();const c=EL.viewer.camera,s=EL.viewer.scene,w=s.canvas.clientWidth,h=s.canvas.clientHeight,ray=c.getPickRay(new Cesium.Cartesian2(w/2,h/2)),t=EL.surfaceHit(ray),ctr=t===null?null:Cesium.Ray.getPoint(ray,t);
+   return{pos:[c.positionWC.x,c.positionWC.y,c.positionWC.z],dir:[c.directionWC.x,c.directionWC.y,c.directionWC.z],up:[c.upWC.x,c.upWC.y,c.upWC.z],right:[c.rightWC.x,c.rightWC.y,c.rightWC.z],
+     heading:Cesium.Math.toDegrees(c.heading),roll:Cesium.Math.toDegrees(c.roll),centre:ctr?[ctr.x,ctr.y,ctr.z]:null,width:c.frustum.width};});
+ const dist=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i])),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),turn=d=>((d%360)+540)%360-180;
+ await page.evaluate(()=>EL.fit(0));await settle();
+
+ // Navigation menu: tilt, heading, sensitivity, north; no device selector
  await page.getByRole('button',{name:'Navigation',exact:true}).click();
- assert.equal(await page.getByRole('button',{name:'Reset to north',exact:true}).isVisible(),true);
- assert.equal(await page.getByText('Two fingers / right drag — orbit',{exact:true}).count(),0);
+ for(const n of ['Tilt','Heading','Sensitivity'])assert.equal(await page.getByRole('slider',{name:n,exact:true}).isVisible(),true,n);
+ assert.equal(await page.locator('#inputDevice').count(),0);
+
+ // two fingers orbit about the centre of the view, level horizon
+ let a=await cam();
+ const orbitCheck=await page.evaluate(async()=>{const s=EL.viewer.scene,cv=s.canvas,r=cv.getBoundingClientRect(),out=[];
+   const ev=()=>cv.dispatchEvent(new WheelEvent('wheel',{deltaX:-8,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true}));
+   const look=()=>{const p=EL.nav.pivot;if(!p)return null;const q=Cesium.SceneTransforms.worldToWindowCoordinates(s,p);return{off:Math.hypot(q.x-cv.clientWidth/2,q.y-cv.clientHeight/2),d:Cesium.Cartesian3.distance(p,EL.viewer.camera.positionWC),x:p.x};};
+   for(let i=0;i<20;i++){ev();await new Promise(f=>setTimeout(f,16));if(i===3)out.push(look());}
+   await new Promise(f=>setTimeout(f,450));out.push(look());return out;});
+ let b=await cam();const [p0,p1]=orbitCheck;
+ assert.ok(turn(b.heading-a.heading)>5,'fingers right turn the view');assert.ok(Math.abs(b.roll)<0.05,'no roll');
+ assert.ok(p0&&p1&&p0.off<1&&p1.off<1,'orbits about the point at the centre of the view '+JSON.stringify(orbitCheck));
+ await wheel(Array(15).fill({y:-6}));await settle();assert.ok(Math.abs((await cam()).roll)<0.05,'tilt keeps the horizon level');
+
+ // Shift pans; releasing Shift during the momentum tail cannot turn the pan into an orbit
+ a=await cam();await wheel([...Array(8).fill({x:6,shift:true}),...Array(12).fill({x:4})],-1);await settle();b=await cam();
+ assert.ok(Math.abs(turn(b.heading-a.heading))<0.05,'no orbit after Shift is released');
+ assert.ok(dot(b.pos.map((v,i)=>v-a.pos[i]),a.right)>0.5,'fingers left move the scene left');
+
+ // a fast trackpad swipe is not read as a mouse wheel (no zoom)
+ a=await cam();await wheel([{x:0,y:4},{x:0,y:120},{x:0,y:110}],-1);await settle();b=await cam();
+ {const pv=await page.evaluate(()=>{const p=EL.nav.pivot;return p&&[p.x,p.y,p.z];});
+  assert.ok(pv&&Math.abs(dist(b.pos,pv)/dist(a.pos,pv)-1)<0.01,'an orbit, not a zoom');}
+
+ // Reset to north
  await page.getByRole('button',{name:'Reset to north',exact:true}).click();
- const pose=await page.evaluate(()=>EL.captureCamera('test'));
- assert.ok(Math.abs(pose.dir[0])<1e-5);assert.ok(Math.abs(pose.up[0])<1e-5);
- await page.mouse.move(800,400);await page.mouse.down({button:'right'});await page.mouse.move(900,440,{steps:8});await page.mouse.up({button:'right'});
- const right=await page.evaluate(()=>{const c=EL.viewer.camera;return [c.rightWC.x,c.rightWC.y,c.rightWC.z];});
- assert.ok(right.every(Number.isFinite));
- const level=await page.evaluate(()=>{const c=EL.captureCamera('level');return c.dir[0]*c.up[1]-c.dir[1]*c.up[0];});
- assert.ok(Math.abs(level)<1e-6,'orbit keeps local camera right horizontal');
- await page.getByRole('button',{name:'Measure',exact:true}).click();await page.keyboard.press('Escape');
- const dirBefore=await page.evaluate(()=>EL.captureCamera('before').dir);
- await page.mouse.move(800,400);await page.mouse.down({button:'right'});await page.mouse.move(850,400,{steps:4});await page.mouse.up({button:'right'});
- const dirAfter=await page.evaluate(()=>EL.captureCamera('after').dir);
- assert.ok(Math.hypot(...dirAfter.map((v,i)=>v-dirBefore[i]))>.05,'Esc releases measurement input ownership');
- await page.waitForFunction(()=>EL.models.Main?._elFootprints);
- const footprint=await page.evaluate(()=>EL.models.Main._elFootprints);
- assert.equal(footprint.length,1);assert.equal(footprint[0].length,6);
+ await page.waitForFunction(()=>{const h=Cesium.Math.toDegrees(EL.viewer.camera.heading);return Math.abs(((h%360)+540)%360-180)<0.5;},null,{timeout:30000}).catch(()=>{});
+ {const hh=(await cam()).heading;assert.ok(Math.abs(turn(hh))<0.5,'north '+hh);}
+
+ // +/-: a click is a smooth step, holding zooms continuously
+ a=await cam();await page.locator('#zoomIn').click();await settle();b=await cam();
+ assert.ok(dist(b.pos,b.centre)<dist(a.pos,a.centre)*0.75,'zoom in step');
+ await page.evaluate(()=>EL.nav.stop());await page.evaluate(()=>EL.nav.hold(1));await page.waitForTimeout(5000);await page.evaluate(()=>EL.nav.release());await settle();const c=await cam();
+ {const pv=await page.evaluate(()=>{const p=EL.nav.pivot;return p&&[p.x,p.y,p.z];});
+  assert.ok(pv&&dist(c.pos,pv)>dist(b.pos,pv)*1.3,'hold zooms out continuously '+JSON.stringify([pv&&dist(b.pos,pv),pv&&dist(c.pos,pv)]));}
+
+ // globe scale: pinch zoom never turns the Earth
+ await page.evaluate(()=>EL.viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(-76.5,42.4,9e6),orientation:{heading:0.5,pitch:-1.4,roll:0}}));
+ a=await cam();await wheel(Array(12).fill({y:-6,ctrl:true}));await settle();b=await cam();
+ assert.ok(dot(a.dir,b.dir)>0.999999&&dot(a.up,b.up)>0.999999,'orientation unchanged');assert.ok(dist(b.pos,[0,0,0])<dist(a.pos,[0,0,0])-1e5,'zoomed in');
+ await page.evaluate(()=>EL.fit(0));await settle();
+
+ // Parallel: two fingers pan (no orbit), Shift + scroll and pinch zoom, the tilt slider still works
+ await page.getByRole('button',{name:'Parallel',exact:true}).click();await settle();
+ a=await cam();await wheel(Array(10).fill({x:6}));await settle();b=await cam();
+ assert.ok(Math.abs(turn(b.heading-a.heading))<0.05&&dist(a.pos,b.pos)>0.5,'parallel scroll pans');
+ a=await cam();await wheel(Array(10).fill({x:6,shift:true}));await settle();b=await cam();assert.ok(Math.abs(b.width-a.width)<1e-6&&dist(a.pos,b.pos)>0.5,'Shift + two fingers still pans');
+ a=b;await wheel(Array(10).fill({y:-6,ctrl:true}));await settle();b=await cam();assert.ok(b.width<a.width*0.9,'pinch zooms');
+ const t0=await page.evaluate(()=>EL.nav.headingTilt().tilt);
+ await page.getByRole('slider',{name:'Tilt',exact:true}).fill(String(Math.round(t0)>30?20:60));await settle();
+ assert.ok(Math.abs(await page.evaluate(()=>EL.nav.headingTilt().tilt)-t0)>10,'tilt slider works in Parallel');
+ await page.getByRole('button',{name:'Perspective',exact:true}).click();
+
+ // Sun: one switch; no permanent time bar
  await page.getByRole('button',{name:'Sun',exact:true}).click();
  await page.getByRole('checkbox',{name:'Sunlight',exact:true}).uncheck();
  assert.equal(await page.getByLabel('Date',{exact:true}).isVisible(),false);
- const before=await page.evaluate(()=>EL.viewer.clock.currentTime.toString());
- await page.evaluate(()=>{const c=EL.captureCamera('test');EL.applyView({...c,date:'2030-01-01',minutes:60},0);});
- const after=await page.evaluate(()=>EL.viewer.clock.currentTime.toString());
- assert.equal(before,after,'off sunlight ignores a saved view time for visible illumination');
  assert.equal(await page.locator('#timebar').count(),0);
- const beforeWalk=await page.evaluate(()=>EL.captureCamera('return'));
- await page.getByRole('button',{name:'Walk',exact:true}).click();
- const roof=await page.evaluate(()=>{const a=EL.meta.anchor,M=Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(a.lon,a.lat,0));const world=Cesium.Matrix4.multiplyByPoint(M,new Cesium.Cartesian3(15,2.5,10),new Cesium.Cartesian3());const p=Cesium.SceneTransforms.worldToWindowCoordinates(EL.viewer.scene,world);return{x:p.x,y:p.y};});
- await page.mouse.click(roof.x,roof.y);
- await page.waitForFunction(()=>EL.walk?.body,null,{timeout:15000});
- assert.equal(await page.getByText('eye height 1.65 m',{exact:false}).count(),0);
- const startFeet=await page.evaluate(()=>EL.walk.body.feet);
- await page.keyboard.down('d');
- try{await page.waitForFunction(start=>{const p=EL.walk?.body?.feet;return p&&Math.hypot(p[0]-start[0],p[1]-start[1])>.2;},startFeet,{timeout:5000});}
- finally{await page.keyboard.up('d');}
- const endFeet=await page.evaluate(()=>EL.walk.body.feet);
- assert.ok(Math.hypot(endFeet[0]-startFeet[0],endFeet[1]-startFeet[1])>.2);
- await page.keyboard.press('Escape');
- assert.equal(await page.evaluate(()=>EL.walk),null);
- const restored=await page.evaluate(()=>EL.captureCamera('return'));
- assert.ok(restored.pos.every((n,i)=>Math.abs(n-beforeWalk.pos[i])<1e-5));
+ await page.getByRole('checkbox',{name:'Sunlight',exact:true}).check();
+ await page.locator('[data-close=sunCard]').click();
+
+ // Walk on the model's roof, then on open ground with no model under you
+ await page.evaluate(()=>EL.fit(0));await settle();
+ const before=await cam();
+ const at=local=>page.evaluate(l=>{const w=Cesium.Matrix4.multiplyByPoint(EL.models.Main.modelMatrix,new Cesium.Cartesian3(...l),new Cesium.Cartesian3());const p=Cesium.SceneTransforms.worldToWindowCoordinates(EL.viewer.scene,w);return{x:p.x,y:p.y};},local);
+ for(const spot of [[15,2.5,10],null]){
+   const s=spot?await at(spot):{x:640,y:760};   // null: open ground near the bottom of the view
+   await page.getByRole('button',{name:'Walk',exact:true}).click();await page.mouse.click(s.x,s.y);
+   await page.waitForFunction(()=>EL.walk?.body,null,{timeout:15000});
+   const f0=await page.evaluate(()=>EL.walk.body.feet.slice());await page.keyboard.down('d');
+   await page.waitForFunction(f=>{const p=EL.walk?.body?.feet;return p&&Math.hypot(p[0]-f[0],p[1]-f[1])>1.5;},f0,{timeout:30000}).catch(()=>{});await page.keyboard.up('d');
+   const f1=await page.evaluate(()=>EL.walk.body.feet.slice());   // speed itself is covered by walk.test.cjs (this renderer is slow)
+   assert.ok(Math.hypot(f1[0]-f0[0],f1[1]-f0[1])>1.5,`walks (${spot||'ground'})`);assert.ok(Math.abs(f1[2]-f0[2])<0.3,'stays on the surface');
+   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>EL.walk),null);
+   assert.ok(dist((await cam()).pos,before.pos)<1e-3,'Esc returns to the camera before walking');
+ }
  assert.deepEqual(errors,[]);
  await browser.close();console.log('viewer controls passed');
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0-beta.2 — preview, 2026-11-09
+- Navigation rebuilt to follow Rhino 8 for Mac, with or without a model and at any scale: two fingers orbit about the point at the centre of the view, Shift pans with the ground following the fingers, pinch zooms toward the cursor; Parallel pans (Shift changes nothing). Mouse: right-drag, Shift/middle-drag, wheel, Ctrl + right-drag.
+- No more roll, Earth flips, inverted pans or mouse/trackpad mix-ups: one input path (Cesium's own controls are off), gestures keep one mode through their momentum, per-frame easing, level horizon near straight-down views, camera kept above Google's mesh.
+- Parallel views no longer show a black half or tile seams and no longer drift while panning; switching back to Perspective keeps the framing.
+- One Sensitivity setting; the input-device selector is gone. Continuous hold-to-zoom on − / +. Compass shows north.
+- Search bar (top left) like Google Earth: suggestions refine as you type, recent searches, Google Earth-style names, fly to your site.
+- Walk works anywhere on the map, with or without a model, at 3.5 m/s (sprint 9.5 m/s), smooth at full frame rate; climbs 45 cm steps, follows stairs down, slides along walls. Replaced the physics library and map-contact modules (about 600 KB) with a small ray-probing walker.
+- Surface picking for pivots, walking and placement uses CPU ray tests on your exported mesh and Google's tiles, independent of the GPU depth buffer.
+- Removed self-shadow stripes on Google's mesh that shimmered while moving.
+- Placing a design set (drag, nudge, rotate, **Apply**) no longer moves Rhino geometry: the placement is an EarthLink layer saved with the set and applied on every export. **Original position** removes it.
+
 ## 0.2.0-beta.1 — development preview, 2026-11-09
 - Site-local Rhino-style navigation, compass/heading/tilt, true-north reset, fit and zoom controls.
 - Physical walking prototype: surface placement, WASD, sprint, jump, gravity, wall/ceiling collisions and steps; sampled map contacts pause at missing surfaces.

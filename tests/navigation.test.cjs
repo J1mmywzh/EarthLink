@@ -1,38 +1,43 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-let N; try { N=require('../shared/viewer/navigation.js'); } catch {}
-const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
-test('orbit keeps target and radius and a level frame',()=>{
-  assert.ok(N,'navigation module exists'); const o=new N.Orbit({target:[3,4,5],distance:20});
-  for(let i=0;i<30;i++)o.orbit(12,1);
-  const p=o.pose(); assert.deepEqual(o.target,[3,4,5]); near(Math.hypot(...p.position.map((v,i)=>v-o.target[i])),20);
-  near(p.direction.reduce((v,x,i)=>v+x*p.up[i],0),0); near(p.right[2],0);
+const N=require('../shared/viewer/navigation.js');
+const pad=(dx,dy,o={})=>({deltaX:dx,deltaY:dy,deltaMode:0,ctrlKey:false,shiftKey:false,...o});
+
+test('Rhino for Mac mapping: two fingers orbit, Shift pans, pinch zooms',()=>{
+  assert.equal(new N.WheelLatch().read(pad(3,2),'perspective',0).mode,'orbit');
+  assert.equal(new N.WheelLatch().read(pad(3,2,{shiftKey:true}),'perspective',0).mode,'pan');
+  assert.equal(new N.WheelLatch().read(pad(0,-4,{ctrlKey:true}),'perspective',0).mode,'zoom');
+  assert.equal(new N.WheelLatch().read(pad(3,2),'two_point',0).mode,'orbit');
 });
-test('north preserves target tilt and distance',()=>{
-  assert.ok(N);const o=new N.Orbit({target:[4,5,6],distance:12,heading:123,tilt:40});o.north();
-  assert.equal(o.heading,0);assert.equal(o.tilt,40);assert.equal(o.distance,12);assert.deepEqual(o.target,[4,5,6]);
+test('Parallel: two fingers pan with or without Shift; only pinch zooms',()=>{
+  assert.equal(new N.WheelLatch().read(pad(3,2),'parallel',0).mode,'pan');
+  assert.equal(new N.WheelLatch().read(pad(6,0,{shiftKey:true}),'parallel',0).mode,'pan');
+  assert.equal(new N.WheelLatch().read(pad(0,6,{shiftKey:true}),'parallel',0).mode,'pan');
+  assert.equal(new N.WheelLatch().read(pad(0,-3,{ctrlKey:true}),'parallel',0).mode,'zoom');
 });
-test('pan and inverse pan restore camera target',()=>{
-  assert.ok(N);const o=new N.Orbit({heading:75,tilt:35,target:[0,0,0]});o.pan(3,4);o.pan(-3,-4);o.target.forEach(v=>near(v,0));
+test('a gesture keeps its mode through the momentum tail, even if Shift is released',()=>{
+  const l=new N.WheelLatch();
+  assert.equal(l.read(pad(5,0,{shiftKey:true}),'perspective',0).mode,'pan');
+  for(let t=16;t<900;t+=16)assert.equal(l.read(pad(2,0),'perspective',t).mode,'pan');
+  assert.equal(l.read(pad(2,0),'perspective',900+300).mode,'orbit','a pause ends the gesture');
 });
-test('parallel zoom changes width without changing distance',()=>{
-  assert.ok(N);const o=new N.Orbit({projection:'parallel',distance:20,halfHeight:8});o.zoom(.5);assert.equal(o.halfHeight,4);assert.equal(o.distance,20);
+test('fast trackpad swipes are not mistaken for a mouse wheel',()=>{
+  const l=new N.WheelLatch();l.read(pad(0,4),'perspective',0);
+  assert.equal(l.read(pad(0,120),'perspective',16).mode,'orbit');
+  assert.equal(N.isMouseWheel(pad(0,100,{wheelDeltaY:-120})),true);
+  assert.equal(N.isMouseWheel(pad(0,3,{deltaMode:1})),true);
+  assert.equal(N.isMouseWheel(pad(2,60)),false);
+  assert.equal(N.isMouseWheel(pad(0,4)),false);
 });
-test('two point stays level and clamps singular endpoints',()=>{
-  assert.ok(N);const o=new N.Orbit({projection:'two_point',tilt:0});o.orbit(0,-10000);const p=o.pose();assert.equal(p.direction[2],0);assert.deepEqual(p.up,[0,0,1]);assert.ok(Number.isFinite(p.shift));assert.ok(Math.abs(p.shift)<6);
+test('easing releases exactly what was added, smoothly, and stops',()=>{
+  const e=new N.Ease();e.add('heading',10);let sum=0,first=null,n=0,out;
+  while((out=e.take(1/60))){sum+=out.heading;first=first??out.heading;n++;}
+  assert.ok(Math.abs(sum-10)<1e-9);assert.ok(first<5,'no jump on the first frame');assert.ok(n<60,'settles within a second');
+  e.add('px',NaN);assert.equal(e.take(1/60),null,'non-finite input is ignored');
 });
-test('nonfinite input cannot poison a camera',()=>{
-  assert.ok(N);const o=new N.Orbit({distance:10});o.orbit(NaN,Infinity);o.pan(Infinity,0);o.zoom(NaN);o.pose().position.forEach(v=>assert.ok(Number.isFinite(v)));
+test('one sensitivity scale: the same swipe turns the same angle at any distance',()=>{
+  assert.ok(N.RATE.orbit>0&&N.RATE.orbit<0.3);assert.ok(N.RATE.tilt<N.RATE.orbit);assert.ok(N.RATE.pan>=1);
 });
-test('wheel normalizes pinch, pixel trackpad and coarse mouse input',()=>{
-  assert.ok(N);assert.equal(N.wheelAction({deltaY:5,deltaX:2,deltaMode:0,ctrlKey:false},'trackpad').type,'orbit');
-  assert.equal(N.wheelAction({deltaY:100,deltaX:0,deltaMode:1},'mouse').type,'zoom');
-  assert.equal(N.wheelAction({deltaY:3,deltaX:0,ctrlKey:true},'trackpad').type,'zoom');
-  assert.equal(N.wheelAction({deltaY:5,deltaX:2,deltaMode:0,shiftKey:true},'trackpad').type,'pan');
-});
-test('neutral lighting still lights ground at eye level and when looking upward',()=>{
- assert.ok(N);for(const d of [[0,1,0],[0,0,1],[0,0,-1]]){const l=N.neutralDirection(d,[0,0,1]);assert.ok(l[2]<-.8);near(Math.hypot(...l),1);}
-});
-test('two point preserves level and upward framing through north and zoom',()=>{
- for(const tilt of [30,90,116.565051177]){const o=new N.Orbit({projection:'two_point',tilt,distance:20,heading:30}),shift=o.pose().shift;o.north();o.zoom(.8);near(o.tilt,tilt);near(o.pose().shift,shift);assert.ok(Number.isFinite(shift));}
+test('neutral light is a unit vector from behind the viewer',()=>{
+  const d=N.neutralDirection([0,1,0],[0,0,1]);assert.ok(Math.abs(Math.hypot(...d)-1)<1e-12);assert.ok(d[2]<0&&d[1]>0);
 });

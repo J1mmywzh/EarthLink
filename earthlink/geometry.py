@@ -1,4 +1,4 @@
-"""Derive clipping/collision geometry from the final Rhino GLB, without Rhino imports.
+"""Rhino-free geometry: the cutout mesh derived from the final GLB, and design-set placement maths.
 
 Positions are local east/north/up metres, exactly as rendered after glTF's Y-up
 conversion. No model bounds are substituted for missing or unsupported geometry.
@@ -84,3 +84,15 @@ def _derive(path):
     if not indices:
         raise ValueError("no surface mesh")
     return {"schema":1,"vertices":vertices,"indices":indices}
+
+
+def compose_placement(p, dx=0.0, dy=0.0, dz=0.0, rot=0.0, pivot=(0, 0, 0)):
+    """A set's EarthLink placement {rot, t}: turned `rot` degrees clockwise on the map, then moved by `t`
+    (metres east/north/up). Returns `p` followed by a viewer move: turn `rot` clockwise about `pivot`, move by d."""
+    p = p or {}
+    r0, t0 = float(p.get("rot", 0.0)), [float(v) for v in (p.get("t") or [0.0, 0.0, 0.0])][:3]
+    a = math.radians(-rot)
+    vx, vy = t0[0] - pivot[0], t0[1] - pivot[1]
+    t = [pivot[0] + vx * math.cos(a) - vy * math.sin(a) + dx, pivot[1] + vx * math.sin(a) + vy * math.cos(a) + dy, t0[2] + dz]
+    out = {"rot": round((r0 + rot + 180.0) % 360.0 - 180.0, 6), "t": [round(v, 6) for v in t]}
+    return None if not out["rot"] and not any(out["t"]) else out

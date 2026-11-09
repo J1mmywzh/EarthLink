@@ -16,7 +16,7 @@ jobs:
       - run: pip install pytest
       - run: python -m compileall -q earthlink commands tools
       - run: python -m pytest -q tests
-      - run: node --test tests/navigation.test.cjs tests/footprints.test.cjs tests/walking.test.cjs tests/map_contacts.test.cjs tests/bounded_picks.test.cjs
+      - run: node --test tests/navigation.test.cjs tests/walk.test.cjs tests/footprints.test.cjs
   viewer:
     runs-on: ubuntu-24.04
     steps:

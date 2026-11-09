@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 const { chromium } = createRequire(import.meta.url)(process.env.EARTHLINK_PLAYWRIGHT || "playwright");
 const url = process.argv[2] || "http://127.0.0.1:8765/";
 const browser = await chromium.launch({ executablePath: process.env.EARTHLINK_CHROME || undefined, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, ignoreHTTPSErrors: !!process.env.EARTHLINK_IGNORE_HTTPS });
 const errors = [];
 page.on("pageerror", e => errors.push(e.message));
 await page.addInitScript(() => localStorage.setItem("earthlink:skipKeys", "true"));

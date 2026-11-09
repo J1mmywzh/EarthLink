@@ -5,8 +5,8 @@ Requires Rhino 8 for commands and package builds. The server and COLLADA tests r
 ```sh
 python3 -m pip install pytest
 python3 -m pytest -q tests
-node --test tests/navigation.test.cjs tests/footprints.test.cjs tests/walking.test.cjs tests/map_contacts.test.cjs tests/bounded_picks.test.cjs
-python3 tools/build.py 0.2.0-beta.1
+node --test tests/navigation.test.cjs tests/walk.test.cjs tests/footprints.test.cjs
+python3 tools/build.py 0.2.0-beta.2
 ```
 
 For browser checks, install `playwright@1.65.0` and Chromium, start `python3 tests/serve_fixture.py --port 8765`, then run these checks sequentially:
@@ -19,7 +19,7 @@ node tests/viewer_review.cjs http://127.0.0.1:8765/
 
 The fixture server creates a temporary data folder and has no map credentials. Set EARTHLINK_PLAYWRIGHT or EARTHLINK_CHROME when test dependencies or the browser executable live outside the default locations. Node 20 or newer is required. Do not generate fixtures in a real user profile.
 
-Tests cover API behavior, GLB transforms, footprint topology, camera invariants, physics and browser state transitions. The smoke test captures two passes. Real input feel, streamed scan quality, installed Rhino/Undo and Windows behavior still require separate acceptance checks. CI pins Ubuntu 24.04, Windows 2022 and macOS 15 Intel so the Python 3.9 compatibility target does not follow an incompatible latest-runner migration.
+Tests cover API behavior, GLB transforms, placement maths, footprint topology, gesture latching, walking (synthetic ray world) and browser behaviour with real wheel events. The smoke test captures two passes. Real input feel, streamed map quality, installed Rhino and Windows behavior still require separate checks; the private map fixture (placeholder site, your own token) covers Google tiles on a real GPU. CI pins Ubuntu 24.04, Windows 2022 and macOS 15 Intel so the Python 3.9 compatibility target does not follow an incompatible latest-runner migration.
 
 ## Build and release
 
@@ -28,7 +28,7 @@ The package appears under `build/rh8/`. Its manifest, archive filename, and plug
 Only push a package after reviewing its contents and testing it. To try a release on McNeel's disposable test server:
 
 ```sh
-python3 tools/build.py 0.2.0-beta.1 --push-test
+python3 tools/build.py 0.2.0-beta.2 --push-test
 ```
 
 This command uploads externally and requires Yak authentication. Production publication uses `--push` and is a separate action. Published version/distribution combinations cannot be overwritten. See [McNeel's publishing guide](https://developer.rhino3d.com/guides/yak/pushing-a-package-to-the-server/).

@@ -2,11 +2,11 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Development preview: 0.2.0-beta.1.** The published PackageManager release is 0.1.1. The navigation and walking changes described below require this development preview.
+**Preview: 0.2.0-beta.2** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
-In Rhino 8, run **PackageManager**, search **EarthLink**, and install. Restart Rhino when ready. For a development build, install its `.yak` package locally instead.
+In Rhino 8, run **PackageManager**, search **EarthLink** (tick *Include pre-releases* for this beta), and install. Restart Rhino when ready.
 
 You need your own Cesium ion token or Google Maps Platform key with Map Tiles API access. Enter it in **EarthLinkSettings** or the viewer's connection dialog. Google Earth Pro is optional.
 
@@ -16,41 +16,47 @@ You need your own Cesium ion token or Google Maps Platform key with Map Tiles AP
 2. Select geometry and run **SendToEarth**.
 3. Choose a design set. Enable **Live** to update it as you edit.
 4. If the file has no location, choose **PickOnMap**, select the site, and apply it to Rhino.
-5. Inspect the model in the browser. Use **Fit model** to frame it.
+5. Inspect the model in the browser. Use **Fit** to frame it.
 
 Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Curves and annotations are not exported as surfaces.
 
-After upgrading from 0.1.x, send each set once to generate the geometry needed for precise cutouts and walking.
+After upgrading from 0.1.x, send each set once to generate the geometry needed for precise cutouts and walking on your model.
+
+## Find a place
+
+Type in the search bar (top left). Suggestions from Google refine as you type, under your **Recent searches**; names read like Google Earth's ("180 Cayuga Park Lane, Ithaca, NY"). Press Enter or pick a result to fly there, or type exact `lat, lon`. With the field empty, the first result is your site. Search needs your Cesium ion token or Google key; coordinates always work.
 
 ## Navigate
 
+Controls follow Rhino 8 for Mac.
+
 | Action | Trackpad | Mouse |
 | --- | --- | --- |
-| Orbit | Two-finger slide | Right-drag |
-| Pan | Shift + two fingers | Shift + right-drag |
-| Zoom | Pinch | Wheel |
+| Orbit (about the point at the centre of the view) | Two fingers | Right-drag |
+| Pan (the ground follows your fingers) | Shift + two fingers | Shift + right-drag, or middle-drag |
+| Zoom (toward the cursor) | Pinch | Wheel, or Ctrl + right-drag |
 
-Parallel views pan by default; hold Ctrl/Command while right-dragging to rotate. The horizon stays level. The compass opens heading and tilt controls, **Reset to north**, and an input-device preference. Mac defaults to Trackpad; select Mouse when using a mouse. **Fit model** frames visible design sets. **− / +** zoom out and in.
+In **Parallel** views two fingers and right-drag pan, with or without Shift; pinch or the wheel zoom. Rotate a parallel view with the Tilt and Heading sliders.
 
-Two-Point preserves verticals and provides **Vertical framing** instead of top-down tilt. For a true top view, use Perspective or Parallel.
+The horizon always stays level. Each gesture keeps one mode until it ends, including its momentum, and movement is eased frame by frame. Pan and zoom scale with distance and orbit is angular, so one swipe feels the same from orbit to a single room.
 
-Using browser navigation turns off **Follow Rhino**. Enable it again to follow the Rhino viewport.
+The compass shows north; select it for **Tilt**, **Heading**, **Sensitivity** and **Reset to north**. **Fit** frames the visible design sets. Click **− / +** for a step, or hold them to zoom continuously. Trackpad and mouse are recognized automatically.
+
+Two-Point keeps verticals vertical and offers **Vertical framing** instead of tilt. Using browser navigation turns off **Follow Rhino**.
 
 ## Walk
 
-Choose the person button, then click a floor or map surface.
+Choose the person button, then click where to stand: your model or the map, with or without a model.
 
 | Control | Action |
 | --- | --- |
-| W A S D or arrow keys | Move |
-| Shift | Sprint |
+| W A S D or arrow keys | Walk (3.5 m/s) |
+| Shift | Sprint (9.5 m/s) |
 | Space | Jump |
-| Right-drag or two-finger slide | Look |
-| Esc or person button | Return to the previous orbit view |
+| Two fingers or right-drag | Look around |
+| Esc or the person button | Return to the previous view |
 
-Walking uses a 1.80 m person with the camera about 1.65 m above the floor. Walls and ceilings block movement; ordinary steps up to 0.20 m are climbed automatically. There is no head bob. Save a view or capture an image from the walking camera as usual.
-
-Collision against your model uses the exported mesh. Scanned-map contacts are approximate; missing or unloaded surfaces can pause movement. A cutout removes Google's ground too, so include a floor or site surface where the design replaces it. Section cuts disable Walk. Changing the displayed geometry or recalling a view leaves Walk safely.
+You walk as a 1.80 m person with eyes at 1.65 m. Walls and ceilings stop you and you slide along them; steps up to 45 cm are climbed and stairs are followed down. Collisions use what is drawn: your exported model mesh and the loaded Google map. Where **Hide map under model** removes the ground, include a floor or site surface in your model. Section cuts disable Walk.
 
 ## Sun and views
 
@@ -64,7 +70,7 @@ Save named views in Rhino or the viewer. With view sync enabled, they appear in 
 
 - Send selections as separate named sets; show, hide, compare, or style them independently.
 - Materials, Clay, and Ghost control model display.
-- Viewer moves remain a preview until **Apply to Rhino**. Applied moves are one Rhino undo step.
+- **Edit** a set to place it on the site: drag, nudge or rotate, then **Apply**. Placement is an EarthLink layer saved with the set in your Rhino file and applied on every update; your Rhino geometry never moves, so you can keep modelling on Rhino's grid at 0,0. **Original position** removes the placement.
 - **Hide map under model** removes Google content within the visible model's projected geometry, preserving concave edges, separate pieces, and uncovered courtyards. It removes ground as well as buildings and vegetation. It does not use a padded bounding rectangle.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
@@ -92,4 +98,4 @@ Open **Capture** to choose image size, detail, and full/context/model passes. Th
 
 EarthLink uses Rhino 8 Python, a separate local Python server, CesiumJS 1.140, and a browser viewer with no frontend build step. Original EarthLink code is MIT licensed; bundled dependencies retain their own licenses.
 
-This preview has synthetic geometry/API/browser tests. Installed-Rhino acceptance, real trackpad feel, and Windows integration require separate checks. Map content and collision samples are visual context, not survey data. Known retained issues are listed in the user manual.
+This preview has unit, API and browser tests and was checked on a Mac GPU over Google's tiles. Windows integration still needs a separate check. Map content is visual context, not survey data. Known issues are listed in the user manual.

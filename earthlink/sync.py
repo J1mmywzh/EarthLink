@@ -2,7 +2,7 @@
 
 Every tick (0.2 s), for the document being synced:
   * follow viewport  - Rhino's active camera -> live/camera.json (viewer follows)          [link_viewport]
-  * live sets        - sets marked Live (or moved from the viewer) are re-sent ~1 s after they change
+  * live sets        - sets marked Live are re-sent ~1 s after their objects change
   * site location    - EarthAnchorPoint edits in Rhino re-send all sets; a location picked in the
                        viewer (live/anchor_request.json) is written into the EarthAnchorPoint
   * sun              - Rhino Sun date/time <-> viewer sun, and the Sun's location/north from the anchor [sync_sun]
@@ -18,7 +18,7 @@ from earthlink import env, views, core
 
 _STICKY = "earthlink_sync_timer"
 _S = {"doc_sn": None, "known": {}, "project": None, "last_cam": None, "was_linked": False,
-      "slow": 0.0, "anchor": None, "live": {}, "follow": set(), "sun_utc": None, "sun_linked": False, "sun_seen": 0.0, "errors": 0}
+      "slow": 0.0, "anchor": None, "live": {}, "sun_utc": None, "sun_linked": False, "sun_seen": 0.0, "errors": 0}
 
 
 def _doc():
@@ -125,7 +125,6 @@ def _watch_sets(doc):
         for n in d.get("names", []):
             core.drop_set(doc, n)
             _S["live"].pop(n, None)
-            _S["follow"].discard(n)
         try:
             os.remove(path)
         except OSError:
@@ -158,25 +157,26 @@ def _apply_requests(doc):
             if core.rename_set(doc, name, req.get("new")):
                 if name in _S["live"]:
                     _S["live"][req["new"]] = _S["live"].pop(name)
-                if name in _S["follow"]:
-                    _S["follow"].discard(name); _S["follow"].add(req["new"])
                 if sc.sticky.get("earthlink_last_set") == name:
                     sc.sticky["earthlink_last_set"] = req["new"]
                 log("renamed set '%s' to '%s'." % (name, req["new"]))
-        elif req.get("type") == "move_set":
-            n = core.move_set(doc, name, req.get("dx", 0), req.get("dy", 0), req.get("dz", 0), req.get("rot", 0), req.get("pivot", (0, 0, 0)))
-            if n:
-                log("moved %d object(s) of '%s' as placed in the viewer (Undo reverts it)." % (n, name))
-                send_sets(doc, [name], reason="moved")
+        elif req.get("type") in ("place_set", "move_set"):   # move_set: requests from older viewers
+            if core.place_set(doc, name, req.get("dx", 0), req.get("dy", 0), req.get("dz", 0), req.get("rot", 0), req.get("pivot", (0, 0, 0))) is not None:
+                log("placed '%s' in EarthLink; the Rhino geometry is unchanged." % name)
+                send_sets(doc, [name], reason="placed")
                 mark_sent(doc, name)
-                _S["follow"].add(name)   # watched from now on, so Undo/Redo in Rhino shows in the viewer
+        elif req.get("type") == "unplace_set":
+            core.reset_placement(doc, name)
+            log("'%s' is back at its Rhino position in EarthLink." % name)
+            send_sets(doc, [name], reason="original position")
+            mark_sent(doc, name)
 
 
 # ------------------------------------------------------------------ live sets
 def _watch_live(doc):
     now = time.time()
     for name, info in core.get_sets(doc).items():
-        if not info.get("live") and name not in _S["follow"]:
+        if not info.get("live"):
             continue
         objs = core.set_objects(doc, name)
         sig = core.signature(objs)
@@ -326,7 +326,7 @@ def start(doc):
     """Start (or retarget) syncing for `doc`. Safe to call repeatedly."""
     if _S["doc_sn"] != doc.RuntimeSerialNumber:
         _S.update(doc_sn=doc.RuntimeSerialNumber, known={}, project=None, last_cam=None, anchor=None,
-                  live={}, follow=set(), sun_utc=None, sun_linked=False, errors=0)
+                  live={}, sun_utc=None, sun_linked=False, errors=0)
     old = sc.sticky.get(_STICKY)
     if old is not None and old.get("sid") == id(_S):
         return

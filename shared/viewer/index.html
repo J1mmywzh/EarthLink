@@ -17,6 +17,7 @@
     --sep: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-hover: rgba(120,120,128,.34); --accent: #0a84ff; --red: #ff453a;
     --shadow: 0 6px 30px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.3); --map: #1c1d1f; } }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--map); color: var(--fg);
     font: 13px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -27,7 +28,24 @@
   svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .hide { display: none !important; }
 
-  #sidebar { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 300px; border-radius: 14px; z-index: 5; display: flex; flex-direction: column; overflow: hidden; transition: transform .28s ease, opacity .28s; }
+  #searchBar { position: absolute; top: 12px; left: 12px; width: 300px; z-index: 8; border-radius: 12px; display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 40px; }
+  #searchBar > .i { width: 17px; height: 17px; color: var(--fg2); flex: none; }
+  #searchBar input { flex: 1; min-width: 0; background: transparent; border: 0; padding: 8px 2px; font-size: 14px; box-shadow: none; }
+  #results { position: absolute; top: 46px; left: 0; right: 0; border-radius: 12px; padding: 6px 6px 8px; display: none; max-height: 70vh; overflow-y: auto; }
+  #results.glass { background: var(--glass-strong); box-shadow: var(--shadow); }
+  .rhead { font-size: 13px; font-weight: 600; margin: 8px 8px 4px; }
+  #results.open { display: block; }
+  .result { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 6px 8px; border-radius: 8px; color: var(--fg); }
+  .result:hover, .result.sel { background: var(--fill); }
+  .rico { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .rico.recent { background: var(--fill); color: var(--fg2); }
+  .rico .i { width: 16px; height: 16px; }
+  .result .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #qClear { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); }
+  #qClear .i { width: 14px; height: 14px; }
+  .hint { color: var(--fg2); font-size: 12px; margin: 0 0 4px; }
+  #navNeedle { transition: transform .08s linear; }
+  #sidebar { position: absolute; top: 62px; left: 12px; bottom: 12px; width: 300px; border-radius: 14px; z-index: 5; display: flex; flex-direction: column; overflow: hidden; transition: transform .28s ease, opacity .28s; }
   #sidebar.hidden { transform: translateX(-330px); opacity: 0; pointer-events: none; }
   #sideHead { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: center; }
   #modelName { font-size: 17px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -122,7 +140,7 @@
   .cesium-widget-credits { left: auto !important; right: 12px !important; bottom: 6px !important; }
   body.picking .cesium-widget canvas { cursor: crosshair; }
   body.measuring .cesium-widget canvas { cursor: crosshair; }
-  @media (max-width: 760px) { #sidebar { width: calc(100% - 76px); } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
+  @media (max-width: 760px) { #sidebar, #searchBar { width: calc(100% - 76px); } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
 </style>
 </head>
 <body>
@@ -147,6 +165,8 @@
   <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
   <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M8 21l2-8V8h4v5l2 8M6 12l4-4M18 12l-4-4M10 13h4"/></symbol>
   <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M16 8l-2.5 5.5L8 16l2.5-5.5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8 8.2 8.2 0 00-6 2.6"/><path d="M4 4v4h4M12 8v4.5l3 2"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
 </svg>
 
@@ -154,6 +174,12 @@
 <div id="frame"></div>
 <div id="measureLbl" class="glass"></div>
 
+<form id="searchBar" class="glass" role="search" autocomplete="off">
+  <svg class="i"><use href="#i-search"/></svg>
+  <input type="text" id="q" placeholder="Search Google Maps" aria-label="Search places" spellcheck="false">
+  <button type="button" id="qClear" class="mini" aria-label="Clear search" hidden><svg class="i"><use href="#i-x"/></svg></button>
+  <div id="results" class="glass"></div>
+</form>
 <aside id="sidebar" class="glass">
   <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status">Waiting for Rhino…</div></div></div>
   <div id="sideBody">
@@ -209,7 +235,7 @@
 
 <div id="navDock" class="glass">
   <button id="walkBtn" title="Walk" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
-  <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i"><use href="#i-compass"/></svg></button>
+  <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
   <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-fit"/></svg></button>
   <span class="divider"></span>
   <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button><button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
@@ -217,10 +243,12 @@
 <div id="navCard" class="glass pop">
   <h3>Navigation <button class="mini" data-close="navCard" aria-label="Close navigation"><svg class="i"><use href="#i-x"/></svg></button></h3>
   <label class="navLabel"><span id="tiltTitle">Tilt</span><span class="val" id="tiltValue"></span></label>
-  <input id="navTilt" aria-label="Tilt" type="range" min="0" max="85" value="35" step="0.1">
+  <input id="navTilt" aria-label="Tilt" type="range" min="0" max="90" value="45" step="0.5">
   <label class="navLabel">Heading <span class="val" id="headingValue"></span></label>
-  <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.9" value="0" step="0.1">
-  <div class="row" style="justify-content:space-between;margin-top:12px"><button id="northBtn" class="link">Reset to north</button><select id="inputDevice" aria-label="Input device" style="width:auto"><option value="auto">Auto</option><option value="trackpad">Trackpad</option><option value="mouse">Mouse</option></select></div>
+  <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.5" value="0" step="0.5">
+  <label class="navLabel">Sensitivity <span class="val" id="sensValue"></span></label>
+  <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
+  <div class="row" style="margin-top:12px"><button id="northBtn" class="link">Reset to north</button></div>
 </div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -266,14 +294,13 @@
     </div>
     <div class="lbl">Rotate <span class="val" id="setRotLbl"></span></div>
     <input type="range" id="setRot" min="-180" max="180" step="0.5" value="0">
-    <div class="row" style="margin-top:14px; justify-content:flex-end"><button class="pill" id="setReset">Reset</button><button class="primary" id="setApply" disabled>Apply to Rhino</button></div>
+    <div class="row" style="margin-top:14px; justify-content:space-between"><button class="link" id="setOriginal" title="Show this set where it is in Rhino">Original position</button><span class="row"><button class="pill" id="setReset">Reset</button><button class="primary" id="setApply" disabled title="Place the set here in EarthLink. Your Rhino geometry does not move.">Apply</button></span></div>
   </div>
 </div>
 
 <div id="siteCard" class="glass pop">
   <h3><span id="siteTitle">Site Location</span><button class="mini" data-close="siteCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  
-  <form id="searchForm"><input type="search" id="search" placeholder="Search a place, or 42.4405, -76.5108"></form>
+  <p class="hint">Search above or click the spot where the model's base point should sit.</p>
   <div class="lbl">Picked point</div>
   <div class="t" id="pickedLbl">Click on the map</div>
   <div class="lbl">Rotate model <span class="val" id="rotLbl"></span></div>
@@ -312,9 +339,7 @@
 </div></div>
 
 <script src="./navigation.js"></script>
-<script src="./walking.js"></script>
-<script src="./map-contacts.js"></script>
-<script src="./bounded-picks.js"></script>
+<script src="./walk.js"></script>
 <script>
 (async () => {
   const $ = id => document.getElementById(id);
@@ -391,8 +416,11 @@
     contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: true } },
   });
   const scene = viewer.scene;
+  viewer.camera._adjustOrthographicFrustum = () => {};   // Parallel width is set by EarthLink only (Cesium 1.140 ties it to camera height)
   scene.globe.baseColor = Cesium.Color.fromCssColorString(dark() ? "#2c2d30" : "#dfe3e6");
   Object.assign(viewer.shadowMap, { softShadows: true, size: 4096, darkness: 0.35, maximumDistance: 1500 });
+  // stronger bias: no self-shadow stripes ("acne") on Google's mesh that shimmer while moving (Cesium 1.140 field)
+  Object.assign(viewer.shadowMap._primitiveBias, { normalOffsetScale: 1.5, depthBias: 0.0004, polygonOffsetFactor: 2, polygonOffsetUnits: 8 });
   viewer.clock.shouldAnimate = false;
 
   let tileset = null;
@@ -409,7 +437,6 @@
   let settingsWrites=Promise.resolve();
   const saveS = patch => { Object.assign(S,patch);settingsWrites=settingsWrites.catch(()=>{}).then(()=>api("/api/settings",patch)).catch(()=>msg("Could not save changes."));return settingsWrites; };
   let nav = null, walk = null;
-  let groundJob=Promise.resolve();
   let rhinoCam = null;   // last camera Rhino sent (Follow Rhino)
 
   // segmented control helper
@@ -522,18 +549,25 @@
       const total = Math.atan(f._elShift || 0) + c.pitch; f._elShift = 0;
       c.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: total, roll: 0 } });
     }
-    if (p === "parallel") {
-      const bs = modelsSphere(), dist = bs ? Cesium.Cartesian3.distance(c.positionWC, bs.center) : 100;
+    const ray = c.getPickRay(new Cesium.Cartesian2(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2));
+    const t = ray && surfaceHit(ray), centre = t !== null && t !== undefined ? Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3()) : null;
+    if (p === "parallel") {   // same framing at the point you are looking at
+      const dist = centre ? Cesium.Cartesian3.distance(c.positionWC, centre) : (modelsSphere() ? Cesium.Cartesian3.distance(c.positionWC, modelsSphere().center) : 100);
       setLens({ projection: "parallel", half_height: Math.max(1, dist * Math.tan((vfov() || 0.7) / 2)) });
+      nav?.settleParallel();
     } else {
+      const wasParallel = isOrtho(), hh = wasParallel ? getLens().half_height : 0;
       setLens({ projection: p, vfov: isOrtho() ? 0.7 : vfov(), shift: 0 });
+      if (wasParallel && centre) {   // come back from far behind: the perspective distance that shows the same width
+        const d = Cesium.Cartesian3.multiplyByScalar(viewer.camera.directionWC, -hh / Math.tan(vfov() / 2), new Cesium.Cartesian3());
+        viewer.camera.setView({ destination: Cesium.Cartesian3.add(centre, d, new Cesium.Cartesian3()), orientation: { direction: viewer.camera.directionWC.clone(), up: viewer.camera.upWC.clone() } });
+      }
       if (p === "two_point") {
         const c2 = viewer.camera; c2.frustum._elShift = Math.tan(c2.pitch);
         c2.setView({ destination: c2.positionWC.clone(), orientation: { heading: c2.heading, pitch: 0, roll: 0 } });
       }
     }
     selProj(p);
-    if(nav)nav.adopt();
   }
   scene.preRender.addEventListener(() => {   // keep two-point level while orbiting
     if (projection !== "two_point" || isOrtho()) return;
@@ -558,7 +592,7 @@
   // ---------------------------------------------------------------- placement
   let meta = null;             // live/meta.json: { project, name, anchor, sets: {name: {glb, bbox_m, ...}} }
   const models = {};           // set name -> Cesium.Model
-  let flewOnce = false, preview = null;   // preview = { lat, lon, h, rot } while editing the site location
+  let preview = null;   // preview = { lat, lon, h, rot } while editing the site location
   const anchor = () => (meta && meta.anchor) || null;
   function baseHeight() {
     const a = anchor(); if (!a) return 0;
@@ -578,7 +612,7 @@
   }
   const visibleSets = () => Object.keys(models).filter(n => models[n].show);
   function modelsSphere(names = visibleSets()) {
-    const ss = names.map(n => models[n] && models[n].boundingSphere).filter(Boolean);
+    const ss = names.map(n => { try { return models[n]?.ready && models[n].boundingSphere; } catch { return null; } }).filter(Boolean);   // not ready yet: skip
     return ss.length ? Cesium.BoundingSphere.fromBoundingSpheres(ss) : null;
   }
   function showSite() {
@@ -737,7 +771,6 @@
     $("modelName").textContent = m.name || "EarthLink";
     const names = Object.keys(m.sets || {});
     $("status").textContent = "";
-    scene.screenSpaceCameraController.enableInputs = false;
     if (!projectChanged) for (const n of Object.keys(models)) {     // renamed sets: same file, new name - keep the loaded model
       if (names.includes(n)) continue;
       const nn = names.find(k => !models[k] && m.sets[k].glb === (models[n]._elGlb || ""));
@@ -758,13 +791,13 @@
         if (models[n]) scene.primitives.remove(models[n]);
         models[n] = next;
         loadDerived(n,next,s);
-        if (offsets[n] && offsets[n].applied) delete offsets[n];   // Rhino moved the geometry; the preview is now real
+        if (offsets[n] && offsets[n].applied) delete offsets[n];   // the new export carries the placement; the preview is now real
       } catch (e) { if(generation!==modelGeneration)return;msg(`Could not load “${n}”: ${e.message}`); }
     }
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
-    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(); groundJob=sampleGround(false); refreshViews(); }
+    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(0); sampleGround(false); refreshViews(); }
     setTimeout(() => {if(generation===modelGeneration)$("dot").className = "live";}, 400);
   }
   function renderSets() {
@@ -774,7 +807,7 @@
     $("sets").innerHTML = "";
     const hid = hidden();
     for (const n of names) {
-      const s = meta.sets[n], el = document.createElement("div");
+      const el = document.createElement("div");
       el.className = "item" + (hid.has(n) ? " off" : "");
       el.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-cube"/></svg></span>` +
         `<span class="grow"><div class="t">${esc(n)}</div></span>` +
@@ -810,15 +843,14 @@
     renderSets(); applyClip(); applySection(); msg(`Showing “${next}”`, 1800);
   };
 
-  function flyTo() {
-    if (nav) return nav.fit();
+  function flyTo(duration = 0.9) {   // fit the visible sets, keeping the current heading
     const bs = modelsSphere(); if (!bs) return;
-    viewer.camera.flyToBoundingSphere(bs, { duration:0, offset:new Cesium.HeadingPitchRange(0,-0.8,bs.radius*3.2) });
+    if (walk) walk.exit(); viewer.camera.cancelFlight();
+    viewer.camera.flyToBoundingSphere(bs, { duration, offset: new Cesium.HeadingPitchRange(viewer.camera.heading, -0.6, bs.radius * 3.2) });
   }
   function restoreCamera() {
     const c = store.get("camera"); if (!c) return false;
     viewer.camera.setView({ destination: new Cesium.Cartesian3(c.x, c.y, c.z), orientation: { heading: c.h, pitch: c.p, roll: c.r } });
-    if(nav)nav.adopt();
     return true;
   }
   viewer.camera.moveEnd.addEventListener(() => {
@@ -853,7 +885,7 @@
     const dest = toWorld(M, v.pos),
           direction = Cesium.Cartesian3.normalize(toWorld(M, v.dir, true), new Cesium.Cartesian3()),
           up = Cesium.Cartesian3.normalize(toWorld(M, v.up, true), new Cesium.Cartesian3());
-    const finish = () => { setLens({ ...v, projection: p }); selProj(p); if(nav)nav.adopt(); };
+    const finish = () => { setLens({ ...v, projection: p }); selProj(p); nav?.settleParallel(); };
     if (p === "perspective" && duration && !isOrtho() && projection === "perspective") {
       viewer.camera.flyTo({ destination: dest, orientation: { direction, up }, duration, complete: finish });
     } else {
@@ -866,12 +898,9 @@
   async function refreshViews() {
     views = (await api("/api/views")).views || [];
     $("views").innerHTML = views.length ? "" : `<div class="empty">No views</div>`;
-    const PN = { perspective: "Perspective", two_point: "Two-Point", parallel: "Parallel" };
     for (const v of views) {
       const li = document.createElement("div");
       li.className = "item click";
-      const t = v.minutes != null ? `${String(Math.floor(v.minutes / 60)).padStart(2, "0")}:${String(v.minutes % 60).padStart(2, "0")}` : "";
-      const sub = [PN[v.projection || "perspective"], t, v.source === "rhino" ? "from Rhino" : ""].filter(Boolean).join(" · ");
       li.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#${v.source === "rhino" ? "i-rhino" : "i-view"}"/></svg></span>` +
         `<span class="grow"><div class="t">${esc(v.name)}</div></span>` +
         (RHINO ? `<span class="acts"><button class="mini" title="Rename"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
@@ -906,7 +935,6 @@
   // ---------------------------------------------------------------- site location (writes Rhino's EarthAnchorPoint)
   let pickReq = RHINO ? await api("/api/pick") : {};
   let picking = false, picked = null, marker = null;
-  const geocoder = cfg.ion_token ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE }) : null;
   function openSite(first) {
     if(walk)walk.exit();
     picking = true; picked = null; $("rot").value = 0; $("rotLbl").textContent = "0°";
@@ -939,32 +967,6 @@
   $("rot").oninput = updatePreview;
   $("editSite").onclick = () => openSite(false);
   $("siteCancel").onclick = closeSite;
-  $("searchForm").onsubmit = async e => {
-    e.preventDefault();
-    const q = $("search").value.trim(); if (!q) return;
-    const ll = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (ll) {
-      const lat = +ll[1], lon = +ll[2];
-      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return msg("That is not a valid “lat, lon”.");
-      viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lon, lat, 600), duration: 1.5 });
-      if (picking) {   // exact coordinates: that is the picked point (ground height sampled from the 3D map)
-        let h = 0;
-        try {
-          const [c] = await scene.sampleHeightMostDetailed([Cesium.Cartographic.fromDegrees(lon, lat)], Object.values(models));
-          if (c && Number.isFinite(c.height)) h = c.height;
-        } catch (err) { /* no 3D map: ground height 0 */ }
-        setPicked(lat, lon, h);
-      }
-      return;
-    }
-    if (!geocoder) return msg("Enter coordinates, or connect Cesium for search.");
-    try {
-      const res = await geocoder.geocode(q);
-      if (!res.length) return msg("No place found.");
-      viewer.camera.flyTo({ destination: res[0].destination, duration: 1.5 });
-      msg(res[0].displayName, 3000);
-    } catch (err) { msg("Search failed: " + err.message); }
-  };
   $("siteApply").onclick = async () => {
     const body = { rotate: +$("rot").value || 0 };
     if (picked) Object.assign(body, { lat: picked.lat, lon: picked.lon, ground_h: picked.h });
@@ -974,7 +976,7 @@
     closeSite();
   };
 
-  // ---------------------------------------------------------------- edit a design set: rename, display, move
+  // ---------------------------------------------------------------- edit a design set: rename, display, place (EarthLink only)
   let editing = null, dragging = null;
   const selSetStyle = seg("setStyleSeg", "", v => {
     const st = Object.assign({}, S.set_styles || {});
@@ -994,6 +996,7 @@
     $("moveLbl").textContent = `E ${o.dx.toFixed(2)} · N ${o.dy.toFixed(2)} · Up ${o.dz.toFixed(2)} m`;
     $("setRot").value = o.rot; $("setRotLbl").textContent = `${(+o.rot).toFixed(1)}°`;
     $("setApply").disabled = !(o.dx || o.dy || o.dz || o.rot) || o.applied;
+    $("setOriginal").hidden = !meta.sets[editing].placement || !!offsets[editing];
   }
   function openSetCard(n) { if(walk)walk.exit(); editing = n; closePops("setCard"); $("setCard").classList.add("open"); showSetCard(); }
   function closeSetCard() {
@@ -1026,12 +1029,16 @@
     const r = await api("/api/sets", { op: "move", name: editing, dx: o.dx, dy: o.dy, dz: o.dz, rot: o.rot, pivot: o.pivot });
     if (r.error) return msg(r.error);
     o.applied = true; showSetCard();
-    msg("Updating Rhino…", 5000);
+    msg("Placing…", 4000);
+  };
+  $("setOriginal").onclick = async () => {   // drop the EarthLink placement: back to where the set is in Rhino
+    const r = await api("/api/sets", { op: "unplace", name: editing });
+    if (r.error) return msg(r.error);
+    msg("Placing…", 4000);
   };
   const setDrag = on => {   // while on, dragging anywhere moves the set; map navigation pauses
     $("dragOn").checked = on;
     document.body.classList.toggle("picking", on);
-    scene.screenSpaceCameraController.enableInputs = !anchor() && !on;
   };
   $("dragOn").onchange = () => { setDrag($("dragOn").checked); if ($("dragOn").checked) msg("Drag enabled", 1800); };
   function groundPoint(pos, z) {   // where the mouse ray meets the horizontal plane at local height z
@@ -1311,11 +1318,11 @@
   const setSide = h => { $("sidebar").classList.toggle("hidden", h); $("toggleSide").classList.toggle("on", !h); store.set("sideHidden", h); };
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
-  $("fly").onclick = flyTo;
+  $("fly").onclick = () => flyTo();
   $("clip").onclick = () => { if(walk)walk.exit();saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
-  $("resample").onclick = () => {if(walk)walk.exit();groundJob=sampleGround(true);};
+  $("resample").onclick = () => { if (walk) walk.exit(); sampleGround(true); };
   document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
-  selProj = seg("projSeg", "perspective", v => { setProjection(v); if(nav)nav.adopt(); });
+  selProj = seg("projSeg", "perspective", v => setProjection(v));
   $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
   // the three link switches can also be changed from Rhino (EarthLinkSync): pick that up without a reload
   let toggledAt = 0;
@@ -1339,210 +1346,343 @@
   $("syncSun").onchange = async () => { clearTimeout(sunPost);saveS({sync_sun:$("syncSun").checked});if($("syncSun").checked){const j=await api("/api/sun");if(j.source==="rhino")sunFromUtc(j.utc,j.enabled);} };
   restyle(); showSite(); showFov();
 
-  // One site-local camera owns every navigation control and gesture.
-  let orbit = null, pointer = null, orbitFrameKey = null;
-  const navigationFrameKey = () => Cesium.Matrix4.toArray(frame()).join(",");
-  const cameraCanvas = scene.canvas;
-  const array = v => [v.x, v.y, v.z];
-  const navigationAllowed = () => !walk && !!anchor() && !picking && !measuring && !$("dragOn").checked && !$("busy").offsetParent && !$("ask").classList.contains("open");
+  // ---------------------------------------------------------------- surfaces: CPU ray tests on what is drawn
+  // Your model: EarthLink's own exported mesh (exact, either face side). The map: Cesium's CPU tile pick.
+  // No depth-buffer reads, so results do not depend on the GPU or the camera's depth range.
+  (() => {   // Cesium's CPU pick reads tile geometry back from the GPU on every call; keep that read in memory instead
+    const BP = Cesium.Buffer?.prototype; if (!BP || BP.__elCache) return;
+    const read = BP.getBufferData, cache = new WeakMap(); BP.__elCache = true;
+    BP.getBufferData = function (view, src = 0, dst = 0, len) {
+      const key = `${view.constructor.name}:${src}:${len ?? view.length}`;
+      let m = cache.get(this); if (!m) cache.set(this, m = new Map());
+      const c = m.get(key); if (c) { view.set(c, dst); return; }
+      read.call(this, view, src, dst, len); m.set(key, view.slice(dst, dst + (len ?? view.length)));
+    };
+  })();
+  function mapPick(ray, max) {                             // like tileset.pick, but only tiles within reach of the ray
+    const hits = [];
+    for (const tile of tileset._selectedTiles) {
+      if (!tile.content) continue;
+      const h = Cesium.IntersectionTests.raySphere(ray, tile.contentBoundingVolume.boundingSphere);
+      if (h && h.start <= max) hits.push([h.start, tile]);
+    }
+    hits.sort((a, b) => a[0] - b[0]);
+    let best = null;
+    for (const [start, tile] of hits) {
+      if (best !== null && start > best) break;
+      const p = tile.content.pick(ray, scene.frameState, new Cesium.Cartesian3());
+      const d = p && Cesium.Cartesian3.distance(p, ray.origin);
+      if (p && d <= max && (best === null || d < best) && !inCutout(p)) best = d;
+    }
+    return best;
+  }
+  const meshIndex = new WeakMap();
+  function indexMesh(g) {
+    if (meshIndex.has(g)) return meshIndex.get(g);
+    const V = g.vertices, I = g.indices, n = I.length / 3, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const p of V) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
+    const cell = Math.min(20, Math.max(0.5, Math.sqrt((hi[0] - lo[0]) * (hi[1] - lo[1]) / Math.max(1, n)) * 2));
+    const nx = Math.floor((hi[0] - lo[0]) / cell) + 1, cells = new Map();
+    for (let t = 0; t < n; t++) {
+      const a = V[I[3 * t]], b = V[I[3 * t + 1]], c = V[I[3 * t + 2]];
+      const x0 = Math.floor((Math.min(a[0], b[0], c[0]) - lo[0]) / cell), x1 = Math.floor((Math.max(a[0], b[0], c[0]) - lo[0]) / cell);
+      const y0 = Math.floor((Math.min(a[1], b[1], c[1]) - lo[1]) / cell), y1 = Math.floor((Math.max(a[1], b[1], c[1]) - lo[1]) / cell);
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const k = x + y * nx; (cells.get(k) || cells.set(k, []).get(k)).push(t); }
+    }
+    const ix = { V, I, lo, hi, cell, nx, cells, seen: new Uint32Array(n), gen: 0 };
+    meshIndex.set(g, ix); return ix;
+  }
+  function rayMesh(ix, o, d, max) {                       // nearest hit distance along a local ray, or null
+    let t0 = 0, t1 = max;
+    for (let k = 0; k < 3; k++) {                          // clip to the mesh box
+      if (Math.abs(d[k]) < 1e-12) { if (o[k] < ix.lo[k] || o[k] > ix.hi[k]) return null; continue; }
+      let a = (ix.lo[k] - o[k]) / d[k], b = (ix.hi[k] - o[k]) / d[k]; if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a); t1 = Math.min(t1, b); if (t0 > t1) return null;
+    }
+    const gx = x => Math.floor((x - ix.lo[0]) / ix.cell), gy = y => Math.floor((y - ix.lo[1]) / ix.cell);
+    const xa = o[0] + d[0] * t0, xb = o[0] + d[0] * t1, ya = o[1] + d[1] * t0, yb = o[1] + d[1] * t1;
+    const gen = ++ix.gen; let best = null;
+    for (let x = gx(Math.min(xa, xb)); x <= gx(Math.max(xa, xb)); x++) for (let y = gy(Math.min(ya, yb)); y <= gy(Math.max(ya, yb)); y++) {
+      for (const t of ix.cells.get(x + y * ix.nx) || []) {
+        if (ix.seen[t] === gen) continue; ix.seen[t] = gen;
+        const A = ix.V[ix.I[3 * t]], B = ix.V[ix.I[3 * t + 1]], C = ix.V[ix.I[3 * t + 2]];
+        const e1 = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], e2 = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+        const p = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]];
+        const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2]; if (Math.abs(det) < 1e-12) continue;
+        const s = [o[0] - A[0], o[1] - A[1], o[2] - A[2]], u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / det; if (u < 0 || u > 1) continue;
+        const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]];
+        const v = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) / det; if (v < 0 || u + v > 1) continue;
+        const h = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+        if (h >= t0 - 1e-6 && h <= t1 + 1e-6 && (best === null || h < best)) best = Math.max(0, h);
+      }
+    }
+    return best;
+  }
+  function inCutout(p) {                                   // a map point hidden by "Hide map under model"
+    if (!S.clip) return false;
+    for (const name of visibleSets()) {
+      const m = models[name], rings = m?._elFootprints; if (!rings) continue;
+      const l = Cesium.Matrix4.multiplyByPoint(Cesium.Matrix4.inverseTransformation(m.modelMatrix, new Cesium.Matrix4()), p, new Cesium.Cartesian3());
+      for (const r of rings) {
+        let inside = false;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+          if ((r[i][1] > l.y) !== (r[j][1] > l.y) && l.x < (r[j][0] - r[i][0]) * (l.y - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside;
+        if (inside) return true;
+      }
+    }
+    return false;
+  }
+  function surfaceHit(ray, max = 1e7, models_ = true) {    // nearest drawn surface along a world ray: distance or null
+    let best = null;
+    if (models_) for (const name of visibleSets()) {
+      const m = models[name], g = m?._elGeometry; if (!g) continue;
+      const inv = Cesium.Matrix4.inverseTransformation(m.modelMatrix, new Cesium.Matrix4());
+      const o = Cesium.Matrix4.multiplyByPoint(inv, ray.origin, new Cesium.Cartesian3()), d = Cesium.Matrix4.multiplyByPointAsVector(inv, ray.direction, new Cesium.Cartesian3());
+      const t = rayMesh(indexMesh(g), [o.x, o.y, o.z], [d.x, d.y, d.z], best ?? max);
+      if (t !== null) best = t;
+    }
+    try {
+      if (tileset) { const t = mapPick(ray, best ?? max); if (t !== null) best = t; }
+      else if (scene.globe.show) {
+        const p = scene.globe.pick(ray, scene), t = p && Cesium.Cartesian3.distance(ray.origin, p);
+        if (p && t <= (best ?? max) && Cesium.Cartesian3.dot(Cesium.Cartesian3.subtract(p, ray.origin, new Cesium.Cartesian3()), ray.direction) > 0) best = t;
+      }
+    } catch { /* a tile unloading mid-pick: treat as no hit */ }
+    return best;
+  }
+
+  // ---------------------------------------------------------------- navigation (navigation.js) and walking (walk.js)
   const freeCamera = () => {
-    if (S.link_viewport) { saveS({link_viewport:false}); $("follow").checked=false; toggledAt=Date.now(); }
+    if (S.link_viewport) { saveS({ link_viewport: false }); $("follow").checked = false; toggledAt = Date.now(); }
     viewer.camera.cancelFlight();
   };
+  const modal = () => $("busy").offsetParent || $("ask").classList.contains("open") || $("keys").classList.contains("open");
+  const sensitivity = () => (+store.get("sensitivity") || 100) / 100;
+  nav = EarthLinkNavigation.create(Cesium, viewer, {
+    projection: () => projection,
+    pick: ray => { const t = surfaceHit(ray); return t === null ? null : Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3()); },
+    ground: ray => { const t = surfaceHit(ray, 5000, false); return t === null ? null : Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3()); },
+    allowed: () => !walk && !modal(),
+    sensitivity,
+    moved: freeCamera,
+    walking: () => !!walk?.body,
+    look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
+  });
+  const turn = d => ((d % 360) + 540) % 360 - 180;
   function navLabels() {
-    if(walk?.body){$("tiltTitle").textContent="Look";$("navTilt").min=-85;$("navTilt").max=85;$("navTilt").value=walk.pitch;$("navTilt").setAttribute("aria-label","Look");$("tiltValue").textContent=`${walk.pitch.toFixed(0)}°`;$("navHeading").value=((walk.heading%360)+360)%360;$("headingValue").textContent=`${Math.round(+$("navHeading").value)}°`;return;}
-    if (!orbit) return;
-    const two=projection==="two_point";
-    $("tiltTitle").textContent=two?"Vertical framing":"Tilt";
-    $("navTilt").min=two?10:0;$("navTilt").max=two?170:85;
-    $("navTilt").value=orbit.tilt;
-    $("navTilt").setAttribute("aria-label",two?"Vertical framing":"Tilt");
-    $("tiltValue").textContent=`${(two?orbit.tilt-90:orbit.tilt).toFixed(0)}°`;
-    $("navHeading").value=orbit.heading; $("headingValue").textContent=`${orbit.heading.toFixed(0)}°`;
+    const two = projection === "two_point";
+    const ht = walk?.body ? { heading: walk.heading, tilt: walk.pitch } : nav.headingTilt();
+    $("tiltTitle").textContent = walk?.body ? "Look" : two ? "Vertical framing" : "Tilt";
+    $("navTilt").min = walk?.body || two ? -80 : 0; $("navTilt").max = walk?.body || two ? 80 : 90;
+    if (document.activeElement !== $("navTilt")) $("navTilt").value = ht.tilt;
+    if (document.activeElement !== $("navHeading")) $("navHeading").value = ht.heading;
+    $("tiltValue").textContent = `${Math.round(ht.tilt)}°`; $("headingValue").textContent = `${Math.round(ht.heading) % 360}°`;
+    $("sensValue").textContent = `${Math.round(sensitivity() * 100)} %`;
   }
-  nav = {
-    ensure() {return orbit&&orbitFrameKey===navigationFrameKey()?true:nav.adopt();},
-    adopt() {
-      if (!anchor()) return false;
-      const M=frame(), c=viewer.camera, pos=toLocal(M,c.positionWC), dir=toLocal(M,c.directionWC,true);
-      const bs=modelsSphere(), center=bs?toLocal(M,bs.center):[0,0,0];
-      let virtual=dir;
-      if(projection==="two_point"){
-        const pitch=Math.atan(c.frustum._elShift||0),h=Math.atan2(dir[0],dir[1]);
-        virtual=[Math.sin(h)*Math.cos(pitch),Math.cos(h)*Math.cos(pitch),Math.sin(pitch)];
-      }
-      const distance=Math.max(.1,center.reduce((v,x,i)=>v+(x-pos[i])*virtual[i],0));
-      orbit=new EarthLinkNavigation.Orbit({target:pos.map((v,i)=>v+virtual[i]*distance),distance,
-        heading:Math.atan2(virtual[0],virtual[1])*180/Math.PI,tilt:Math.acos(Math.max(-1,Math.min(1,-virtual[2])))*180/Math.PI,
-        projection,halfHeight:getLens().half_height||30});
-      orbitFrameKey=navigationFrameKey();navLabels();return true;
-    },
-    apply() {
-      if(!orbit||!anchor())return;
-      const p=orbit.pose(),M=frame(),c=viewer.camera;
-      if(isOrtho()) {const a=aspect();c.frustum.width=2*p.halfHeight*(a>1?a:1);}
-      else c.frustum._elShift=p.shift;
-      c.setView({destination:toWorld(M,p.position),orientation:{direction:toWorld(M,p.direction,true),up:toWorld(M,p.up,true)}});
-      scene.requestRender();navLabels();
-    },
-    fit() {
-      if(walk)walk.exit();
-      if(!navigationAllowed())return; freeCamera();if(!nav.ensure())return;
-      const bs=modelsSphere();if(!bs)return;
-      orbit.target=toLocal(frame(),bs.center);orbit.distance=Math.max(.1,bs.radius/Math.sin((vfov()||.7)/2)*1.15);
-      orbit.halfHeight=Math.max(.1,bs.radius*1.15/Math.min(1,aspect()));orbit.projection=projection;nav.apply();
-    },
-    zoom(factor) {if(!navigationAllowed()||walk)return;freeCamera();if(!nav.ensure())return;orbit.zoom(factor);nav.apply();}
+  let labelsAt = 0;
+  scene.postRender.addEventListener(() => {   // compass follows the heading; open menu values stay current
+    const h = walk?.body ? walk.heading : Cesium.Math.toDegrees(viewer.camera.heading);
+    $("navNeedle").style.transform = `rotate(${-h}deg)`;
+    const now = performance.now();
+    if ($("navCard").classList.contains("open") && now - labelsAt > 200) { labelsAt = now; navLabels(); }
+  });
+  $("navBtn").onclick = () => { const on = !$("navCard").classList.contains("open"); closePops("navCard"); $("navCard").classList.toggle("open", on); if (on) navLabels(); };
+  $("northBtn").onclick = () => {
+    if (!walk?.body) return nav.north();
+    const from = walk.heading, d = -turn(from); let t = 0;
+    const step = () => { t = Math.min(1, t + 1 / 20); walk.heading = (from + d * (1 - Math.pow(1 - t, 3)) + 360) % 360; if (t < 1 && walk?.body) requestAnimationFrame(step); };
+    step();
   };
-  $("navBtn").onclick=()=>{if(!walk)nav.ensure();else navLabels();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
-  $("northBtn").onclick=()=>{if(walk?.body){walk.heading=0;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.north();nav.apply();};
-  $("navHeading").oninput=()=>{if(walk?.body){walk.heading=+$("navHeading").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.heading=+$("navHeading").value;nav.apply();};
-  $("navTilt").oninput=()=>{if(walk?.body){walk.pitch=+$("navTilt").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.tilt=+$("navTilt").value;nav.apply();};
-  $("inputDevice").value=store.get("inputDevice")||(/Mac/.test(navigator.platform)?"trackpad":"auto");
-  $("inputDevice").onchange=()=>store.set("inputDevice",$("inputDevice").value);
-  $("zoomIn").onclick=()=>nav.zoom(.8);$("zoomOut").onclick=()=>nav.zoom(1.25);
-  function walkMesh(){
-    const vertices=[],indices=[];
-    for(const name of visibleSets()){
-      const g=models[name]._elGeometry;if(!g)throw Error("Resend the model to walk.");
-      const offset=offsetMatrix(name),start=vertices.length;
-      for(const p of g.vertices)vertices.push(array(Cesium.Matrix4.multiplyByPoint(offset,new Cesium.Cartesian3(...p),new Cesium.Cartesian3())));
-      for(const i of g.indices)indices.push(i+start);
-    }
-    return{schema:1,vertices,indices};
+  $("navHeading").oninput = () => { if (walk?.body) walk.heading = +$("navHeading").value; else nav.setHeading(+$("navHeading").value); };
+  $("navTilt").oninput = () => { if (walk?.body) walk.pitch = +$("navTilt").value; else nav.setTilt(+$("navTilt").value); };
+  $("sens").value = Math.round(sensitivity() * 100);
+  $("sens").oninput = () => { store.set("sensitivity", +$("sens").value); navLabels(); };
+  for (const [id, sign] of [["zoomIn", -1], ["zoomOut", 1]]) {   // click: one smooth step; hold: continuous
+    const b = $(id); let timer = 0, held = false;
+    const up = () => { clearTimeout(timer); if (held) nav.release(); else if (timer) nav.zoomStep(sign); timer = 0; held = false; };
+    b.addEventListener("pointerdown", e => { if (e.button) return; e.preventDefault(); b.setPointerCapture(e.pointerId); held = false; timer = setTimeout(() => { held = true; nav.hold(sign); }, 220); });
+    b.addEventListener("pointerup", up); b.addEventListener("pointercancel", () => { clearTimeout(timer); timer = 0; held = false; nav.release(); });
+    b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); nav.zoomStep(sign); } });
   }
-  function beginWalk(){
-    if(walk){walk.exit();return;}
-    if(!anchor())return msg("Send a model first.");
-    if($("sectionOn").checked)return msg("Turn off the section cut to walk.");
-    if(picking)closeSite();if(editing)closeSetCard();
-    measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");
-    freeCamera();closePops();
-    const returning=captureCamera(""),state={placing:true,keys:new Set(),body:null,cache:new Map(),context:null,pending:false,last:performance.now(),heading:0,pitch:0};
-    state.exit=()=>{
-      if(walk!==state)return;walk=null;msg("");state.queries?.stop();state.body?.free();document.body.classList.remove("picking");
-      $("walkBtn").classList.remove("on");$("walkBtn").setAttribute("aria-pressed","false");
-      const {date,minutes,...camera}=returning;applyView(camera,0);pointer=null;
-    };
-    walk=state;$("walkBtn").classList.add("on");$("walkBtn").setAttribute("aria-pressed","true");$("walkBtn").blur();
-    document.body.classList.add("picking");msg("Choose a surface.",2200);
-  }
-  async function mapContacts(state,feet){
-    if(!tileset)return null;
-    if(typeof scene.pickFromRayMostDetailed!=="function")throw Error("Walk is unavailable in this browser.");
-    const M=frame(),exclude=Object.values(models),queries=state.queries,generation=state.contactGeneration=(state.contactGeneration||0)+1;
-    const current=()=>walk===state&&state.contactGeneration===generation&&!queries.closed;
-    const query=async(origin,direction,max)=>{
-      if(!current())return null;
-      const ray=new Cesium.Ray(toWorld(M,origin),Cesium.Cartesian3.normalize(toWorld(M,direction,true),new Cesium.Cartesian3()));
-      const result=await queries.cast(ray,exclude,.05);
-      return current()&&result?.position?toLocal(M,result.position):null;
-    };
-    let timer;
-    try{return await Promise.race([EarthLinkMapContacts.sample(feet,query,state.cache),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Surface unavailable.")),5000);})]);}
-    catch(error){state.contactGeneration++;queries.cancelPending();throw error;}
-    finally{clearTimeout(timer);}
-  }
-  async function placeWalker(screen){
-    const state=walk;if(!state?.placing||state.pending)return;
-    let point=scene.pickPositionSupported?scene.pickPosition(screen):null;
-    if(!point)return msg("Choose a solid surface.");
-    state.pending=true;msg("Loading…",6000);
-    try{
-      await groundJob;state.queries?.stop();state.queries=null;
-      if(tileset&&typeof scene.pickFromRayMostDetailed==="function"){
-        const precise=await scene.pickFromRayMostDetailed(viewer.camera.getPickRay(screen),[],.05);
-        if(!precise?.position)throw Error("Surface unavailable.");
-        point=precise.position;
-      }
-      if(walk!==state)return;
-      if(tileset)state.queries=new EarthLinkBoundedPicks.Queries(scene);
-      const feet=toLocal(frame(),point),mesh=walkMesh(),context=await mapContacts(state,feet);
-      if(walk!==state)return;
-      const body=await EarthLinkWalking.create(mesh,{feet,context});
-      if(walk!==state){body.free();return;}
-      const camera=captureCamera("");state.heading=Math.atan2(camera.dir[0],camera.dir[1])*180/Math.PI;state.pitch=0;
-      state.body=body;state.context=context;state.contextTime=performance.now();state.placing=false;state.last=performance.now();
-      setProjection("perspective",true);state.eyeZ=body.eye[2];document.body.classList.remove("picking");msg("");drawWalk();
-    }catch(error){state.queries?.stop();if(walk===state)msg(error.message==="Not enough room"?"Choose a clear surface.":error.message);}
-    finally{state.pending=false;}
-  }
-  function drawWalk(dt=0){
-    if(!walk?.body)return;const eye=walk.body.eye;
-    if(walk.body.grounded&&dt&&Math.abs(eye[2]-walk.eyeZ)<.3)walk.eyeZ+=(eye[2]-walk.eyeZ)*(1-Math.exp(-dt*14));else walk.eyeZ=eye[2];
-    eye[2]=walk.eyeZ;navLabels();
-    const h=walk.heading*Math.PI/180,p=walk.pitch*Math.PI/180,M=frame();
-    const dir=[Math.sin(h)*Math.cos(p),Math.cos(h)*Math.cos(p),Math.sin(p)],up=[-Math.sin(h)*Math.sin(p),-Math.cos(h)*Math.sin(p),Math.cos(p)];
-    viewer.camera.setView({destination:toWorld(M,eye),orientation:{direction:toWorld(M,dir,true),up:toWorld(M,up,true)}});
-  }
-  async function refreshContacts(state){
-    state.pending=true;const feet=state.body.feet;
-    try{const next=await mapContacts(state,feet);if(walk===state&&next){state.body.updateContext(next);state.context=next;state.contextTime=performance.now();}}
-    catch(error){state.queries?.cancelPending();if(walk===state){state.contextTime=0;state.retryAt=performance.now()+1000;}}
-    finally{state.pending=false;}
-  }
-  const stopWalkingInput=()=>{if(walk){walk.keys.clear();walk.jump=false;walk.last=performance.now();}};
-  window.addEventListener("blur",stopWalkingInput);
-  document.addEventListener("focusin",e=>{if(e.target.closest("input,textarea,select,button"))stopWalkingInput();});
-  document.addEventListener("keydown",e=>{
-    if(!walk||e.target.closest("input,textarea,select,[contenteditable=true]"))return;
-    if(e.code==="Escape"){e.preventDefault();walk.exit();return;}
-    if(!walk.body||!["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowLeft","ArrowDown","ArrowRight","ShiftLeft","ShiftRight","Space"].includes(e.code))return;
-    e.preventDefault();walk.keys.add(e.code);if(e.code==="Space"&&!e.repeat)walk.jump=true;
-  });
-  document.addEventListener("keyup",e=>{walk?.keys.delete(e.code);});
-  document.addEventListener("visibilitychange",()=>{if(document.hidden)stopWalkingInput();});
-  scene.preUpdate.addEventListener(()=>{
-    const state=walk;if(!state?.body)return;
-    const now=performance.now(),dt=Math.min(.1,(now-state.last)/1000);state.last=now;
-    if(document.hidden||$("busy").offsetParent)return;
-    const k=state.keys,h=state.heading*Math.PI/180;
-    const forward=Number(k.has("KeyW")||k.has("ArrowUp"))-Number(k.has("KeyS")||k.has("ArrowDown"));
-    const right=Number(k.has("KeyD")||k.has("ArrowRight"))-Number(k.has("KeyA")||k.has("ArrowLeft"));
-    const input={x:forward*Math.sin(h)+right*Math.cos(h),y:forward*Math.cos(h)-right*Math.sin(h),sprint:k.has("ShiftLeft")||k.has("ShiftRight"),jump:!!state.jump};
-    const feet=state.body.feet,moving=!!(forward||right),speed=input.sprint?3.8:1.4;
-    if(tileset){
-      const context=state.context,delta=context?Math.max(Math.abs(feet[0]-context.center[0]),Math.abs(feet[1]-context.center[1])):Infinity;
-      if(!state.pending&&now>(state.retryAt||0)&&moving&&(delta>.12||now-state.contextTime>1500))refreshContacts(state);
-      const next=[feet[0]+input.x*speed*dt,feet[1]+input.y*speed*dt,feet[2]];
-      const outside=!context||Math.max(Math.abs(next[0]-context.center[0]),Math.abs(next[1]-context.center[1]))>context.radius;
-      if(outside){input.x=0;input.y=0;}
-    }
-    const next=[feet[0]+input.x*speed*dt,feet[1]+input.y*speed*dt,feet[2]];
-    if(moving&&state.body.grounded&&!state.body.supportedAt(next)){input.x=0;input.y=0;}
-    state.body.step(input,dt);state.jump=false;drawWalk(dt);
-  });
-  $("walkBtn").onclick=beginWalk;
-  cameraCanvas.addEventListener("contextmenu",e=>e.preventDefault());
-  cameraCanvas.addEventListener("pointerdown",e=>{
-    if(walk?.body&&[1,2].includes(e.button)){pointer={id:e.pointerId,x:e.clientX,y:e.clientY,look:true};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();return;}
-    if(!navigationAllowed()||![1,2].includes(e.button))return;
-    freeCamera();if(!nav.ensure())return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();
-  });
-  cameraCanvas.addEventListener("pointermove",e=>{
-    if(!pointer||pointer.id!==e.pointerId)return;
-    if(pointer.look&&walk?.body){walk.heading+=(e.clientX-pointer.x)*.2;walk.pitch=Math.max(-85,Math.min(85,walk.pitch-(e.clientY-pointer.y)*.2));pointer.x=e.clientX;pointer.y=e.clientY;drawWalk();return;}
-    if(!navigationAllowed()||!orbit)return;
-    const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer.x=e.clientX;pointer.y=e.clientY;
-    const pan=e.shiftKey||(projection==="parallel"&&!e.ctrlKey&&!e.metaKey);
-    const units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
-    if(pan)orbit.pan(-dx*units,dy*units);else orbit.orbit(dx*.25,dy*.25);nav.apply();e.preventDefault();
-  });
-  const releasePointer=()=>{pointer=null;};
-  window.addEventListener("pointerup",releasePointer);cameraCanvas.addEventListener("pointercancel",releasePointer);cameraCanvas.addEventListener("lostpointercapture",releasePointer);window.addEventListener("blur",releasePointer);
-  cameraCanvas.addEventListener("wheel",e=>{
-    if(walk?.body){e.preventDefault();if(!e.ctrlKey){walk.heading+=e.deltaX*.25;walk.pitch=Math.max(-85,Math.min(85,walk.pitch-e.deltaY*.25));drawWalk();}return;}
-    if(!navigationAllowed())return;
-    e.preventDefault();freeCamera();if(!nav.ensure())return;
-    const a=EarthLinkNavigation.wheelAction(e,$("inputDevice").value),units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
-    if(a.type==="zoom")orbit.zoom(a.factor);
-    else if(a.type==="pan"||projection==="parallel")orbit.pan(-a.x*units,a.y*units);
-    else orbit.orbit(a.x*.3,a.y*.3);
-    nav.apply();
-  },{passive:false});
-  document.addEventListener("visibilitychange",()=>{if(document.hidden)releasePointer();});
 
-  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, get orbit(){return orbit;}, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  function beginWalk() {
+    if (walk) { walk.exit(); return; }
+    if ($("sectionOn").checked) return msg("Turn off the section cut to walk.");
+    if (picking) closeSite(); if (editing) closeSetCard();
+    measuring = false; clearMeasure(); $("measureBtn").classList.remove("on"); document.body.classList.remove("measuring");
+    freeCamera(); closePops(); nav.stop();
+    const c = viewer.camera, returning = { pos: c.positionWC.clone(), dir: c.directionWC.clone(), up: c.upWC.clone(), lens: getLens() };
+    const state = { placing: true, keys: new Set(), body: null, heading: 0, pitch: 0, last: 0, raf: 0 };
+    state.exit = () => {
+      if (walk !== state) return; walk = null; cancelAnimationFrame(state.raf); msg("");
+      document.body.classList.remove("picking"); $("walkBtn").classList.remove("on"); $("walkBtn").setAttribute("aria-pressed", "false");
+      setLens(returning.lens); selProj(returning.lens.projection);
+      viewer.camera.setView({ destination: returning.pos, orientation: { direction: returning.dir, up: returning.up } });
+    };
+    walk = state; $("walkBtn").classList.add("on"); $("walkBtn").setAttribute("aria-pressed", "true"); $("walkBtn").blur();
+    document.body.classList.add("picking"); msg("Click where to stand.", 2500);
+  }
+  function placeWalker(screen) {
+    const state = walk; if (!state?.placing) return;
+    const ray = viewer.camera.getPickRay(screen), t = ray && surfaceHit(ray);
+    if (t === null || t === undefined) return msg("Click on a surface.");
+    const point = Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3());
+    const M = Cesium.Transforms.eastNorthUpToFixedFrame(point);   // the walk's own frame: works with or without a model
+    const probe = (o, d, max) => surfaceHit(new Cesium.Ray(toWorld(M, o), Cesium.Cartesian3.normalize(toWorld(M, d, true), new Cesium.Cartesian3())), max);
+    setProjection("perspective", true);
+    const dir = toLocal(M, viewer.camera.directionWC, true);
+    Object.assign(state, { placing: false, M, body: new EarthLinkWalk.Walker(probe, [0, 0, 0]), heading: (Math.atan2(dir[0], dir[1]) * 180 / Math.PI + 360) % 360, pitch: 0, eyeZ: EarthLinkWalk.W.eye });
+    document.body.classList.remove("picking"); msg("");
+    const tick = t => {
+      if (walk !== state) return;
+      const dt = state.last ? Math.min(0.05, (t - state.last) / 1000) : 0; state.last = t;
+      if (!document.hidden && !modal() && dt) {
+        const k = state.keys, h = state.heading * Math.PI / 180;
+        const f = (k.has("KeyW") || k.has("ArrowUp")) - (k.has("KeyS") || k.has("ArrowDown"));
+        const r = (k.has("KeyD") || k.has("ArrowRight")) - (k.has("KeyA") || k.has("ArrowLeft"));
+        state.body.step({ x: f * Math.sin(h) + r * Math.cos(h), y: f * Math.cos(h) - r * Math.sin(h),
+          sprint: k.has("ShiftLeft") || k.has("ShiftRight"), jump: k.has("Space") }, dt);
+      }
+      drawWalk(dt);
+      state.raf = requestAnimationFrame(tick);
+    };
+    state.raf = requestAnimationFrame(tick);
+  }
+  function drawWalk(dt) {
+    const state = walk, eye = state.body.eye;
+    state.eyeZ += (eye[2] - state.eyeZ) * (Math.abs(eye[2] - state.eyeZ) > 2 ? 1 : 1 - Math.exp(-(dt || 1) * 12));   // eased steps
+    const h = state.heading * Math.PI / 180, p = state.pitch * Math.PI / 180;
+    const dir = [Math.sin(h) * Math.cos(p), Math.cos(h) * Math.cos(p), Math.sin(p)], up = [-Math.sin(h) * Math.sin(p), -Math.cos(h) * Math.sin(p), Math.cos(p)];
+    viewer.camera.setView({ destination: toWorld(state.M, [eye[0], eye[1], state.eyeZ]), orientation: { direction: toWorld(state.M, dir, true), up: toWorld(state.M, up, true) } });
+  }
+  const WALK_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "ShiftLeft", "ShiftRight", "Space"];
+  const stopKeys = () => walk?.keys.clear();
+  window.addEventListener("blur", stopKeys);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopKeys(); });
+  document.addEventListener("keydown", e => {
+    if (!walk || e.target.closest?.("input,textarea,select,[contenteditable=true]")) return;
+    if (e.code === "Escape") { e.preventDefault(); walk.exit(); return; }
+    if (walk.body && WALK_KEYS.includes(e.code)) { e.preventDefault(); walk.keys.add(e.code); }
+  });
+  document.addEventListener("keyup", e => walk?.keys.delete(e.code));
+  $("walkBtn").onclick = beginWalk;
+
+  // ---------------------------------------------------------------- search (top left), like Google Earth
+  // Suggestions refine as you type (Google geocoder, which the 3D tiles require), recent searches first.
+  const geocoder = cfg.ion_token ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE })
+    : cfg.google_key && Cesium.GoogleGeocoderService ? new Cesium.GoogleGeocoderService({ key: cfg.google_key }) : null;
+  const SUFFIX = { St: "Street", Rd: "Road", Ln: "Lane", Ave: "Avenue", Dr: "Drive", Blvd: "Boulevard", Ct: "Court", Pl: "Place", Hwy: "Highway",
+    Pkwy: "Parkway", Ter: "Terrace", Cir: "Circle", Sq: "Square", Trl: "Trail", Pk: "Park" };
+  const DIR = { N: "North", S: "South", E: "East", W: "West", NE: "Northeast", NW: "Northwest", SE: "Southeast", SW: "Southwest" };
+  function placeName(raw) {   // "180 Cayuga Park Ln, Ithaca, NY 14850, USA" -> "180 Cayuga Park Lane, Ithaca, NY"
+    let parts = String(raw).split(",").map(p => p.trim()).filter(Boolean);
+    if (parts.length > 1 && /^(USA|United States)$/i.test(parts.at(-1))) parts.pop();
+    parts = parts.map((p, i) => i ? p.replace(/\s+\d{5}(-\d{4})?$/, "").replace(/^\d{4,5}\s+/, "") : p);
+    if (/^\d/.test(parts[0] || "")) parts[0] = parts[0].split(" ").map((w, i, a) =>
+      i === a.length - 1 && SUFFIX[w.replace(".", "")] ? SUFFIX[w.replace(".", "")] : i === 1 && DIR[w] && a.length > 3 ? DIR[w] : w).join(" ");
+    return parts.join(", ");
+  }
+  const packDest = d => d instanceof Cesium.Rectangle ? { r: [d.west, d.south, d.east, d.north] } : { p: [d.x, d.y, d.z] };
+  const unpackDest = d => d.r ? new Cesium.Rectangle(...d.r) : new Cesium.Cartesian3(...d.p);
+  const recents = () => (store.get("recentSearches") || []).filter(r => r?.name && r.dest);
+  function remember(name, dest) {
+    store.set("recentSearches", [{ name, dest: packDest(dest) }, ...recents().filter(r => r.name !== name)].slice(0, 12));
+  }
+  function flyToPlace(dest, radius = 150) {
+    if (walk) walk.exit(); freeCamera();
+    let centre = dest;
+    if (dest instanceof Cesium.Rectangle) {
+      const c = Cesium.Rectangle.center(dest); centre = Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, 0);
+      radius = Math.max(radius, Cesium.Cartesian3.distance(Cesium.Cartesian3.fromRadians(dest.west, dest.south), Cesium.Cartesian3.fromRadians(dest.east, dest.north)) / 2);
+    }
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(centre, radius), { duration: 1.8, offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-40), radius * 2.4) });
+  }
+  function flyToSite() {
+    if (modelsSphere()) return flyTo(1.2);
+    const a = anchor(); if (!a) return msg("Send a model first.");
+    flyToPlace(Cesium.Cartesian3.fromDegrees(a.lon, a.lat, baseHeight()));
+  }
+  const results = $("results"), q = $("q");
+  let items = [], active = -1, suggestTimer = 0, suggestFor = "";
+  const suggestCache = new Map();
+  function render(sections) {
+    items = []; active = -1; results.innerHTML = "";
+    for (const [title, list] of sections) {
+      if (!list.length) continue;
+      if (title) { const h = document.createElement("div"); h.className = "rhead"; h.textContent = title; results.appendChild(h); }
+      for (const it of list) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "result"; b.dataset.i = items.length;
+        b.innerHTML = `<span class="rico ${it.kind}"><svg class="i"><use href="#${it.kind === "recent" ? "i-clock" : it.kind === "site" ? "i-cube" : "i-pin"}"/></svg></span><span class="t">${esc(it.name)}</span>`;
+        b.onpointerdown = e => { e.preventDefault(); choose(it); };
+        results.appendChild(b); items.push(it);
+      }
+    }
+    results.classList.toggle("open", items.length > 0);
+  }
+  function choose(it) {
+    q.value = it.kind === "site" ? "" : it.name; results.classList.remove("open"); q.blur(); $("qClear").hidden = !q.value;
+    if (it.kind === "site") return flyToSite();
+    remember(it.name, it.dest); flyToPlace(it.dest);
+  }
+  function refresh(places = suggestCache.get(q.value.trim().toLowerCase()) || []) {
+    const text = q.value.trim().toLowerCase();
+    const recent = recents().filter(r => !text || r.name.toLowerCase().includes(text)).slice(0, text ? 3 : 5)
+      .map(r => ({ kind: "recent", name: r.name, dest: unpackDest(r.dest) }));
+    const site = !text && anchor() ? [{ kind: "site", name: meta?.name || "My site" }] : [];
+    const shown = new Set(recent.map(r => r.name));
+    render([["", site], ["Recent searches", recent], ["Places", places.filter(p => !shown.has(p.name))]]);
+  }
+  async function suggest(text) {
+    const key = text.toLowerCase();
+    if (!geocoder || text.length < 3 || /^-?\d+(\.\d+)?\s*[, ]/.test(text)) return;
+    if (!suggestCache.has(key)) {
+      try {
+        const res = await geocoder.geocode(text);
+        const seen = new Set();
+        suggestCache.set(key, res.map(r => ({ kind: "place", name: placeName(r.displayName), dest: r.destination })).filter(p => !seen.has(p.name) && seen.add(p.name)).slice(0, 5));
+        while (suggestCache.size > 60) suggestCache.delete(suggestCache.keys().next().value);
+      } catch { return; }
+    }
+    if (q.value.trim().toLowerCase() === key && document.activeElement === q) refresh(suggestCache.get(key));
+  }
+  q.onfocus = () => refresh();
+  q.oninput = () => {
+    $("qClear").hidden = !q.value; refresh();
+    clearTimeout(suggestTimer); suggestFor = q.value.trim(); suggestTimer = setTimeout(() => suggest(suggestFor), 280);
+  };
+  q.onblur = () => setTimeout(() => results.classList.remove("open"), 120);
+  q.onkeydown = e => {
+    if (e.key === "Escape") { q.value = ""; $("qClear").hidden = true; q.blur(); return; }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); if (!items.length) return;
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      results.querySelectorAll(".result").forEach((b, i) => b.classList.toggle("sel", i === active));
+    }
+  };
+  $("qClear").onclick = () => { q.value = ""; $("qClear").hidden = true; q.focus(); refresh(); };
+  $("searchBar").onsubmit = async e => {
+    e.preventDefault();
+    const text = q.value.trim(); if (active >= 0 && items[active]) return choose(items[active]);
+    if (!text) return flyToSite();
+    const ll = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (ll) {
+      const lat = +ll[1], lon = +ll[2];
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return msg("That is not a valid “lat, lon”.");
+      flyToPlace(Cesium.Cartesian3.fromDegrees(lon, lat, 0)); results.classList.remove("open"); q.blur();
+      if (picking) {   // placing the site: exact coordinates are the picked point (ground height from the 3D map)
+        let h = 0;
+        try { const [c] = await scene.sampleHeightMostDetailed([Cesium.Cartographic.fromDegrees(lon, lat)], Object.values(models)); if (Number.isFinite(c?.height)) h = c.height; } catch {}
+        setPicked(lat, lon, h);
+      }
+      return;
+    }
+    if (!geocoder) return msg("Place search needs a Cesium ion token or Google key. Coordinates work.");
+    clearTimeout(suggestTimer); await suggest(text);
+    const first = (suggestCache.get(text.toLowerCase()) || [])[0];
+    if (first) choose(first); else msg("No place found.");
+  };
+
+  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {

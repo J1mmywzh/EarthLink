@@ -21,14 +21,14 @@ def test_finish_package_preserves_nested_viewer_resource_paths(tmp_path, monkeyp
     monkeypatch.setattr(build, 'ROOT', str(tmp_path))
     vendor = tmp_path / 'shared/viewer/vendor'
     vendor.mkdir(parents=True)
-    (vendor / 'rapier.mjs').write_text('export default {};')
-    project = {'identity': {'name': 'EarthLink'}, 'resources': [{'uri': 'shared/viewer/vendor/rapier.mjs'}]}
+    (vendor / 'earcut.js').write_text('/* earcut */')
+    project = {'identity': {'name': 'EarthLink'}, 'resources': [{'uri': 'shared/viewer/vendor/earcut.js'}]}
     (tmp_path / 'EarthLink.rhproj').write_text(json.dumps(project))
     package = tmp_path / 'earthlink-0.2.0+930-rh8-any.yak'
     with zipfile.ZipFile(package, 'w') as z:
         z.writestr('manifest.yml', 'name: EarthLink\nversion: 0.2.0+930\n')
-        z.writestr('shared/rapier.mjs', 'export default {};')
+        z.writestr('shared/earcut.js', '/* earcut */')
     result = build.finish_package(str(package), '0.2.0-beta.1')
     with zipfile.ZipFile(result) as z:
-        assert z.read('shared/vendor/rapier.mjs') == (vendor / 'rapier.mjs').read_bytes()
-        assert 'shared/rapier.mjs' not in z.namelist()
+        assert z.read('shared/vendor/earcut.js') == (vendor / 'earcut.js').read_bytes()
+        assert 'shared/earcut.js' not in z.namelist()

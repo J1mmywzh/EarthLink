@@ -5,10 +5,10 @@ This guide is for an assistant helping someone use or develop EarthLink. Start w
 ## Before operating Rhino
 
 1. Identify the active Rhino document, its unsaved state, model units, current selection, EarthAnchorPoint, and existing EarthLink sets. Do not assume a prior session's file or anchor is still current.
-2. Establish whether the user wants a send, a named view, a site edit, a geometry move, a capture, a build, or publication. Keep the action within that scope.
+2. Establish whether the user wants a send, a named view, a site edit, a set placement, a capture, a build, or publication. Keep the action within that scope.
 3. Use an anchor supplied or approved by the user. Exact site coordinates and selected geometry can reach external map services or a shared viewer; do not invent a real project location or transmit it without authorization.
 4. For a normal installed-plugin check, use the installed commands and confirm the plugin path. Do not silently substitute source-script execution.
-5. A browser set move is only a preview until Apply to Rhino. That button changes source geometry. Removing a set does not delete geometry.
+5. A browser set move is a preview until **Apply**, which saves an EarthLink-only placement with the set; it never moves Rhino geometry. Removing a set does not delete geometry.
 
 ## Runtime constraints
 
@@ -17,7 +17,6 @@ This guide is for an assistant helping someone use or develop EarthLink. Start w
 - Use `tools/build.py`, retaining `earthlink/` as the project library base and the 24 px light/dark command icons.
 - Rhino/pythonnet out-parameters can be tuples. Keep `_frustum` handling intact.
 - Sun updates use DateTimeKind.Unspecified for construction and SetDateTime with Utc, plus the per-date offset received from the viewer.
-- Validate Undo through Rhino's Edit → Undo menu. Scripted Undo is not equivalent in the recorded test workflow.
 - `env.viewer_dir()` prefers installed resources. When testing source, pass an explicit source viewer directory to the server.
 - If Rhino is unresponsive, stop trying to drive it and continue with work that does not need Rhino. Ask before restarting it.
 
@@ -35,4 +34,6 @@ Pull before editing. Inspect changes, run appropriate checks, commit, and push c
 
 Read the README navigation and walking controls before driving the viewer. Do not reintroduce permanent gesture legends, eye-height labels or explanatory subtitles; use short labels, essential values and actionable messages. Resend legacy sets to create geometry sidecars. Walking and cutouts must use the same displayed export/version and set transforms. Preserve courtyard holes and disconnected regions; never fall back to an enclosing rectangle.
 
-Walking uses physical own-model collision geometry and guarded transient map contacts. Test streamed context separately from synthetic fixtures; map scan holes and loading can stop motion. Do not claim full context collision coverage from flat-floor tests. Keep the person/camera parameters in the manual, not the interface. Preserve the previous orbit camera on exit and stop movement on blur, capture or competing tools.
+Navigation follows Rhino 8 for Mac (README table) and is the only camera input; keep Cesium's screenSpaceCameraController disabled. Do not add inertia or per-device modes; tune the rates in `navigation.js` RATE (one user-facing Sensitivity). Surface picks (pivot, walking, placement) use CPU ray tests: the exported mesh and `tile.content.pick`; avoid `scene.pickFromRay`/`pickPosition`, which depend on the depth buffer and were unreliable. Parallel cameras stay 20 km behind their centre point and Cesium's orthographic width adjustment is disabled.
+
+Walking probes what is drawn each frame (`walk.js`). Nothing from Google's tiles is extracted or stored beyond Cesium's in-memory pick buffers. Test streamed context separately from synthetic fixtures; scan holes and loading can stop motion. Keep person/camera parameters in the manual, not the interface. Preserve the previous camera on exit and stop movement on blur, capture or competing tools.

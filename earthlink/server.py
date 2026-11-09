@@ -18,9 +18,8 @@ from earthlink import env  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
-VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js", "map-contacts.js", "bounded-picks.js",
-                 "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/rapier.mjs",
-                 "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt", "vendor/LICENSE-rapier.txt")
+VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js",
+                 "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt")
 
 
 # ======================================================================= Rhino-side control
@@ -163,10 +162,13 @@ def _sets_op(data):
         meta["sets"] = {(new if k == name else k): v for k, v in meta["sets"].items()}
         _rename_in_settings(name, new)
         _queue_for_rhino({"type": "rename_set", "project": meta.get("project"), "name": name, "new": new})
-    elif op == "move":
+    elif op == "move":          # EarthLink placement only; the Rhino geometry is not moved
         mv = {k: float(data.get(k) or 0.0) for k in ("dx", "dy", "dz", "rot")}
         mv["pivot"] = [float(v) for v in (data.get("pivot") or [0, 0, 0])][:3]
-        _queue_for_rhino(dict(mv, type="move_set", project=meta.get("project"), name=name))
+        _queue_for_rhino(dict(mv, type="place_set", project=meta.get("project"), name=name))
+        return {"ok": True}
+    elif op == "unplace":
+        _queue_for_rhino({"type": "unplace_set", "project": meta.get("project"), "name": name})
         return {"ok": True}
     else:
         return {"error": "unknown operation"}

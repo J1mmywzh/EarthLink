@@ -11,7 +11,6 @@ Preserve required attribution in the viewer. Before adding map-based screenshots
 
 ## Bundled browser libraries
 
-- [Rapier 3D compatibility build 0.19.3](https://github.com/dimforge/rapier.js), Apache-2.0: character collision and movement. Bundled as vendor/rapier.mjs with the Apache license.
 - [polygon-clipping 0.15.7](https://github.com/mfogel/polygon-clipping), MIT: projected footprint union.
 - [earcut 2.2.4](https://github.com/mapbox/earcut), ISC: courtyard-preserving decomposition for Cesium's pinned clipping API.
 
