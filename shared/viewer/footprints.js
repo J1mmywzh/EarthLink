@@ -16,7 +16,7 @@
     const v=mesh.vertices,ix=mesh.indices,out=[];
     let zmin=Infinity;
     for(const k of ix){if(!Number.isInteger(k)||k<0||!v[k]||v[k].length!==3||!v[k].every(Number.isFinite))throw Error('Invalid mesh position');zmin=Math.min(zmin,v[k][2]);}
-    const cut=zmin+GROUND_TOLERANCE;
+    const cut=zmin+GROUND_TOLERANCE;out.zmin=zmin;
     for(let i=0;i<ix.length;i+=3){
       let poly=[v[ix[i]],v[ix[i+1]],v[ix[i+2]]];
       if(poly.every(p=>p[2]>cut))continue;
@@ -109,39 +109,58 @@
   }
   const signed=r=>r.reduce((s,p,i)=>{const q=r[(i+1)%r.length];return s+p[0]*q[1]-q[0]*p[1];},0)/2;
 
-  /* Cesium's clipping polygons have no holes. Instead of triangulating a courtyard's surroundings (thousands of
-     pieces, each slowing every frame), cut the plan into strips at every courtyard: each courtyard is crossed by
-     a cut, so every strip's outline is a plain polygon, and the strips meet exactly. */
-  function outline(t,cell){
+  function dilate(g,nx,ny,k){                           // grow the painted area by k cells (square)
+    if(k<=0)return g;
+    const a=new Uint8Array(nx*ny),b=new Uint8Array(nx*ny);
+    for(let r=0;r<ny;r++){let run=-Infinity;const o=r*nx;
+      for(let c=0;c<nx;c++){if(g[o+c])run=c;if(c-run<=k)a[o+c]=1;}
+      run=Infinity;for(let c=nx-1;c>=0;c--){if(g[o+c])run=c;if(run-c<=k)a[o+c]=1;}}
+    for(let c=0;c<nx;c++){let run=-Infinity;
+      for(let r=0;r<ny;r++){if(a[r*nx+c])run=r;if(r-run<=k)b[r*nx+c]=1;}
+      run=Infinity;for(let r=ny-1;r>=0;r--){if(a[r*nx+c])run=r;if(run-r<=k)b[r*nx+c]=1;}}
+    return b;
+  }
+  /* polygons: what to clip from the map, the base grown by `margin` metres so the map's ragged cut edge stays
+     clear of the model. rings: the base's true boundary (courtyards included; the base is on the left of each
+     ring), for the band that joins the map to the model. */
+  function outline(t,cell,margin){
     let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
     for(let i=0;i<t.length;i+=2){x0=Math.min(x0,t[i]);x1=Math.max(x1,t[i]);y0=Math.min(y0,t[i+1]);y1=Math.max(y1,t[i+1]);}
-    x0-=cell;y0-=cell;
-    const nx=Math.ceil((x1-x0)/cell)+2,ny=Math.ceil((y1-y0)/cell)+2;
-    const g=paint(t,x0,y0,cell,nx,ny),minHole=Math.max(1,cell*cell*2)/(cell*cell);   // gaps under 1 m² are not courtyards
-    const cuts=new Set();
+    const k=Math.ceil(margin/cell),pad=k+1;
+    x0-=cell*pad;y0-=cell*pad;
+    const nx=Math.ceil((x1-x0)/cell)+pad+1,ny=Math.ceil((y1-y0)/cell)+pad+1;
+    const base=paint(t,x0,y0,cell,nx,ny),minHole=Math.max(1,cell*cell*2)/(cell*cell);   // gaps under 1 m² are not courtyards
+    const world=(c0,q)=>q.map(([c,r])=>[x0+(c0+c)*cell,y0+r*cell]);
+    const rings=[];
+    for(const r of trace(base,nx,0,nx,ny)){const a=signed(r);if(a>0||-a>=minHole){const q=simplify(r,1);if(q.length>=3)rings.push(world(0,q));}}
+    // Cesium's clipping polygons have no holes. Instead of triangulating a courtyard's surroundings (thousands of
+    // pieces, each slowing every frame), cut the plan into strips at every courtyard: each courtyard is crossed
+    // by a cut, so every strip's outline is a plain polygon, and the strips meet exactly.
+    const g=dilate(base,nx,ny,k),cuts=new Set();
     for(const r of trace(g,nx,0,nx,ny))if(-signed(r)>=minHole){
       let a=Infinity,b=-Infinity;for(const p of r){a=Math.min(a,p[0]);b=Math.max(b,p[0]);}
       cuts.add(Math.floor((a+b)/2));
     }
-    const edges=[0,...[...cuts].sort((a,b)=>a-b),nx],result=[];
-    for(let k=0;k+1<edges.length;k++){
-      const c0=edges[k],w=edges[k+1]-c0;if(w<=0)continue;
+    const edges=[0,...[...cuts].sort((a,b)=>a-b),nx],polygons=[];
+    for(let i=0;i+1<edges.length;i++){
+      const c0=edges[i],w=edges[i+1]-c0;if(w<=0)continue;
       for(const r of trace(g,nx,c0,w,ny)){
         if(signed(r)<=0)continue;                        // a small gap left inside a strip is covered
         const q=simplify(r,1,([c])=>(c===0&&c0>0)||(c===w&&c0+w<nx));   // strips keep their shared edges exact
-        if(q.length>=3)result.push(q.map(([c,rr])=>[x0+(c0+c)*cell,y0+rr*cell]));
+        if(q.length>=3)polygons.push(world(c0,q));
       }
     }
-    return result;
+    return {polygons,rings};
   }
 
-  function derive(mesh){
-    const t=triangles(mesh);if(!t.length)return [];
+  function deriveAll(mesh,margin=0){
+    const t=triangles(mesh);if(!t.length)return {polygons:[],rings:[],base:0};
     let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
     for(let i=0;i<t.length;i+=2){x0=Math.min(x0,t[i]);x1=Math.max(x1,t[i]);y0=Math.min(y0,t[i+1]);y1=Math.max(y1,t[i+1]);}
     let cell=Math.max(Math.sqrt((x1-x0)*(y1-y0)/2e6),Math.max(x1-x0,y1-y0)/4000,0.01);
-    for(let i=0;i<6;i++,cell*=2){const r=outline(t,cell);if(r.length<=MAX_POLYGONS)return r;}
+    for(let i=0;i<6;i++,cell*=2){const r=outline(t,cell,margin);if(r.polygons.length<=MAX_POLYGONS)return {...r,base:t.zmin};}
     throw Error('Footprint is too complex');
   }
-  return {derive};
+  const derive=mesh=>deriveAll(mesh).polygons;
+  return {derive,deriveAll};
 });

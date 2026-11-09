@@ -445,6 +445,7 @@
     ts.shadows = Cesium.ShadowMode.ENABLED;
     scene.primitives.add(ts);
     watchMap(ts);
+    ts.allTilesLoaded.addEventListener(() => { try { refreshSkirt(); } catch { /* still starting up */ } });
     return ts;
   }
   // Cesium never asks again for a map tile whose request failed (Wi-Fi drop, waking from sleep, a rate limit),
@@ -736,13 +737,15 @@
   }
 
   let clipKey = "";
+  const CUT_MARGIN = 0.4;   // m the map is cut back beyond a set's base, so its ragged cut edge stays clear of the model
+  let skirt = null, skirtTimer = 0, skirtState = null;
   const geometryJobs=new Map();
   function footprintJob(mesh) {
     return new Promise((resolve,reject)=>{
       const worker=new Worker("./footprint-worker.js"), timer=setTimeout(()=>finish(null,Error("Cutout took too long")),30000);
       const finish=(value,error)=>{clearTimeout(timer);worker.terminate();error?reject(error):resolve(value);};
-      worker.onmessage=e=>e.data.error?finish(null,Error(e.data.error)):finish(e.data.polygons);
-      worker.onerror=()=>finish(null,Error("Cutout unavailable"));worker.postMessage(mesh);
+      worker.onmessage=e=>e.data.error?finish(null,Error(e.data.error)):finish(e.data);
+      worker.onerror=()=>finish(null,Error("Cutout unavailable"));worker.postMessage({mesh,margin:CUT_MARGIN});
     });
   }
   async function loadDerived(name,model,entry) {
@@ -750,12 +753,12 @@
     const key=`${meta.project}/${entry.geometry}/${entry.version}`;
     if(!geometryJobs.has(key))geometryJobs.set(key,(async()=>{
       const response=await fetch(`${DATA}live/${entry.geometry}?v=${entry.version}`);if(!response.ok)throw Error("Resend the model for cutout");
-      const mesh=await response.json(),polygons=await footprintJob(mesh);return {mesh,polygons};
+      const mesh=await response.json(),cut=await footprintJob(mesh);return {mesh,...cut};
     })());
     try {
       const data=await geometryJobs.get(key);
       if(models[name]!==model||meta?.sets?.[name]?.geometry!==entry.geometry)return;
-      model._elGeometry=data.mesh;model._elFootprints=data.polygons;clipKey="";applyClip();
+      model._elGeometry=data.mesh;model._elFootprints=data.polygons;model._elRings=data.rings;model._elBase=data.base;clipKey="";applyClip();
     } catch(error) {if(models[name]===model){model._elGeometryError=error.message;if(clipped().has(name))msg("Cutout unavailable. Resend the model.");}}
     while(geometryJobs.size>12)geometryJobs.delete(geometryJobs.keys().next().value);
   }
@@ -772,7 +775,7 @@
   function applyClip() {
     if (!tileset || !anchor()) return;
     const visible=cutSets(),M=frame();
-    if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; return; }
+    if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); return; }
     const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,offsets[n]]),Array.from({length:16},(_,i)=>M[i])]);
     if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;return;}
     const polygons=[];
@@ -787,6 +790,97 @@
     tileset.clippingPolygons=polygons.length?new Cesium.ClippingPolygonCollection({polygons}):undefined;
     if(previous&&!previous.isDestroyed())previous.destroy();
     clipKey=key;
+    dropSkirt(); scheduleSkirt();
+  }
+
+  /* The band that joins the cut map to the model. Around each cut set's base runs a narrow strip from just under
+     the map's surface (1.2 m outside the base) to the base's own level, coloured with the map's pixels at its outer
+     edge, stretched inward. It hides the cut's ragged edge and the step between Google's ground and your model's:
+     no black gap, whichever is higher. It is a presentation fill, not survey data. */
+  const SKIRT = { reach: CUT_MARGIN + 0.8, inset: 0.15, step: 2, under: 0.05, maxStep: 30 };
+  function dropSkirt() { clearTimeout(skirtTimer); if (skirt) { scene.primitives.remove(skirt); skirt = null; scene.requestRender(); } skirtState = null; }
+  function scheduleSkirt() { clearTimeout(skirtTimer); skirtTimer = setTimeout(buildSkirt, 250); }
+  function refreshSkirt() {                              // map detail arrived: rebuild if the band was made from less
+    if (!tileset || !cutSets().length || !skirtState) return;
+    const d = Cesium.Cartesian3.distance(viewer.camera.positionWC, skirtState.centre);
+    if (!skirtState.loaded || d < skirtState.distance / 2) scheduleSkirt();
+  }
+  function buildSkirt() {
+    if (!tileset || !anchor() || document.hidden) return;
+    const C3 = Cesium.Cartesian3, M = frame(), sets = cutSets().filter(n => models[n]?._elRings?.length);
+    if (!sets.length) return dropSkirt();
+    const up = C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, C3.UNIT_Z, new C3()), new C3()), down = C3.negate(up, new C3());
+    const world = (m, x, y, z) => Cesium.Matrix4.multiplyByPoint(m, new C3(x, y, z), new C3());
+    const inv = Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4());
+    const pos = [], flat = [], idx = [];                 // world positions; plan position (anchor frame) of each vertex's colour
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const name of sets) {
+      const model = models[name], z0 = model._elBase || 0, S2W = Cesium.Matrix4.multiply(M, offsetMatrix(name), new Cesium.Matrix4());
+      for (const ring of model._elRings) {
+        const pts = [];                                  // the ring, with a point at least every SKIRT.step metres
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i], b = ring[(i + 1) % ring.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SKIRT.step));
+          for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+        }
+        const first = pos.length / 3, n = pts.length;
+        for (let i = 0; i < n; i++) {
+          const p = pts[i], a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
+          const e1 = [p[0] - a[0], p[1] - a[1]], e2 = [b[0] - p[0], b[1] - p[1]], l1 = Math.hypot(...e1) || 1, l2 = Math.hypot(...e2) || 1;
+          const n1 = [e1[1] / l1, -e1[0] / l1], n2 = [e2[1] / l2, -e2[0] / l2];      // outward: the base is on the left
+          let m = [n1[0] + n2[0], n1[1] + n2[1]]; const ml = Math.hypot(...m);
+          m = ml > 1e-6 ? [m[0] / ml, m[1] / ml] : n1;
+          const k = 1 / Math.max(0.5, m[0] * n1[0] + m[1] * n1[1]);                  // mitre, limited at sharp corners
+          const o = world(S2W, p[0] + m[0] * SKIRT.reach * k, p[1] + m[1] * SKIRT.reach * k, z0);
+          const inner = world(S2W, p[0] - m[0] * SKIRT.inset * k, p[1] - m[1] * SKIRT.inset * k, z0 - 0.02);
+          const d = mapPick(new Cesium.Ray(C3.add(o, C3.multiplyByScalar(up, 300, new C3()), new C3()), down), 600);
+          const rise = d === null ? -SKIRT.under : Math.max(-SKIRT.maxStep, Math.min(SKIRT.maxStep, 300 - d - SKIRT.under));
+          const top = C3.add(o, C3.multiplyByScalar(up, rise, new C3()), new C3());
+          const l = Cesium.Matrix4.multiplyByPoint(inv, o, new C3());
+          x0 = Math.min(x0, l.x); x1 = Math.max(x1, l.x); y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y);
+          pos.push(top.x, top.y, top.z, inner.x, inner.y, inner.z); flat.push(l.x, l.y, l.x, l.y);
+          const v = first + 2 * i, w = first + 2 * ((i + 1) % n);
+          idx.push(v, v + 1, w, w, v + 1, w + 1);
+        }
+      }
+    }
+    if (!idx.length) return dropSkirt();
+
+    // One top-down picture of the map around the cut: the band's colour.
+    const canvas = scene.canvas, aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, W = Math.max(x1 - x0 + 4, (y1 - y0 + 4) * aspect), H = W / aspect;
+    const cam = viewer.camera, keep = { pos: cam.positionWC.clone(), dir: cam.directionWC.clone(), up: cam.upWC.clone(), lens: getLens(),
+      shown: Object.entries(models).map(([n, m]) => [m, m.show]), entities: viewer.entities.show };
+    const picture = document.createElement("canvas");
+    picture.width = Math.min(2048, canvas.width); picture.height = Math.max(1, Math.round(picture.width / aspect));
+    try {
+      keep.shown.forEach(([m]) => m.show = false); viewer.entities.show = false; if (skirt) skirt.show = false;
+      if (!isOrtho()) cam.switchToOrthographicFrustum();
+      cam.frustum.width = W; cam.frustum.aspectRatio = aspect;
+      cam.setView({ destination: world(M, cx, cy, 1500), orientation: { direction: down, up: C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, C3.UNIT_Y, new C3()), new C3()) } });
+      scene.requestRender(); viewer.render();
+      picture.getContext("2d").drawImage(canvas, 0, 0, picture.width, picture.height);
+    } finally {
+      keep.shown.forEach(([m, show]) => m.show = show); viewer.entities.show = keep.entities;
+      setLens(keep.lens);
+      cam.setView({ destination: keep.pos, orientation: { direction: keep.dir, up: keep.up } });
+      scene.requestRender();
+    }
+    const st = new Float32Array(flat.length), normals = new Float32Array(pos.length);
+    for (let i = 0; i < flat.length; i += 2) { st[i] = (flat[i] - cx) / W + 0.5; st[i + 1] = (flat[i + 1] - cy) / H + 0.5; }
+    for (let i = 0; i < pos.length; i += 3) { normals[i] = up.x; normals[i + 1] = up.y; normals[i + 2] = up.z; }
+    const values = new Float64Array(pos), attr = (type, size, v) => new Cesium.GeometryAttribute({ componentDatatype: type, componentsPerAttribute: size, values: v });
+    const geometry = new Cesium.Geometry({
+      attributes: { position: attr(Cesium.ComponentDatatype.DOUBLE, 3, values), normal: attr(Cesium.ComponentDatatype.FLOAT, 3, normals), st: attr(Cesium.ComponentDatatype.FLOAT, 2, st) },
+      indices: new Uint32Array(idx), primitiveType: Cesium.PrimitiveType.TRIANGLES, boundingSphere: Cesium.BoundingSphere.fromVertices(values) });
+    const next = new Cesium.Primitive({
+      geometryInstances: new Cesium.GeometryInstance({ geometry }), asynchronous: false, shadows: Cesium.ShadowMode.RECEIVE_ONLY,
+      appearance: new Cesium.MaterialAppearance({ flat: true, faceForward: true, translucent: false, closed: false,
+        materialSupport: Cesium.MaterialAppearance.MaterialSupport.TEXTURED,
+        material: new Cesium.Material({ fabric: { type: "Image", uniforms: { image: picture } } }) }) });
+    const old = skirt; skirt = scene.primitives.add(next); if (old) scene.primitives.remove(old);
+    const centre = world(M, cx, cy, 0);
+    skirtState = { centre, distance: C3.distance(keep.pos, centre), loaded: tileset.tilesLoaded };
+    scene.requestRender();
   }
 
   // ---------------------------------------------------------------- display style & section
@@ -1231,6 +1325,7 @@
     if (pass === "context") Object.values(models).forEach(m => m.show = false);
     if (pass === "model") {
       if (tileset) tileset.show = false;
+      if (skirt) skirt.show = false;
       scene.globe.show = false;
       ["skyBox", "skyAtmosphere", "sun", "moon"].forEach(k => scene[k] && (scene[k].show = false));
       scene.backgroundColor = Cesium.Color.TRANSPARENT;
@@ -1245,6 +1340,7 @@
     } finally {
       Object.entries(keep.models).forEach(([n, s]) => models[n] && (models[n].show = s));
       if (tileset) tileset.show = keep.tiles;
+      if (skirt) skirt.show = true;
       scene.globe.show = keep.globe;
       if (scene.skyBox) scene.skyBox.show = keep.sky;
       if (scene.skyAtmosphere) scene.skyAtmosphere.show = keep.atmo;
@@ -1812,7 +1908,7 @@
     if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
-  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get skirt() { return skirt; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {

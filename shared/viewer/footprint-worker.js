@@ -1,2 +1,2 @@
 importScripts('./footprints.js');
-self.onmessage=event=>{try{self.postMessage({polygons:EarthLinkFootprints.derive(event.data)});}catch(error){self.postMessage({error:error.message});}};
+self.onmessage=event=>{try{self.postMessage(EarthLinkFootprints.deriveAll(event.data.mesh,event.data.margin));}catch(error){self.postMessage({error:error.message});}};
