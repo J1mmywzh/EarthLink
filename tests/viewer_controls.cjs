@@ -40,9 +40,14 @@ const assert=require('node:assert/strict');
  {const d=b.pos.map((v,i)=>v-a.pos[i]);assert.ok(dot(d,a.right)>0.5,'fingers left move the scene left '+JSON.stringify({right:dot(d,a.right),up:dot(d,a.up),fwd:dot(d,a.dir),dh:turn(b.heading-a.heading),roll:b.roll,pitch:b.pitch}));}
 
  // a fast trackpad swipe is not read as a mouse wheel (no zoom)
- a=await cam();await wheel([{x:0,y:4},{x:0,y:120},{x:0,y:110}],-1);await settle();b=await cam();
- {const pv=await page.evaluate(()=>{const p=EL.nav.pivot;return p&&[p.x,p.y,p.z];});
-  assert.ok(pv&&Math.abs(dist(b.pos,pv)/dist(a.pos,pv)-1)<0.01,'an orbit, not a zoom');}
+ a=await cam();
+{const sw=await page.evaluate(async()=>{const c=EL.viewer.scene.canvas,r=c.getBoundingClientRect(),out={mouse:[],pivot:null};
+   for(const y of [4,120,110]){const e=new WheelEvent('wheel',{deltaX:0,deltaY:y,deltaMode:0,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true});
+     out.mouse.push(EarthLinkNavigation.isMouseWheel(e));c.dispatchEvent(e);}
+   for(let i=0;i<30&&!out.pivot;i++){await new Promise(f=>requestAnimationFrame(f));const p=EL.nav.pivot;if(p)out.pivot=[p.x,p.y,p.z];}
+   return out;});
+ await settle();b=await cam();const pv=sw.pivot||a.centre;
+ assert.ok(pv&&Math.abs(dist(b.pos,pv)/dist(a.pos,pv)-1)<0.01,'an orbit, not a zoom '+JSON.stringify({mouse:sw.mouse,pivot:!!sw.pivot,centre:!!a.centre,ratio:pv&&dist(b.pos,pv)/dist(a.pos,pv)}));}
 
  // Reset to north
  await page.getByRole('button',{name:'Reset to north',exact:true}).click();
