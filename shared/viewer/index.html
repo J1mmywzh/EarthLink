@@ -423,14 +423,62 @@
   Object.assign(viewer.shadowMap._primitiveBias, { normalOffsetScale: 1.5, depthBias: 0.0004, polygonOffsetFactor: 2, polygonOffsetUnits: 8 });
   viewer.clock.shouldAnimate = false;
 
-  let tileset = null;
+  let tileset = null, reconnectedAt = 0, retryMap = () => 0;   // declared before the map opens (watchMap sets retryMap)
   if (haveTiles) {
     try {
-      tileset = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
-      tileset.shadows = Cesium.ShadowMode.ENABLED;
-      scene.primitives.add(tileset);
+      tileset = await openMap();
       scene.globe.show = false;
     } catch (e) { msg("Map unavailable. Check your token.", 6000); }
+  }
+  async function openMap() {
+    const ts = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
+    ts.shadows = Cesium.ShadowMode.ENABLED;
+    scene.primitives.add(ts);
+    watchMap(ts);
+    return ts;
+  }
+  // Cesium never asks again for a map tile whose request failed (Wi-Fi drop, waking from sleep, a rate limit),
+  // so its area stays blurry until the page reloads. Retry failed tiles with a growing delay; if retries keep
+  // failing, the map session has expired: reconnect the map (at most every 5 minutes).
+  function watchMap(ts) {
+    let timer = 0, delay = 2000, streak = 0, lastFail = 0;
+    const unfail = () => {                                // FAILED -> UNLOADED: requested again (Cesium 1.140 field)
+      let failed = 0;
+      for (const stack = [ts.root]; stack.length;) {
+        const t = stack.pop(); if (!t) continue;
+        if (t._contentState === 5) { t._contentState = 0; failed++; }
+        for (const c of t.children) stack.push(c);
+      }
+      if (failed) scene.requestRender();
+      return failed;
+    };
+    retryMap = () => (ts === tileset && !ts.isDestroyed() ? unfail() : 0);
+    ts.tileFailed.addEventListener(() => {
+      const now = Date.now();
+      if (now - lastFail > 120000) { streak = 0; delay = 2000; }
+      lastFail = now;
+      if (!timer) timer = setTimeout(retry, delay);
+    });
+    function retry() {
+      timer = 0;
+      if (!retryMap()) return;
+      streak++; delay = Math.min(60000, delay * 2);
+      if (streak >= 4 && Date.now() - reconnectedAt > 300000) reconnectMap();
+    }
+  }
+  // back online or back to the tab (after sleep): retry at once
+  window.addEventListener("online", () => retryMap());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) retryMap(); });
+  async function reconnectMap() {
+    reconnectedAt = Date.now();
+    const old = tileset;
+    try {
+      const ts = await openMap();
+      ts.show = old.show; ts.maximumScreenSpaceError = old.maximumScreenSpaceError;
+      tileset = ts; clipKey = ""; applyClip();
+      scene.primitives.remove(old);
+      msg("Reconnected to the map.");
+    } catch { msg("Map connection lost. Reload the page."); }
   }
 
   let S = await api("/api/settings");
@@ -1688,7 +1736,7 @@
     if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
-  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {
