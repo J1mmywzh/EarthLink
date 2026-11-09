@@ -1,6 +1,6 @@
 # EarthLink user manual
 
-For EarthLink 0.2.0-beta.5, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
+For EarthLink 0.2.0-beta.6, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
 
 ## 1. What EarthLink does
 

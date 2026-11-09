@@ -423,6 +423,11 @@
   Object.assign(viewer.shadowMap._primitiveBias, { normalOffsetScale: 1.5, depthBias: 0.0004, polygonOffsetFactor: 2, polygonOffsetUnits: 8 });
   viewer.clock.shouldAnimate = false;
 
+  // Cesium 1.140 does not refine a map tile while one of its sub-tiles is an empty placeholder still too small on
+  // screen to be opened: the whole area stays blurry until you zoom in close. An empty tile has nothing to draw at
+  // its own level, so always open it (its content below then loads at the usual detail).
+  { const T = Cesium.Cesium3DTilesetTraversal, can = T && T.canTraverse;
+    if (can) T.canTraverse = tile => (tile.hasEmptyContent && tile.children.length > 0 && !tile.contentExpired) || can(tile); }
   let tileset = null, reconnectedAt = 0, retryMap = () => 0;   // declared before the map opens (watchMap sets retryMap)
   if (haveTiles) {
     try {

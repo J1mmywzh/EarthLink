@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.0-beta.6 — preview, 2026-11-09
+- Areas of the map that stayed blurry at normal viewing distances (sharp only when zoomed right in) now load full detail. Google's map contains empty placeholder tiles; Cesium refused to swap a coarse tile for its sharper sub-tiles while one of those placeholders was still too small on screen to open. Placeholders are now always opened.
+
 ## 0.2.0-beta.5 — preview, 2026-11-09
 - Blurry patches of the map that never sharpen are fixed. When a map tile request failed once (Wi-Fi drop, waking from sleep, a rate limit), Cesium never asked again, so that area stayed at its coarse overview until the page was reloaded. Failed tiles are now retried with a growing delay, at once when the connection or the tab comes back, and the map reconnects by itself if its session has expired.
 

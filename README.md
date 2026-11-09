@@ -2,7 +2,7 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Preview: 0.2.0-beta.5** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+**Preview: 0.2.0-beta.6** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
