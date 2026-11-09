@@ -134,7 +134,8 @@ def rename_set_in_viewer(old, new):
         st = dict(s.get("set_styles") or {})
         if old in st:
             st[new] = st.pop(old)
-        env.save_settings({"hidden_sets": [new if n == old else n for n in s.get("hidden_sets") or []], "set_styles": st})
+        ren = lambda key: [new if n == old else n for n in s.get(key) or []]
+        env.save_settings({"hidden_sets": ren("hidden_sets"), "clip_sets": ren("clip_sets"), "set_styles": st})
 
 
 # ----------------------------------------------------------------- placement (EarthLink only; Rhino geometry never moves)

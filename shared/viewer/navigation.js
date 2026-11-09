@@ -1,10 +1,16 @@
-/* EarthLink navigation: Rhino 8 for Mac gestures on a Cesium globe.
+/* EarthLink navigation: Rhino 8 view controls on a Cesium globe (McNeel's documented defaults).
 
-   Perspective / Two-Point   two fingers or right-drag   orbit about the point at the centre of the view
-                             Shift + either               pan (the ground follows the fingers)
-                             pinch, wheel, Ctrl+right     zoom (toward the cursor below 50 km)
-   Parallel                  two fingers, right-drag      pan (Shift changes nothing)   pinch, wheel: zoom
-   Walk                      two fingers or right-drag    look around
+   Mouse (Mac and Windows; Mod = Cmd on Mac, Ctrl on Windows; Alt = Option on Mac)
+     right-drag                 rotate (perspective) / pan (parallel)
+     Shift + right-drag         pan; press Shift during a drag to lock it to one direction
+     Mod + right-drag           zoom (drag up = in)          wheel: zoom toward the cursor
+     Alt + right-drag           dolly: move in / out          Mod + Shift + right-drag: rotate, also in parallel
+     Mod + Alt + right-drag     turn the camera in place      Mod + Shift + Alt + right-drag: lens length
+     middle-drag                pan (Mac default; Alt/Option + middle: rotate on Mac, dolly on Windows)
+   Mac trackpad                 two fingers rotate (pan in parallel), Shift + two fingers pan, pinch zooms
+   Windows touchpad             two-finger scroll zooms, like Rhino for Windows; pinch zooms; rotate with right-drag
+   Keys                         arrows rotate (pan in parallel), Shift + arrows pan, Page Up / Page Down zoom
+   Walk                         two fingers, right-drag or arrows look around
 
    Every gesture keeps the horizon level, picks its pivot when it starts and keeps one mode until its
    momentum ends. Movement is eased per frame. Pan and zoom scale with distance, orbit is angular, so
@@ -23,6 +29,7 @@
     hold: Math.LN2 / 0.61,             // +/- held: distance halves every 0.61 s
     look: 0.08, lookMouse: 0.15,       // walking
   };
+  const STEP = { degrees: 6, pan: 1 / 8 };   // arrow keys: Rhino's 60 steps per turn; pan an eighth of the view
   const GESTURE_GAP = 220;   // ms without wheel events that ends a gesture (momentum included)
   const EASE = 0.045;        // s: time constant of the per-frame easing
 
@@ -30,12 +37,12 @@
      momentum tail cannot switch pan to orbit. Pinch (ctrlKey) is always zoom. */
   class WheelLatch {
     constructor() { this.last = -Infinity; this.mode = null; this.device = null; }
-    read(e, projection, now) {
+    read(e, projection, now, mac = true) {
       const fresh = now - this.last > GESTURE_GAP; this.last = now;
       if (e.ctrlKey) { this.mode = fresh ? "zoom" : this.mode || "zoom"; return { mode: "zoom", pinch: true, start: fresh }; }
       if (fresh || !this.mode) {
         this.device = isMouseWheel(e) ? "mouse" : "trackpad";
-        this.mode = this.device === "mouse" ? "zoom"
+        this.mode = this.device === "mouse" || !mac ? "zoom"   // Rhino for Windows: two-finger scrolling zooms
           : projection === "parallel" ? "pan"                // Rhino: Shift changes nothing in a parallel view
           : (e.shiftKey ? "pan" : "orbit");
       }
@@ -53,7 +60,7 @@
 
   // Pending motion released gradually, frame by frame.
   class Ease {
-    constructor() { this.v = { heading: 0, tilt: 0, px: 0, py: 0, zoom: 0 }; }
+    constructor() { this.v = { heading: 0, tilt: 0, px: 0, py: 0, zoom: 0, lh: 0, lt: 0 }; }
     add(k, x) { if (Number.isFinite(x)) this.v[k] += x; }
     take(dt) {
       const f = 1 - Math.exp(-Math.max(0, dt) / EASE), out = {};
@@ -80,13 +87,15 @@
      ground(ray) nearest map surface (your model excluded) or null,
      allowed() navigation permitted now,
      sensitivity() multiplier, moved() user took the camera (cancel flights / Follow Rhino),
-     walking() true while walking, look(dHeading, dPitch) turn the walker. */
+     walking() true while walking, look(dHeading, dPitch) turn the walker,
+     lens(k) multiply the perspective field of view by k (optional), mac() Mac controls (default: detected). */
   function create(Cesium, viewer, hooks) {
     const C3 = Cesium.Cartesian3, scene = viewer.scene, cam = viewer.camera, canvas = scene.canvas;
     const E = Cesium.Ellipsoid.WGS84, latch = new WheelLatch(), ease = new Ease();
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
     scene.screenSpaceCameraController.enableInputs = false;   // one input path only
+    const mac = () => (hooks.mac ? !!hooks.mac() : isMac());
 
     const normal = p => E.geodeticSurfaceNormal(p, v3());
     const sens = () => clamp(+hooks.sensitivity() || 1, 0.2, 3);
@@ -190,6 +199,15 @@
       pivot = rotate(q, pivot);
       setPose(rotate(q, cam.positionWC), rotate(q, cam.directionWC), rotate(q, cam.upWC));
     }
+    function lookAround(dh, dt) {                          // turn the camera where it stands (Rhino: RotateCamera)
+      const n = normal(cam.positionWC);
+      let dir = rotate(Cesium.Quaternion.fromAxisAngle(n, -Cesium.Math.toRadians(dh)), cam.directionWC), up = cam.upWC;
+      const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), -1.55, 1.55);
+      const right = C3.normalize(C3.cross(dir, n, v3()), v3());
+      dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
+      pivot = null;
+      setPose(cam.positionWC, dir, up);
+    }
     function zoom(logFactor) {                             // > 0 zooms out
       const z = Math.exp(logFactor);
       if (ortho()) {
@@ -223,6 +241,7 @@
           if (m.heading || m.tilt) orbit(m.heading, m.tilt);
           if (m.px || m.py) pan(m.px, m.py);
           if (m.zoom) zoom(m.zoom);
+          if (m.lh || m.lt) lookAround(m.lh, m.lt);
         }
       }
       if (hold) {
@@ -239,7 +258,7 @@
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       if (!hooks.allowed() && !hooks.walking()) return;
-      const g = latch.read(e, hooks.projection(), e.timeStamp || performance.now()), u = wheelPx(e), s = sens();   // event time: page stalls cannot split a gesture
+      const g = latch.read(e, hooks.projection(), e.timeStamp || performance.now(), mac()), u = wheelPx(e), s = sens();   // event time: page stalls cannot split a gesture
       const fx = -e.deltaX * u, fy = -e.deltaY * u;        // finger motion (natural scrolling)
       if (hooks.walking()) { if (g.mode !== "zoom") { ease.add("heading", fx * RATE.look * s); ease.add("tilt", fy * RATE.look * s); kick(); } return; }
       if (g.start) { begin(); pivot = null; anchor = null; ease.clear(); }
@@ -261,23 +280,60 @@
       return p && C3.distance(p, cam.positionWC) < 5e4 ? { point: p } : null;   // globe scale: zoom to the centre
     }
     canvas.addEventListener("contextmenu", e => e.preventDefault());
+    // Rhino's mouse: the button and modifiers held when the drag starts choose what it does.
+    function dragMode(e) {
+      const proj = hooks.projection(), mod = mac() ? e.metaKey : e.ctrlKey, alt = e.altKey, shift = e.shiftKey;
+      if (hooks.walking()) return "look";
+      if (e.button === 1) return mod ? "zoom" : alt ? (mac() ? "orbit" : "dolly") : "pan";   // middle button
+      if (mod && shift && alt) return "lens";
+      if (mod && alt) return "lookAround";
+      if (shift && alt) return "none";                    // Rhino tilts (rolls) the view; EarthLink keeps the horizon level
+      if (mod && shift) return "orbit";                   // rotate, also a parallel view
+      if (mod) return "zoom";
+      if (alt) return "dolly";
+      if (shift) return "pan";
+      return proj === "parallel" ? "pan" : "orbit";
+    }
     canvas.addEventListener("pointerdown", e => {
       if (![1, 2].includes(e.button)) return;
       if (!hooks.allowed() && !hooks.walking()) return;
       e.preventDefault(); canvas.setPointerCapture(e.pointerId);
-      const proj = hooks.projection();
-      const mode = hooks.walking() ? "look" : e.ctrlKey || e.metaKey ? "zoom" : e.shiftKey || e.button === 1 || proj === "parallel" ? "pan" : "orbit";
+      const mode = dragMode(e);
       if (mode !== "look") { begin(); pivot = null; anchor = mode === "zoom" ? zoomAnchor(e) : null; ease.clear(); }
-      pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, mode };
+      pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, mode, shift: e.shiftKey, sx: 0, sy: 0, lock: null };
     });
     canvas.addEventListener("pointermove", e => {
       if (!pointer || pointer.id !== e.pointerId) return;
-      const fx = e.clientX - pointer.x, fy = e.clientY - pointer.y, s = sens(); pointer.x = e.clientX; pointer.y = e.clientY;
-      if (pointer.mode === "look") { ease.add("heading", fx * RATE.lookMouse * s); ease.add("tilt", fy * RATE.lookMouse * s); }
-      else if (pointer.mode === "zoom") ease.add("zoom", fy * RATE.dragZoom * s);
-      else if (pointer.mode === "pan") { ease.add("px", fx); ease.add("py", fy); }
-      else { ease.add("heading", fx * RATE.orbitMouse * s); ease.add("tilt", -fy * RATE.tiltMouse * s); }
+      let fx = e.clientX - pointer.x, fy = e.clientY - pointer.y; const s = sens(); pointer.x = e.clientX; pointer.y = e.clientY;
+      pointer.sx += fx; pointer.sy += fy;
+      if (e.shiftKey && !pointer.shift && !pointer.lock) pointer.lock = Math.abs(pointer.sx) >= Math.abs(pointer.sy) ? "x" : "y";   // Shift pressed mid-drag
+      if (!e.shiftKey && !pointer.shift) pointer.lock = null;
+      if (pointer.lock === "x") fy = 0; else if (pointer.lock === "y") fx = 0;
+      const m = pointer.mode;
+      if (m === "look") { ease.add("heading", fx * RATE.lookMouse * s); ease.add("tilt", fy * RATE.lookMouse * s); }
+      else if (m === "zoom") ease.add("zoom", fy * RATE.dragZoom * s);
+      else if (m === "dolly") { if (!anchor) anchor = { point: pivot || (pivot = centre()) }; ease.add("zoom", fy * RATE.dragZoom * s); }
+      else if (m === "pan") { ease.add("px", fx); ease.add("py", fy); }
+      else if (m === "lookAround") { ease.add("lh", fx * RATE.lookMouse * s); ease.add("lt", -fy * RATE.lookMouse * s); }
+      else if (m === "lens") { if (hooks.lens) hooks.lens(Math.exp(fy * 0.004)); }
+      else if (m === "orbit") { ease.add("heading", fx * RATE.orbitMouse * s); ease.add("tilt", -fy * RATE.tiltMouse * s); }
       kick();
+    });
+    // Rhino's keys: arrows rotate (pan in parallel), Shift + arrows pan, Page Up / Page Down zoom.
+    document.addEventListener("keydown", e => {
+      if (hooks.walking() || !hooks.allowed() || e.defaultPrevented || e.target.closest?.("input,textarea,select,[contenteditable=true]")) return;
+      const arrow = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (arrow && !(mac() ? e.metaKey : e.ctrlKey)) {
+        e.preventDefault(); if (!e.repeat) { begin(); pivot = null; anchor = null; }
+        const [w, h] = size(), [dx, dy] = arrow;
+        if (e.shiftKey || hooks.projection() === "parallel") { ease.add("px", -dx * w * STEP.pan); ease.add("py", -dy * h * STEP.pan); }
+        else { ease.add("heading", dx * STEP.degrees); ease.add("tilt", -dy * STEP.degrees); }
+        kick();
+      } else if (e.key === "PageUp" || e.key === "PageDown") {
+        e.preventDefault(); if (!e.repeat) { begin(); pivot = null; anchor = null; }
+        if (e.shiftKey && hooks.lens) hooks.lens(e.key === "PageUp" ? 0.9 : 1 / 0.9);   // Shift: lens length
+        else api.zoomStep(e.key === "PageUp" ? -1 : 1);
+      }
     });
     const release = () => { pointer = null; hold = 0; };
     ["pointerup", "pointercancel", "lostpointercapture"].forEach(n => canvas.addEventListener(n, release));
@@ -298,7 +354,7 @@
     let sliderAt = 0;
     const sliderPivot = () => { const now = performance.now(); if (now - sliderAt > 600) { begin(); pivot = centre(); } sliderAt = now; };
     const turn = d => ((d % 360) + 540) % 360 - 180;
-    return {
+    const api = {
       RATE,
       headingTilt,
       setHeading(h) { if (!hooks.allowed()) return; sliderPivot(); orbit(turn(h - headingTilt().heading), 0); scene.requestRender(); },
@@ -328,7 +384,13 @@
       settleParallel() { if (!ortho()) return; pivot = centre(); setPose(cam.positionWC, cam.directionWC, cam.upWC); pivot = null; scene.requestRender(); },
       get pivot() { return pivot; },
     };
+    return api;
   }
 
-  return { RATE, WheelLatch, Ease, isMouseWheel, neutralDirection, create };
+  // Rhino's Mac and Windows controls differ (Cmd vs Ctrl, two-finger scrolling). Detected from the browser.
+  function isMac() {
+    const n = typeof navigator !== "undefined" ? navigator : {};
+    return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
+  }
+  return { RATE, STEP, WheelLatch, Ease, isMouseWheel, isMac, neutralDirection, create };
 });

@@ -23,7 +23,7 @@ flowchart LR
 | `earthlink/env.py` | Paths, defaults, settings, and OS helpers |
 | `earthlink/geometry.py` | Final GLB to ENU-metre mesh sidecar for the map cutout, with node transforms baked |
 | `shared/viewer/navigation.js` | Rhino-for-Mac trackpad and mouse navigation on the globe: gesture latching, easing, level horizon, scale-aware pan/zoom |
-| `shared/viewer/footprints.js` | Plan outline for "Hide map under model": triangles painted on a grid, edges traced and straightened, in a worker |
+| `shared/viewer/footprints.js` | Plan outline of each set's base for "Hide map underneath": triangles cut 1 cm above the lowest point, painted on a grid, edges traced and straightened, in a worker |
 | `shared/viewer/walk.js` | Walking: a 1.80 m person on whatever is drawn (map or model), probed by rays each frame |
 | `earthlink/collada.py` | GLB to Z-up COLLADA conversion for Earth Pro |
 | `shared/viewer/index.html` | Viewer UI and CesiumJS integration; no frontend build step |

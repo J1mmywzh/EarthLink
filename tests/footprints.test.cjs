@@ -11,3 +11,14 @@ test('vertical and degenerate triangles make no map hole',()=>{assert.ok(F);asse
 test('invalid meshes fail instead of clipping their bounds',()=>{assert.ok(F);assert.throws(()=>F.derive({schema:1,vertices:[[0,0,0]],indices:[0,1,2]}));});
 test('a single projected triangle is covered, never short of it',()=>{assert.ok(F);const p=F.derive({schema:1,vertices:[[0,0,0],[1,0,0],[0,1,0]],indices:[0,1,2]});near(area(p),.5,0.12);assert.equal(p.some(r=>hit(r,.8,.8)),false);});
 test('a large, finely split model stays fast and simple',()=>{const r=[];for(let x=0;x<200;x+=0.5)for(let y=0;y<280;y+=0.5)if(!(x>80&&x<120&&y>100&&y<140))r.push([x,y,0.5,0.5]);const t=Date.now(),p=F.derive(mesh(r));assert.ok(Date.now()-t<15000,'took '+(Date.now()-t)+' ms');assert.ok(p.length<=4096);near(area(p),200*280-40*40,0.02);assert.equal(p.some(q=>hit(q,100,120)),false);});
+test('only the base is cut: an upside-down trapezoid keeps the map under its overhang',()=>{
+  // closed solid: 2 x 2 m base at z=0, 6 x 6 m top at z=3
+  const b=[[-1,-1,0],[1,-1,0],[1,1,0],[-1,1,0]],t=[[-3,-3,3],[3,-3,3],[3,3,3],[-3,3,3]],vertices=[...b,...t],indices=[0,2,1,0,3,2,4,5,6,4,6,7];
+  for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(i,j,4+j,i,4+j,4+i);}
+  const p=F.derive({schema:1,vertices,indices});near(area(p),4,0.06);
+  assert.equal(p.some(r=>hit(r,2,0)),false,'overhang keeps the map');assert.ok(p.some(r=>hit(r,0,0)),'base is cut');
+});
+test('a model resting a few millimetres off true still cuts its base',()=>{
+  const p=F.derive({schema:1,vertices:[[0,0,0.004],[2,0,0],[2,2,0.006],[0,2,0],[0,0,3],[2,0,3],[2,2,3]],indices:[0,1,2,0,2,3,4,5,6]});
+  near(area(p),4,0.06);
+});

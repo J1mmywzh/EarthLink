@@ -16,7 +16,7 @@ if __name__ == "__main__" and __package__ in (None, ""):
 
 from earthlink import env  # noqa: E402
 
-SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
+SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
 VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js")
 
@@ -152,11 +152,11 @@ def _queue_for_rhino(req):
 
 def _rename_in_settings(old, new):
     s = env.load_settings()
-    hid = [new if n == old else n for n in s.get("hidden_sets") or []]
+    ren = lambda key: [new if n == old else n for n in s.get(key) or []]
     st = dict(s.get("set_styles") or {})
     if old in st:
         st[new] = st.pop(old)
-    env.save_settings({"hidden_sets": hid, "set_styles": st})
+    env.save_settings({"hidden_sets": ren("hidden_sets"), "clip_sets": ren("clip_sets"), "set_styles": st})
 
 
 def _sets_op(data):
@@ -289,7 +289,8 @@ def serve(viewer_dir, port):
                 return self.send_error(403)
             path = self.path.split("?")[0]
             if path == "/":
-                self.send_response(302); self.send_header("Location", "/viewer/"); self.end_headers()
+                query = self.path[1:] if self.path.startswith("/?") else ""   # keep options such as ?controls=mac
+                self.send_response(302); self.send_header("Location", "/viewer/" + query); self.end_headers()
             elif path == "/api/ping":
                 self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir})
             elif path == "/api/config":

@@ -1,4 +1,6 @@
-/* EarthLink walking: a 1.80 m person on whatever is drawn (Google's map or your model).
+/* EarthLink walking: a 1.80 m person on whatever is drawn (Google's map or your model), who can also fly
+   like Minecraft's creative mode: double-tap Space to take off, Space rises, Shift sinks, touching the ground
+   lands, double-tap Space again to drop.
 
    Coordinates are metres east/north/up in a frame centred where the walk began. The browser supplies
    probe(origin, direction, maxDistance) -> distance to the first drawn surface, or null. Each frame the
@@ -7,14 +9,20 @@
   "use strict";
   const W = {
     eye: 1.65, head: 1.8, radius: 0.3, step: 0.45,      // stairs up to 45 cm are climbed
-    walk: 3.5, sprint: 9.5, accel: 0.12,                // m/s; s to reach speed
+    walk: 3.5, sprint: 9.5, sneak: 1.3, accel: 0.12,    // m/s; s to reach speed
     gravity: 9.81, jump: 0.5, snapDown: 0.5,            // m jump height; m followed down stairs
+    fly: 10.9, flySprint: 21.6, flyUp: 7.5, flyAccel: 0.25,   // Minecraft creative flight, m/s; s to reach speed (it glides)
   };
 
   class Walker {
     constructor(probe, feet = [0, 0, 0]) {
       this.probe = probe; this.feet = feet.slice(); this.vel = [0, 0]; this.vz = 0;
-      this.grounded = true; this.airborne = 0;
+      this.grounded = true; this.airborne = 0; this.flying = false;
+    }
+    toggleFly() {                                        // double-tap Space
+      this.flying = !this.flying; this.vz = 0;
+      if (this.flying) this.grounded = false; else this.airborne = 0;   // stop flying: fall
+      return this.flying;
     }
     get eye() { return [this.feet[0], this.feet[1], this.feet[2] + W.eye]; }
 
@@ -27,18 +35,20 @@
       }
       return false;
     }
-    ground(x, y, from) {                                // height of the surface below, or null
-      const top = this.feet[2] + from, t = this.probe([x, y, top], [0, 0, -1], from + 60);
+    ground(x, y, from, reach = 60) {                    // height of the surface below, or null
+      const top = this.feet[2] + from, t = this.probe([x, y, top], [0, 0, -1], from + reach);
       return t == null ? null : top - t;
     }
 
-    /* input: {x, y} desired direction in the walk frame (length <= 1), sprint, jump */
+    /* input: {x, y} desired direction in the walk frame (length <= 1), sprint, sneak (Shift), jump (Space held) */
     step(input, dt) {
       if (!(dt > 0)) return this.feet;
       dt = Math.min(dt, 0.05);
-      const len = Math.hypot(input.x || 0, input.y || 0), speed = input.sprint ? W.sprint : W.walk;
+      const fly = this.flying;
+      const len = Math.hypot(input.x || 0, input.y || 0);
+      const speed = fly ? (input.sprint ? W.flySprint : W.fly) : input.sprint ? W.sprint : input.sneak ? W.sneak : W.walk;
       const target = len ? [input.x / Math.max(1, len) * speed, input.y / Math.max(1, len) * speed] : [0, 0];
-      const k = 1 - Math.exp(-dt / W.accel);
+      const k = 1 - Math.exp(-dt / (fly ? W.flyAccel : W.accel));
       this.vel = this.vel.map((v, i) => v + (target[i] - v) * k);
       if (Math.hypot(...this.vel) < 0.01 && !len) this.vel = [0, 0];
 
@@ -48,10 +58,11 @@
       if (dx && this.blocked(x, y, dx, 0)) { dx = 0; this.vel[0] = 0; }
       if (dy && this.blocked(x + dx, y, 0, dy)) { dy = 0; this.vel[1] = 0; }
       this.feet[0] += dx; this.feet[1] += dy;
+      if (fly) return this.flyVertical(input, dt, k);
 
       // vertical: stand, climb a step, follow stairs down, jump, fall
       if (input.jump && this.grounded) { this.vz = Math.sqrt(2 * W.gravity * W.jump); this.grounded = false; }
-      let g = this.ground(this.feet[0], this.feet[1], W.step);
+      let g = this.ground(this.feet[0], this.feet[1], W.step, this.grounded ? 60 : 2000);   // falling from a flight: look far down
       if (g == null) {                                  // under a refined map surface (or nothing yet): rise onto it
         const high = this.ground(this.feet[0], this.feet[1], 3);
         if (high != null && (g == null || high > g + 0.01) && high > this.feet[2]) g = high;
@@ -73,5 +84,22 @@
       return this.feet;
     }
   }
+  Walker.prototype.flyVertical = function (input, dt, k) {   // Space rises, Shift sinks; touching down lands
+    const want = ((input.jump ? 1 : 0) - (input.sneak ? 1 : 0)) * W.flyUp;
+    this.vz += (want - this.vz) * k;
+    if (Math.abs(this.vz) < 0.01 && !want) this.vz = 0;
+    const dz = this.vz * dt;
+    if (dz > 0) {
+      const t = this.probe([this.feet[0], this.feet[1], this.feet[2] + W.head - 0.05], [0, 0, 1], dz + 0.1);
+      if (t != null) { this.vz = 0; return this.feet; }   // ceiling
+      this.feet[2] += dz;
+    } else if (dz < 0) {
+      const g = this.ground(this.feet[0], this.feet[1], W.step, -dz + 0.1);
+      if (g != null && this.feet[2] + dz <= g) {          // touched the ground: land, as in Minecraft
+        this.feet[2] = g; this.vz = 0; this.flying = false; this.grounded = true; this.airborne = 0;
+      } else this.feet[2] += dz;
+    }
+    return this.feet;
+  };
   return { W, Walker };
 });

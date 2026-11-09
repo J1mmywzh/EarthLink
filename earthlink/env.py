@@ -13,7 +13,7 @@ DEFAULTS = {
     "viewer": True, "earthpro": False,
     # viewer placement settings (also edited from the viewer page)
     "nudge": 0.0, "geoid_offset": -33.5, "ground_h": None,
-    "clip": False, "clip_margin": 0.0, "shadows": True, "sun_enabled": True, "sun_utc": None,
+    "clip": False, "clip_sets": [], "clip_margin": 0.0, "shadows": True, "sun_enabled": True, "sun_utc": None,
     # where viewer screenshots go ("" = Pictures/EarthLink); save_mode "folder" or "ask"
     "snapshot_dir": "", "save_mode": "folder",
     # Rhino sync: two-way named views, the viewer following Rhino's active viewport, Rhino Sun <-> viewer sun

@@ -114,6 +114,11 @@
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
 
+  #peg { position:fixed;z-index:50;pointer-events:none;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;color:#8e8e93;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  #peg svg { width:34px;height:34px;transform:translateY(-6px) rotate(-8deg);transition:transform .12s; }
+  #peg span { width:14px;height:5px;border-radius:50%;background:rgba(0,0,0,.35);margin-top:-4px; }
+  #peg.ok { color:var(--accent); } #peg.ok svg { transform:translateY(-10px); }
+  body.pegging, body.pegging * { cursor:grabbing !important; }
   #navDock { position:absolute;right:14px;bottom:40px;z-index:6;display:flex;align-items:center;padding:6px;border-radius:16px;gap:4px; }
   #navDock button { width:38px;height:38px;background:transparent;border:0;border-radius:10px;display:grid;place-items:center;font-size:22px;color:var(--fg); }
   #navDock button.on {color:var(--accent);background:var(--fill);}
@@ -227,14 +232,14 @@
   <div class="stack glass"><button id="toggleSide" title="Show or hide the sidebar"><svg class="i"><use href="#i-side"/></svg></button></div>
   <div class="stack glass">
     <button id="shadows" title="Sun" aria-label="Sun"><svg class="i"><use href="#i-sun"/></svg></button>
-    <button id="clip" title="Hide map under model"><svg class="i"><use href="#i-cut"/></svg></button>
     <button id="measureBtn" title="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
   </div>
   <div class="stack glass"><button id="captureBtn" title="Capture"><svg class="i"><use href="#i-cam"/></svg></button></div>
 </div>
 
+<div id="peg" hidden aria-hidden="true"><svg class="i"><use href="#i-person"/></svg><span></span></div>
 <div id="navDock" class="glass">
-  <button id="walkBtn" title="Walk" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
+  <button id="walkBtn" title="Walk: drag onto the map, or click" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
   <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
   <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-fit"/></svg></button>
   <span class="divider"></span>
@@ -751,14 +756,23 @@
       const data=await geometryJobs.get(key);
       if(models[name]!==model||meta?.sets?.[name]?.geometry!==entry.geometry)return;
       model._elGeometry=data.mesh;model._elFootprints=data.polygons;clipKey="";applyClip();
-    } catch(error) {if(models[name]===model){model._elGeometryError=error.message;if(S.clip)msg("Cutout unavailable. Resend the model.");}}
+    } catch(error) {if(models[name]===model){model._elGeometryError=error.message;if(clipped().has(name))msg("Cutout unavailable. Resend the model.");}}
     while(geometryJobs.size>12)geometryJobs.delete(geometryJobs.keys().next().value);
   }
+  // "Hide map underneath" is chosen per design set. (Older settings had one switch for all sets.)
+  const clipped = () => new Set(S.clip && meta ? Object.keys(meta.sets || {}) : S.clip_sets || []);
+  const cutSets = () => visibleSets().filter(n => clipped().has(n));
+  function setClipped(n, on) {
+    const c = clipped(); on ? c.add(n) : c.delete(n);
+    saveS({ clip: false, clip_sets: [...c] });
+    renderSets(); applyClip();
+    if (on && !tileset) msg("Connect a map first.");
+    else if (on && !meta?.sets?.[n]?.geometry) msg("Resend this set to hide the map underneath.");
+  }
   function applyClip() {
-    $("clip").classList.toggle("on", !!S.clip);
     if (!tileset || !anchor()) return;
-    if (!S.clip) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; return; }
-    const visible=visibleSets(),M=frame();
+    const visible=cutSets(),M=frame();
+    if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; return; }
     const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,offsets[n]]),Array.from({length:16},(_,i)=>M[i])]);
     if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;return;}
     const polygons=[];
@@ -858,7 +872,7 @@
     $("setsGroup").classList.toggle("hide", names.length === 0);
     $("flipSets").classList.toggle("hide", names.length < 2);
     $("sets").innerHTML = "";
-    const hid = hidden();
+    const hid = hidden(), cut = clipped();
     for (const n of names) {
       const el = document.createElement("div");
       el.className = "item" + (hid.has(n) ? " off" : "");
@@ -866,9 +880,11 @@
         `<span class="grow"><div class="t">${esc(n)}</div></span>` +
         `<span class="acts"><button class="mini" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
         (RHINO ? `<button class="mini" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") + `</span>` +
+        `<button class="mini cut ${cut.has(n) ? "on" : ""}" title="Hide the map underneath this set" aria-pressed="${cut.has(n)}"><svg class="i" style="width:15px;height:15px"><use href="#i-cut"/></svg></button>` +
         `<button class="mini ${hid.has(n) ? "" : "on"}" title="Show / hide"><svg class="i" style="width:16px;height:16px"><use href="#${hid.has(n) ? "i-eyeoff" : "i-eye"}"/></svg></button>`;
       const btns = el.querySelectorAll("button"), eye = btns[btns.length - 1];
       eye.onclick = () => setHidden(n, !hidden().has(n));
+      btns[btns.length - 2].onclick = () => { if (walk) walk.exit(); setClipped(n, !clipped().has(n)); };
       btns[0].onclick = () => openSetCard(n);
       if (offsets[n]) el.title = "Move pending";
       if (RHINO) btns[1].onclick = async () => {
@@ -1372,7 +1388,6 @@
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
   $("fly").onclick = () => flyTo();
-  $("clip").onclick = () => { if(walk)walk.exit();saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
   $("resample").onclick = () => { if (walk) walk.exit(); sampleGround(true); };
   document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
   selProj = seg("projSeg", "perspective", v => setProjection(v));
@@ -1471,9 +1486,8 @@
     }
     return best;
   }
-  function inCutout(p) {                                   // a map point hidden by "Hide map under model"
-    if (!S.clip) return false;
-    for (const name of visibleSets()) {
+  function inCutout(p) {                                   // a map point hidden by "Hide map underneath"
+    for (const name of cutSets()) {
       const m = models[name], rings = m?._elFootprints; if (!rings) continue;
       const l = Cesium.Matrix4.multiplyByPoint(Cesium.Matrix4.inverseTransformation(m.modelMatrix, new Cesium.Matrix4()), p, new Cesium.Cartesian3());
       for (const r of rings) {
@@ -1518,6 +1532,9 @@
     allowed: () => !walk && !modal(),
     sensitivity,
     moved: freeCamera,
+    // ?controls=mac|windows overrides the detected platform (Rhino's Mac and Windows controls differ)
+    mac: () => { const c = new URLSearchParams(location.search).get("controls"); return c ? c === "mac" : EarthLinkNavigation.isMac(); },
+    lens: k => { if (!isOrtho()) setVfov(Math.max(Cesium.Math.toRadians(3), Math.min(Cesium.Math.toRadians(120), viewer.camera.frustum.fovy * k))); },
     walking: () => !!walk?.body,
     look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
   });
@@ -1565,15 +1582,15 @@
     measuring = false; clearMeasure(); $("measureBtn").classList.remove("on"); document.body.classList.remove("measuring");
     freeCamera(); closePops(); nav.stop();
     const c = viewer.camera, returning = { pos: c.positionWC.clone(), dir: c.directionWC.clone(), up: c.upWC.clone(), lens: getLens() };
-    const state = { placing: true, keys: new Set(), body: null, heading: 0, pitch: 0, last: 0, raf: 0 };
+    const state = { placing: true, keys: new Set(), body: null, heading: 0, pitch: 0, last: 0, raf: 0, sprinting: false, tapSpace: 0, tapW: 0 };
     state.exit = () => {
-      if (walk !== state) return; walk = null; cancelAnimationFrame(state.raf); msg("");
+      if (walk !== state) return; walk = null; cancelAnimationFrame(state.raf); viewer.camera.cancelFlight(); msg("");
       document.body.classList.remove("picking"); $("walkBtn").classList.remove("on"); $("walkBtn").setAttribute("aria-pressed", "false");
       setLens(returning.lens); selProj(returning.lens.projection);
       viewer.camera.setView({ destination: returning.pos, orientation: { direction: returning.dir, up: returning.up } });
     };
     walk = state; $("walkBtn").classList.add("on"); $("walkBtn").setAttribute("aria-pressed", "true"); $("walkBtn").blur();
-    document.body.classList.add("picking"); msg("Click where to stand.", 2500);
+    document.body.classList.add("picking"); msg("Click where to stand, or drag the person onto the map.", 2500);
   }
   function placeWalker(screen) {
     const state = walk; if (!state?.placing) return;
@@ -1585,7 +1602,8 @@
     setProjection("perspective", true);
     const dir = toLocal(M, viewer.camera.directionWC, true);
     Object.assign(state, { placing: false, M, body: new EarthLinkWalk.Walker(probe, [0, 0, 0]), heading: (Math.atan2(dir[0], dir[1]) * 180 / Math.PI + 360) % 360, pitch: 0, eyeZ: EarthLinkWalk.W.eye });
-    document.body.classList.remove("picking"); msg("");
+    document.body.classList.remove("picking");
+    msg(WALK_HELP, 6000);
     const tick = t => {
       if (walk !== state) return;
       const dt = state.last ? Math.min(0.05, (t - state.last) / 1000) : 0; state.last = t;
@@ -1593,32 +1611,85 @@
         const k = state.keys, h = state.heading * Math.PI / 180;
         const f = (k.has("KeyW") || k.has("ArrowUp")) - (k.has("KeyS") || k.has("ArrowDown"));
         const r = (k.has("KeyD") || k.has("ArrowRight")) - (k.has("KeyA") || k.has("ArrowLeft"));
+        if (!f && !r) state.sprinting = false;                    // Minecraft: sprinting ends when you stop
+        const wasFlying = state.body.flying;
         state.body.step({ x: f * Math.sin(h) + r * Math.cos(h), y: f * Math.cos(h) - r * Math.sin(h),
-          sprint: k.has("ShiftLeft") || k.has("ShiftRight"), jump: k.has("Space") }, dt);
+          sprint: state.sprinting || (MAC_KEYS && (k.has("ControlLeft") || k.has("ControlRight"))),
+          sneak: k.has("ShiftLeft") || k.has("ShiftRight"), jump: k.has("Space") }, dt);
+        if (wasFlying && !state.body.flying) msg("Landed", 1200);
       }
       drawWalk(dt);
       state.raf = requestAnimationFrame(tick);
     };
-    state.raf = requestAnimationFrame(tick);
+    // drop in: a short flight down to eye level, then walking starts
+    const pose = walkPose(state, state.eyeZ), start = () => { if (walk === state && !state.raf) state.raf = requestAnimationFrame(tick); };
+    viewer.camera.flyTo({ destination: pose.destination, orientation: pose.orientation, duration: 0.8,
+      easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT, complete: start, cancel: start });
+  }
+  function walkPose(state, eyeZ) {
+    const eye = state.body.eye, h = state.heading * Math.PI / 180, p = state.pitch * Math.PI / 180;
+    const dir = [Math.sin(h) * Math.cos(p), Math.cos(h) * Math.cos(p), Math.sin(p)], up = [-Math.sin(h) * Math.sin(p), -Math.cos(h) * Math.sin(p), Math.cos(p)];
+    return { destination: toWorld(state.M, [eye[0], eye[1], eyeZ]), orientation: { direction: toWorld(state.M, dir, true), up: toWorld(state.M, up, true) } };
   }
   function drawWalk(dt) {
     const state = walk, eye = state.body.eye;
-    state.eyeZ += (eye[2] - state.eyeZ) * (Math.abs(eye[2] - state.eyeZ) > 2 ? 1 : 1 - Math.exp(-(dt || 1) * 12));   // eased steps
-    const h = state.heading * Math.PI / 180, p = state.pitch * Math.PI / 180;
-    const dir = [Math.sin(h) * Math.cos(p), Math.cos(h) * Math.cos(p), Math.sin(p)], up = [-Math.sin(h) * Math.sin(p), -Math.cos(h) * Math.sin(p), Math.cos(p)];
-    viewer.camera.setView({ destination: toWorld(state.M, [eye[0], eye[1], state.eyeZ]), orientation: { direction: toWorld(state.M, dir, true), up: toWorld(state.M, up, true) } });
+    const far = Math.abs(eye[2] - state.eyeZ) > 2 || state.body.flying;   // flying: no step smoothing
+    state.eyeZ += (eye[2] - state.eyeZ) * (far ? 1 : 1 - Math.exp(-(dt || 1) * 12));   // eased steps
+    viewer.camera.setView(walkPose(state, state.eyeZ));
   }
-  const WALK_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "ShiftLeft", "ShiftRight", "Space"];
-  const stopKeys = () => walk?.keys.clear();
+  // Minecraft controls. Ctrl sprints on a Mac only: on Windows Ctrl+W would close the tab, so double-tap W there.
+  const MAC_KEYS = (() => { const c = new URLSearchParams(location.search).get("controls"); return c ? c === "mac" : EarthLinkNavigation.isMac(); })();
+  const WALK_HELP = `WASD move · Space jump · double-tap Space fly (Space up, Shift down) · ${MAC_KEYS ? "Control or " : ""}double-tap W sprint · Shift sneak · Esc exit`;
+  const WALK_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight"];
+  const DOUBLE_TAP = 300;   // ms
+  const stopKeys = () => { if (walk) { walk.keys.clear(); walk.sprinting = false; } };
   window.addEventListener("blur", stopKeys);
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopKeys(); });
   document.addEventListener("keydown", e => {
     if (!walk || e.target.closest?.("input,textarea,select,[contenteditable=true]")) return;
     if (e.code === "Escape") { e.preventDefault(); walk.exit(); return; }
-    if (walk.body && WALK_KEYS.includes(e.code)) { e.preventDefault(); walk.keys.add(e.code); }
+    if (!walk.body || !WALK_KEYS.includes(e.code)) return;
+    e.preventDefault();
+    if (!e.repeat) {
+      const now = e.timeStamp || performance.now();   // the key's own time: a slow frame cannot break a double-tap
+      if (e.code === "Space") {
+        if (now - walk.tapSpace < DOUBLE_TAP) { walk.tapSpace = 0; msg(walk.body.toggleFly() ? "Flying · Space up · Shift down · double-tap Space to drop" : "Falling", 1800); }
+        else walk.tapSpace = now;
+      }
+      if (e.code === "KeyW") { if (now - walk.tapW < DOUBLE_TAP) walk.sprinting = true; walk.tapW = now; }
+    }
+    walk.keys.add(e.code);
   });
   document.addEventListener("keyup", e => walk?.keys.delete(e.code));
-  $("walkBtn").onclick = beginWalk;
+
+  // Like Google Maps: drag the person onto the map and drop it to stand there. A click lets you click a spot.
+  let pegged = false;
+  (() => {
+    const b = $("walkBtn"), peg = $("peg"), canvas = viewer.scene.canvas;
+    const overMap = e => document.elementFromPoint(e.clientX, e.clientY) === canvas;
+    let drag = null;
+    const end = () => { drag = null; peg.hidden = true; document.body.classList.remove("pegging"); };
+    b.addEventListener("pointerdown", e => {
+      if (e.button || walk?.body) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false }; b.setPointerCapture(e.pointerId);
+    });
+    b.addEventListener("pointermove", e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.on && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) { drag.on = true; peg.hidden = false; document.body.classList.add("pegging"); }
+      if (drag.on) { peg.style.left = e.clientX + "px"; peg.style.top = e.clientY + "px"; peg.classList.toggle("ok", overMap(e)); }
+    });
+    b.addEventListener("pointerup", e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dropped = drag.on; end(); if (!dropped) return;
+      pegged = true;                                     // the click that follows is not a click on the button
+      if (!overMap(e)) return;
+      const r = canvas.getBoundingClientRect();
+      if (!walk) beginWalk();
+      if (walk?.placing) placeWalker(new Cesium.Cartesian2(e.clientX - r.left, e.clientY - r.top));
+    });
+    b.addEventListener("pointercancel", end);
+  })();
+  $("walkBtn").onclick = () => { if (pegged) { pegged = false; return; } beginWalk(); };
 
   // ---------------------------------------------------------------- search (top left), like Google Earth
   // Suggestions refine as you type (Google geocoder, which the 3D tiles require), recent searches first.

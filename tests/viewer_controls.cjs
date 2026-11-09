@@ -6,7 +6,7 @@ const assert=require('node:assert/strict');
  const page=await browser.newPage({viewport:{width:1280,height:800},ignoreHTTPSErrors:!!process.env.EARTHLINK_IGNORE_HTTPS});const errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>localStorage.setItem('earthlink:skipKeys','true'));
- await page.goto(process.argv[2]||'http://127.0.0.1:8877/');
+ {const u=new URL(process.argv[2]||'http://127.0.0.1:8877/');u.searchParams.set('controls','mac');await page.goto(u.href);}   // Rhino for Mac gestures (Windows: viewer_review.cjs)
  await page.waitForFunction(()=>window.EL&&Object.keys(EL.models).length>0,null,{timeout:60000});
  const settle=()=>page.waitForTimeout(450);
  const wheel=(list,gap=16)=>page.evaluate(async([list,gap])=>{const c=EL.viewer.scene.canvas,r=c.getBoundingClientRect();

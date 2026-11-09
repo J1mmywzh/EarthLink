@@ -1,21 +1,39 @@
-/* The plan outline of a model, for "Hide map under model".
+/* The plan outline of where a model meets the ground, for "Hide map underneath".
 
-   Every triangle is painted onto a fine grid (seen from above), the painted area's edges are traced into
-   rings, straightened, and returned as simple polygons Cesium can clip with. Courtyards, separate buildings
-   and concave corners are kept. Painting is conservative: the outline may reach up to one grid cell past the
-   model, never short of it. The cell is chosen from the model's size (about 2 million cells at most). */
+   Only the part of the model at its lowest level is used: every triangle is cut at 1 cm above the set's lowest
+   point and what lies below is painted onto a fine grid (seen from above). The painted area's edges are traced
+   into rings, straightened, and returned as simple polygons Cesium can clip with. An overhang, a cantilever or an
+   upside-down trapezoid keeps the map under it; only its base is cut. Courtyards, separate buildings and concave
+   corners are kept. Painting is conservative: the outline may reach up to one grid cell past the base, never short
+   of it. The cell is chosen from the base's size (about 2 million cells at most). */
 (function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory();else root.EarthLinkFootprints=factory();})(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const MAX_POLYGONS=4096;
 
+  const GROUND_TOLERANCE=0.01;                         // m above the lowest point that still counts as touching
   function triangles(mesh){
     if(mesh?.schema!==1||!Array.isArray(mesh.vertices)||!Array.isArray(mesh.indices)||mesh.indices.length%3)throw Error('Invalid geometry');
     const v=mesh.vertices,ix=mesh.indices,out=[];
-    for(const k of ix)if(!Number.isInteger(k)||k<0||!v[k]||v[k].length!==3||!v[k].every(Number.isFinite))throw Error('Invalid mesh position');
+    let zmin=Infinity;
+    for(const k of ix){if(!Number.isInteger(k)||k<0||!v[k]||v[k].length!==3||!v[k].every(Number.isFinite))throw Error('Invalid mesh position');zmin=Math.min(zmin,v[k][2]);}
+    const cut=zmin+GROUND_TOLERANCE;
     for(let i=0;i<ix.length;i+=3){
-      const a=v[ix[i]],b=v[ix[i+1]],c=v[ix[i+2]];
-      const area=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
-      if(Math.abs(area)>1e-9)out.push(a[0],a[1],b[0],b[1],c[0],c[1]);   // walls seen edge-on cover nothing
+      let poly=[v[ix[i]],v[ix[i+1]],v[ix[i+2]]];
+      if(poly.every(p=>p[2]>cut))continue;
+      if(poly.some(p=>p[2]>cut)){                        // keep the part below the cut (Sutherland-Hodgman)
+        const kept=[];
+        for(let k=0;k<3;k++){
+          const a=poly[k],b=poly[(k+1)%3],ia=a[2]<=cut,ib=b[2]<=cut;
+          if(ia)kept.push(a);
+          if(ia!==ib){const t=(cut-a[2])/(b[2]-a[2]);kept.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,cut]);}
+        }
+        poly=kept;
+      }
+      for(let k=1;k+1<poly.length;k++){
+        const a=poly[0],b=poly[k],c=poly[k+1];
+        const area=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+        if(Math.abs(area)>1e-9)out.push(a[0],a[1],b[0],b[1],c[0],c[1]);   // walls seen edge-on cover nothing
+      }
     }
     return out;
   }

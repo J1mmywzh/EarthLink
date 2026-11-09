@@ -50,3 +50,26 @@ test('nothing drawn below: holds position instead of falling forever',()=>{
 test('rises onto a map surface that refines upward just after placing',()=>{
   const w=new Walker(world([[-100,-100,1.19,100,100,1.2]]));w.step({},1/60);assert.ok(Math.abs(w.feet[2]-1.2)<0.01);
 });
+
+test('creative flight: take off, rise, fly at Minecraft speeds, land by sinking',()=>{
+  const w=new Walker(world([floor]));
+  assert.equal(w.toggleFly(),true);
+  run(w,{x:0,y:0,jump:true},2);assert.ok(w.feet[2]>12&&w.feet[2]<16,'rose about 7.5 m/s: '+w.feet[2]);
+  run(w,{x:0,y:0},2);const h=w.feet[2];run(w,{x:0,y:0},2);assert.ok(Math.abs(w.feet[2]-h)<1e-6,'hovers without gravity');
+  run(w,{x:0,y:1},2);const a=w.feet[1];run(w,{x:0,y:1},1);assert.ok(Math.abs(w.feet[1]-a-W.fly)<0.1,'flies 10.9 m/s');
+  run(w,{x:0,y:1,sprint:true},2);const b=w.feet[1];run(w,{x:0,y:1,sprint:true},1);assert.ok(Math.abs(w.feet[1]-b-W.flySprint)<0.2,'sprint-flies 21.6 m/s');
+  run(w,{x:0,y:0,sneak:true},4);assert.equal(w.flying,false,'touching the ground lands');assert.ok(Math.abs(w.feet[2])<1e-6);
+});
+test('stopping flight drops to the ground below, however far',()=>{
+  const w=new Walker(world([floor]));w.toggleFly();run(w,{x:0,y:0,jump:true},12);assert.ok(w.feet[2]>80);
+  w.toggleFly();run(w,{x:0,y:0},8);assert.ok(Math.abs(w.feet[2])<1e-6&&w.grounded,'fell to the floor: '+w.feet[2]);
+});
+test('flight stops at a ceiling and at walls',()=>{
+  const w=new Walker(world([floor,[-5,-5,4,5,5,5],[-5,3,0,5,4,20]]));w.toggleFly();
+  run(w,{x:0,y:0,jump:true},3);assert.ok(w.feet[2]+W.head<=4.01,'head under the ceiling');
+  run(w,{x:0,y:1},3);assert.ok(w.feet[1]<3-W.radius+0.01,'wall stops forward flight');
+});
+test('Shift sneaks slowly on the ground',()=>{
+  const w=new Walker(world([floor]));run(w,{x:0,y:1,sneak:true},2);const a=w.feet[1];run(w,{x:0,y:1,sneak:true},1);
+  assert.ok(Math.abs(w.feet[1]-a-W.sneak)<0.05);
+});
