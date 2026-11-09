@@ -8,7 +8,7 @@
       this.heading=o.heading||0;this.tilt=o.tilt??35;this.projection=o.projection||'perspective';
       this.halfHeight=o.halfHeight||30;this.constrain();
     }
-    constrain(){this.heading=((this.heading%360)+360)%360;this.tilt=clamp(this.tilt,this.projection==='two_point'?10:0,85);this.distance=clamp(this.distance,.05,1e8);this.halfHeight=clamp(this.halfHeight,.01,1e8);}
+    constrain(){this.heading=((this.heading%360)+360)%360;this.tilt=clamp(this.tilt,this.projection==='two_point'?10:0,this.projection==='two_point'?170:85);this.distance=clamp(this.distance,.05,1e8);this.halfHeight=clamp(this.halfHeight,.01,1e8);}
     orbit(dx,dy){if(Number.isFinite(dx)&&Number.isFinite(dy)){this.heading+=dx;this.tilt+=dy;this.constrain();}return this;}
     pan(x,y){if(!Number.isFinite(x)||!Number.isFinite(y))return this;const p=this.pose();this.target=this.target.map((v,i)=>v+p.right[i]*x+p.up[i]*y);return this;}
     zoom(factor){if(Number.isFinite(factor)&&factor>0){if(this.projection==='parallel')this.halfHeight*=factor;else this.distance*=factor;this.constrain();}return this;}

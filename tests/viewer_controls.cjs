@@ -7,7 +7,7 @@ const assert=require('node:assert/strict');
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>localStorage.setItem('earthlink:skipKeys','true'));
  await page.goto(process.argv[2]||'http://127.0.0.1:8877/');
- await page.waitForFunction(()=>window.EL&&Object.keys(EL.models).length>0,{timeout:60000});
+ await page.waitForFunction(()=>window.EL&&Object.keys(EL.models).length>0,null,{timeout:60000});
  await page.getByRole('button',{name:'Navigation',exact:true}).click();
  assert.equal(await page.getByRole('button',{name:'Reset to north',exact:true}).isVisible(),true);
  assert.equal(await page.getByText('Two fingers / right drag — orbit',{exact:true}).count(),0);
@@ -42,7 +42,9 @@ const assert=require('node:assert/strict');
  await page.waitForFunction(()=>EL.walk?.body,null,{timeout:15000});
  assert.equal(await page.getByText('eye height 1.65 m',{exact:false}).count(),0);
  const startFeet=await page.evaluate(()=>EL.walk.body.feet);
- await page.keyboard.down('d');await page.waitForTimeout(300);await page.keyboard.up('d');
+ await page.keyboard.down('d');
+ try{await page.waitForFunction(start=>{const p=EL.walk?.body?.feet;return p&&Math.hypot(p[0]-start[0],p[1]-start[1])>.2;},startFeet,{timeout:5000});}
+ finally{await page.keyboard.up('d');}
  const endFeet=await page.evaluate(()=>EL.walk.body.feet);
  assert.ok(Math.hypot(endFeet[0]-startFeet[0],endFeet[1]-startFeet[1])>.2);
  await page.keyboard.press('Escape');

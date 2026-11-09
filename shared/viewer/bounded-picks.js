@@ -5,7 +5,7 @@
     constructor(scene){
       const p=scene?._picking,f=p?._pickOffscreenView?.camera?.frustum;
       if(!Array.isArray(p?._mostDetailedRayPicks)||!f||!Number.isFinite(f.far)||typeof scene.pickFromRayMostDetailed!=='function')throw Error('Walk is unavailable in this browser.');
-      this.scene=scene;this.picking=p;this.frustum=f;this.jobs=new Set();this.active=false;this.generation=0;
+      this.scene=scene;this.picking=p;this.frustum=f;this.jobs=new Set();this.active=false;this.closed=false;this.generation=0;
     }
     acquire(){
       if(this.active)return;
@@ -14,6 +14,7 @@
       this.picking._earthLinkOwner=this;this.active=true;this.generation++;
     }
     async cast(ray,exclude,width){
+      if(this.closed)return null;
       this.acquire();const generation=this.generation,list=this.picking._mostDetailedRayPicks,count=list.length;
       const promise=this.scene.pickFromRayMostDetailed(ray,exclude,width),job=list.length>count?list[list.length-1]:null;
       if(job)this.jobs.add(job);
@@ -25,6 +26,7 @@
       for(const job of this.jobs){const i=list.indexOf(job);if(i>=0)list.splice(i,1);}this.jobs.clear();
     }
     stop(){
+      this.closed=true;
       this.cancelPending();if(!this.active)return;
       if(this.picking._earthLinkOwner===this){this.frustum.near=this.saved.near;this.frustum.far=this.saved.far;delete this.picking._earthLinkOwner;}
       this.active=false;

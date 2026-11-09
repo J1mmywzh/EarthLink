@@ -33,3 +33,4 @@ jobs:
           sleep 2
           node tests/viewer_smoke.mjs http://127.0.0.1:8765/
           node tests/viewer_controls.cjs http://127.0.0.1:8765/
+          node tests/viewer_review.cjs http://127.0.0.1:8765/

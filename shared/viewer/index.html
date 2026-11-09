@@ -514,7 +514,8 @@
     showFov();
   }
   let selProj = () => {};
-  function setProjection(p) {
+  function setProjection(p, keepWalking = false) {
+    if(walk&&!keepWalking)walk.exit();
     const c = viewer.camera, f = c.frustum;
     if (p === projection) return;
     if (projection === "two_point" && !isOrtho()) {   // fold the lens shift back into the camera pitch
@@ -725,9 +726,11 @@
   $("sectionOn").onchange = applySection; $("sectionH").oninput = applySection;
 
   // ---------------------------------------------------------------- design sets
+  let modelGeneration = 0;
   async function loadMeta(m) {
+    const generation = ++modelGeneration;
     if(walk)walk.exit();
-    const first = !meta;
+    const first = !Object.keys(models).length;
     const projectChanged = meta && meta.project !== m.project;
     meta = m;
     $("dot").className = "flash";
@@ -747,20 +750,22 @@
       try {
         const next = await Cesium.Model.fromGltfAsync({ url: `${DATA}live/${s.glb}?v=${s.version}`, modelMatrix: frame(),
           shadows: Cesium.ShadowMode.ENABLED, forwardAxis: Cesium.Axis.X });   // Rhino glTF is already east/north/up
+        if(generation!==modelGeneration){next.destroy();return;}
         next._elVersion = s.version; next._elGlb = s.glb;
         scene.primitives.add(next);
         await new Promise(r => { if (next.ready) return r(); const off = next.readyEvent.addEventListener(() => { off(); r(); }); setTimeout(r, 15000); });
+        if(generation!==modelGeneration){scene.primitives.remove(next);return;}
         if (models[n]) scene.primitives.remove(models[n]);
         models[n] = next;
         loadDerived(n,next,s);
         if (offsets[n] && offsets[n].applied) delete offsets[n];   // Rhino moved the geometry; the preview is now real
-      } catch (e) { msg(`Could not load “${n}”: ${e.message}`); }
+      } catch (e) { if(generation!==modelGeneration)return;msg(`Could not load “${n}”: ${e.message}`); }
     }
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
     if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(); groundJob=sampleGround(false); refreshViews(); }
-    setTimeout(() => $("dot").className = "live", 400);
+    setTimeout(() => {if(generation===modelGeneration)$("dot").className = "live";}, 400);
   }
   function renderSets() {
     const names = meta ? Object.keys(meta.sets || {}) : [];
@@ -813,6 +818,7 @@
   function restoreCamera() {
     const c = store.get("camera"); if (!c) return false;
     viewer.camera.setView({ destination: new Cesium.Cartesian3(c.x, c.y, c.z), orientation: { heading: c.h, pitch: c.p, roll: c.r } });
+    if(nav)nav.adopt();
     return true;
   }
   viewer.camera.moveEnd.addEventListener(() => {
@@ -1306,7 +1312,7 @@
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
   $("fly").onclick = flyTo;
-  $("clip").onclick = () => { saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
+  $("clip").onclick = () => { if(walk)walk.exit();saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
   $("resample").onclick = () => {if(walk)walk.exit();groundJob=sampleGround(true);};
   document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
   selProj = seg("projSeg", "perspective", v => { setProjection(v); if(nav)nav.adopt(); });
@@ -1334,7 +1340,8 @@
   restyle(); showSite(); showFov();
 
   // One site-local camera owns every navigation control and gesture.
-  let orbit = null, pointer = null;
+  let orbit = null, pointer = null, orbitFrameKey = null;
+  const navigationFrameKey = () => Cesium.Matrix4.toArray(frame()).join(",");
   const cameraCanvas = scene.canvas;
   const array = v => [v.x, v.y, v.z];
   const navigationAllowed = () => !walk && !!anchor() && !picking && !measuring && !$("dragOn").checked && !$("busy").offsetParent && !$("ask").classList.contains("open");
@@ -1347,13 +1354,14 @@
     if (!orbit) return;
     const two=projection==="two_point";
     $("tiltTitle").textContent=two?"Vertical framing":"Tilt";
-    $("navTilt").min=two?10:0;$("navTilt").max=85;
+    $("navTilt").min=two?10:0;$("navTilt").max=two?170:85;
     $("navTilt").value=orbit.tilt;
     $("navTilt").setAttribute("aria-label",two?"Vertical framing":"Tilt");
     $("tiltValue").textContent=`${(two?orbit.tilt-90:orbit.tilt).toFixed(0)}°`;
     $("navHeading").value=orbit.heading; $("headingValue").textContent=`${orbit.heading.toFixed(0)}°`;
   }
   nav = {
+    ensure() {return orbit&&orbitFrameKey===navigationFrameKey()?true:nav.adopt();},
     adopt() {
       if (!anchor()) return false;
       const M=frame(), c=viewer.camera, pos=toLocal(M,c.positionWC), dir=toLocal(M,c.directionWC,true);
@@ -1367,7 +1375,7 @@
       orbit=new EarthLinkNavigation.Orbit({target:pos.map((v,i)=>v+virtual[i]*distance),distance,
         heading:Math.atan2(virtual[0],virtual[1])*180/Math.PI,tilt:Math.acos(Math.max(-1,Math.min(1,-virtual[2])))*180/Math.PI,
         projection,halfHeight:getLens().half_height||30});
-      navLabels();return true;
+      orbitFrameKey=navigationFrameKey();navLabels();return true;
     },
     apply() {
       if(!orbit||!anchor())return;
@@ -1379,17 +1387,17 @@
     },
     fit() {
       if(walk)walk.exit();
-      if(!navigationAllowed())return; freeCamera();if(!orbit&&!nav.adopt())return;
+      if(!navigationAllowed())return; freeCamera();if(!nav.ensure())return;
       const bs=modelsSphere();if(!bs)return;
       orbit.target=toLocal(frame(),bs.center);orbit.distance=Math.max(.1,bs.radius/Math.sin((vfov()||.7)/2)*1.15);
       orbit.halfHeight=Math.max(.1,bs.radius*1.15/Math.min(1,aspect()));orbit.projection=projection;nav.apply();
     },
-    zoom(factor) {if(!navigationAllowed()||walk)return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.zoom(factor);nav.apply();}
+    zoom(factor) {if(!navigationAllowed()||walk)return;freeCamera();if(!nav.ensure())return;orbit.zoom(factor);nav.apply();}
   };
-  $("navBtn").onclick=()=>{if(!walk)nav.adopt();else navLabels();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
-  $("northBtn").onclick=()=>{if(walk?.body){walk.heading=0;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.north();nav.apply();};
-  $("navHeading").oninput=()=>{if(walk?.body){walk.heading=+$("navHeading").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.heading=+$("navHeading").value;nav.apply();};
-  $("navTilt").oninput=()=>{if(walk?.body){walk.pitch=+$("navTilt").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.tilt=+$("navTilt").value;nav.apply();};
+  $("navBtn").onclick=()=>{if(!walk)nav.ensure();else navLabels();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
+  $("northBtn").onclick=()=>{if(walk?.body){walk.heading=0;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.north();nav.apply();};
+  $("navHeading").oninput=()=>{if(walk?.body){walk.heading=+$("navHeading").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.heading=+$("navHeading").value;nav.apply();};
+  $("navTilt").oninput=()=>{if(walk?.body){walk.pitch=+$("navTilt").value;drawWalk();return;}if(!navigationAllowed())return;freeCamera();if(!nav.ensure())return;orbit.tilt=+$("navTilt").value;nav.apply();};
   $("inputDevice").value=store.get("inputDevice")||(/Mac/.test(navigator.platform)?"trackpad":"auto");
   $("inputDevice").onchange=()=>store.set("inputDevice",$("inputDevice").value);
   $("zoomIn").onclick=()=>nav.zoom(.8);$("zoomOut").onclick=()=>nav.zoom(1.25);
@@ -1422,14 +1430,17 @@
   async function mapContacts(state,feet){
     if(!tileset)return null;
     if(typeof scene.pickFromRayMostDetailed!=="function")throw Error("Walk is unavailable in this browser.");
-    const M=frame(),exclude=Object.values(models);
+    const M=frame(),exclude=Object.values(models),queries=state.queries,generation=state.contactGeneration=(state.contactGeneration||0)+1;
+    const current=()=>walk===state&&state.contactGeneration===generation&&!queries.closed;
     const query=async(origin,direction,max)=>{
+      if(!current())return null;
       const ray=new Cesium.Ray(toWorld(M,origin),Cesium.Cartesian3.normalize(toWorld(M,direction,true),new Cesium.Cartesian3()));
-      const result=await state.queries.cast(ray,exclude,.05);
-      return result?.position?toLocal(M,result.position):null;
+      const result=await queries.cast(ray,exclude,.05);
+      return current()&&result?.position?toLocal(M,result.position):null;
     };
     let timer;
     try{return await Promise.race([EarthLinkMapContacts.sample(feet,query,state.cache),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Surface unavailable.")),5000);})]);}
+    catch(error){state.contactGeneration++;queries.cancelPending();throw error;}
     finally{clearTimeout(timer);}
   }
   async function placeWalker(screen){
@@ -1452,7 +1463,7 @@
       if(walk!==state){body.free();return;}
       const camera=captureCamera("");state.heading=Math.atan2(camera.dir[0],camera.dir[1])*180/Math.PI;state.pitch=0;
       state.body=body;state.context=context;state.contextTime=performance.now();state.placing=false;state.last=performance.now();
-      setProjection("perspective");state.eyeZ=body.eye[2];document.body.classList.remove("picking");msg("");drawWalk();
+      setProjection("perspective",true);state.eyeZ=body.eye[2];document.body.classList.remove("picking");msg("");drawWalk();
     }catch(error){state.queries?.stop();if(walk===state)msg(error.message==="Not enough room"?"Choose a clear surface.":error.message);}
     finally{state.pending=false;}
   }
@@ -1506,7 +1517,7 @@
   cameraCanvas.addEventListener("pointerdown",e=>{
     if(walk?.body&&[1,2].includes(e.button)){pointer={id:e.pointerId,x:e.clientX,y:e.clientY,look:true};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();return;}
     if(!navigationAllowed()||![1,2].includes(e.button))return;
-    freeCamera();nav.adopt();pointer={id:e.pointerId,x:e.clientX,y:e.clientY};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();
+    freeCamera();if(!nav.ensure())return;pointer={id:e.pointerId,x:e.clientX,y:e.clientY};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();
   });
   cameraCanvas.addEventListener("pointermove",e=>{
     if(!pointer||pointer.id!==e.pointerId)return;
@@ -1522,7 +1533,7 @@
   cameraCanvas.addEventListener("wheel",e=>{
     if(walk?.body){e.preventDefault();if(!e.ctrlKey){walk.heading+=e.deltaX*.25;walk.pitch=Math.max(-85,Math.min(85,walk.pitch-e.deltaY*.25));drawWalk();}return;}
     if(!navigationAllowed())return;
-    e.preventDefault();freeCamera();if(!orbit&&!nav.adopt())return;
+    e.preventDefault();freeCamera();if(!nav.ensure())return;
     const a=EarthLinkNavigation.wheelAction(e,$("inputDevice").value),units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
     if(a.type==="zoom")orbit.zoom(a.factor);
     else if(a.type==="pan"||projection==="parallel")orbit.pan(-a.x*units,a.y*units);

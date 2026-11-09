@@ -7,6 +7,8 @@
 - Exported mesh footprints preserve concave shapes, islands and courtyard holes without padded rectangular masks.
 - Removed persistent instructions and redundant secondary interface copy; expanded the manuals.
 - Fixed concurrent temporary-file collisions in JSON/settings saves. Added behavioral/browser tests, bundled dependency licenses, complete share resources and compatible CI runners.
+- Preserved panned orbit targets and upward Two-Point framing; cancelled map contacts on Walk exit and rejected delayed live exports. Corrected prerelease package filenames.
+- Restored nested viewer-library paths after the Rhino build so installed packages retain working imports.
 - Published 0.1.0/0.1.1 artifacts are unchanged. Installed-Rhino/Windows acceptance remains separate.
 
 ## 0.1.1 — 2026-11-08

@@ -33,3 +33,6 @@ test('wheel normalizes pinch, pixel trackpad and coarse mouse input',()=>{
 test('neutral lighting still lights ground at eye level and when looking upward',()=>{
  assert.ok(N);for(const d of [[0,1,0],[0,0,1],[0,0,-1]]){const l=N.neutralDirection(d,[0,0,1]);assert.ok(l[2]<-.8);near(Math.hypot(...l),1);}
 });
+test('two point preserves level and upward framing through north and zoom',()=>{
+ for(const tilt of [30,90,116.565051177]){const o=new N.Orbit({projection:'two_point',tilt,distance:20,heading:30}),shift=o.pose().shift;o.north();o.zoom(.8);near(o.tilt,tilt);near(o.pose().shift,shift);assert.ok(Number.isFinite(shift));}
+});

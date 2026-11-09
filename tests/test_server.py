@@ -5,6 +5,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from tests.fixtures import make_live  # noqa: E402
+from earthlink.server import VIEWER_ASSETS  # noqa: E402
 
 
 def _free_port():
@@ -86,6 +87,7 @@ def test_snapshot_and_share(srv):
     names = zipfile.ZipFile(z).namelist()
     assert {"index.html", "live/meta.json", "live/views.json", "live/share.json", "live/set_Main/v00001/model.glb"} <= set(names)
     assert {"navigation.js","footprints.js","footprint-worker.js","live/set_Main/v00001/geometry.json"} <= set(names)
+    assert set(VIEWER_ASSETS) <= set(names)
 
 
 def test_sun_enabled_roundtrip_and_invalid_boolean(srv):

@@ -22,10 +22,22 @@ def finish_package(pkg, version):
     """Complete the manifest rhinocode writes: authors (required by Yak) from the project's publisher, the plain
     version (rhinocode appends +build data), the url, and the package icon. Renames the .yak to match."""
     import json, re, zipfile
-    ident = json.load(open(os.path.join(ROOT, "EarthLink.rhproj"), encoding="utf-8"))["identity"]
+    with open(os.path.join(ROOT, "EarthLink.rhproj"), encoding="utf-8") as fh:
+        project = json.load(fh)
+    ident = project["identity"]
     author = (ident.get("publisher") or {}).get("name") or "unknown"
     with zipfile.ZipFile(pkg) as z:
         files = {n: z.read(n) for n in z.namelist()}
+    # rhinocode flattens resource paths; restore the relative imports used by the viewer.
+    for resource in project.get("resources", []):
+        uri = resource.get("uri", "")
+        if uri.startswith("shared/viewer/"):
+            target = "shared/" + uri[len("shared/viewer/"):]
+            with open(os.path.join(ROOT, *uri.split("/")), "rb") as fh:
+                files[target] = fh.read()
+            flattened = "shared/" + os.path.basename(uri)
+            if flattened != target:
+                files.pop(flattened, None)
     m = files["manifest.yml"].decode("utf-8")
     m = re.sub(r"(?m)^version:.*$", "version: " + version, m)
     m = re.sub(r"(?m)^authors:\n(?:- .*\n)+", "authors:\n- " + json.dumps(author) + "\n", m)
@@ -48,8 +60,10 @@ def finish_package(pkg, version):
                     files["docs/" + name] = fh.read()
     files["manifest.yml"] = m.encode("utf-8")
     base = os.path.basename(pkg)
-    hit = re.match(r"^(.+?)-\d[^-]*-(.+)$", base)
-    out = os.path.join(os.path.dirname(pkg), "%s-%s-%s" % (hit.group(1), version, hit.group(2)) if hit else base)
+    hit = re.search(r"-(rh\d+(?:_\d+)*-(?:any|win|mac))\.yak$", base)
+    if not hit:
+        raise ValueError("Unrecognized Yak distribution: " + base)
+    out = os.path.join(os.path.dirname(pkg), "%s-%s-%s.yak" % (ident["name"].lower(), version, hit.group(1)))
     tmp = out + ".tmp"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
         for n, data in files.items():

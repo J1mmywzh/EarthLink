@@ -9,7 +9,15 @@ node --test tests/navigation.test.cjs tests/footprints.test.cjs tests/walking.te
 python3 tools/build.py 0.2.0-beta.1
 ```
 
-For browser checks, install `playwright@1.65.0` and Chromium, start `python3 tests/serve_fixture.py --port 8765`, then run both `node tests/viewer_smoke.mjs http://127.0.0.1:8765/` and `node tests/viewer_controls.cjs http://127.0.0.1:8765/`. The fixture server creates a temporary data folder and has no map credentials. Set EARTHLINK_PLAYWRIGHT or EARTHLINK_CHROME when test dependencies or the browser executable live outside the default locations. Node 20 or newer is required. Do not generate fixtures in a real user profile.
+For browser checks, install `playwright@1.65.0` and Chromium, start `python3 tests/serve_fixture.py --port 8765`, then run these checks sequentially:
+
+```sh
+node tests/viewer_smoke.mjs http://127.0.0.1:8765/
+node tests/viewer_controls.cjs http://127.0.0.1:8765/
+node tests/viewer_review.cjs http://127.0.0.1:8765/
+```
+
+The fixture server creates a temporary data folder and has no map credentials. Set EARTHLINK_PLAYWRIGHT or EARTHLINK_CHROME when test dependencies or the browser executable live outside the default locations. Node 20 or newer is required. Do not generate fixtures in a real user profile.
 
 Tests cover API behavior, GLB transforms, footprint topology, camera invariants, physics and browser state transitions. The smoke test captures two passes. Real input feel, streamed scan quality, installed Rhino/Undo and Windows behavior still require separate acceptance checks. CI pins Ubuntu 24.04, Windows 2022 and macOS 15 Intel so the Python 3.9 compatibility target does not follow an incompatible latest-runner migration.
 
@@ -34,3 +42,5 @@ Use a GitHub clone on each computer. Pull before editing; review, commit, and pu
 Keep keys in EarthLinkSettings or the viewer's connection dialog. Do not commit settings, exported models, local captures, or precise project locations. The included test coordinates are the development placeholder, not a user's project dataset.
 
 All viewer modules and vendor license files must appear in EarthLink.rhproj resources and server.VIEWER_ASSETS. When adding a resource, verify a built Yak archive and an exported static share. The pinned Cesium private ray APIs used for walking require explicit checks before changing engine versions.
+
+The Rhino builder flattens shared-resource folders. `finish_package()` restores the paths from the viewer resource URIs, including `shared/vendor/`, so relative imports also work in installed packages.
