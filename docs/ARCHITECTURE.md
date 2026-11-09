@@ -40,6 +40,6 @@ Geometry is exported in metres in a local east/north/up frame around the EarthAn
 1. Ground height is currently a global setting and may carry over when switching projects. Re-sample at the new site.
 2. A live set emptied by deleting all its objects can retain its last exported geometry. Remove the set from the viewer to clear it.
 3. Browser-only exports can prune an older COLLADA file still referenced by Earth Pro. Re-export to Earth Pro.
-4. Installed-plugin validation of the public 0.1.0 build and Windows validation remain pending.
+4. The author reports testing public 0.1.0 in Rhino 8. Version 0.1.1 changes release metadata and documentation only; Windows validation remains unverified.
 
 These issues are recorded, not fixed, in this initial preview preparation.

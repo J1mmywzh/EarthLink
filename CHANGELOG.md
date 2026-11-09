@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.1.0 — initial public preview, prepared 2026-11-08 (not published)
+## 0.1.1 — 2026-11-08
+- Refined the public product description. No runtime functionality changes.
+
+## 0.1.0 — initial public preview, 2026-11-08
 - Initial public version selected by Jimmy Wang. Based on the internal 0.2.0 development snapshot below.
 - Release numbering restarts at 0.1.0; internal 0.2.0 is archived and is not a newer public release.
 - Plugin implementation is unchanged; release identity and public documentation are updated.
-- macOS integration testing was reported for the internal build; installed 0.1.0 and Windows testing remain pending.
+- Author reports testing the 0.1.0 package in Rhino 8 before production publication.
+- Simplified the public project and package descriptions.
 - Known preview limitations: re-sample height when changing sites; an emptied live set can retain its last export;
   browser-only updates can prune an older Earth Pro conversion still in use.
 

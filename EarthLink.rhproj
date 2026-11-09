@@ -8,11 +8,11 @@
   "id": "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30",
   "identity": {
     "name": "EarthLink",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": {
       "name": "Jimmy Wang"
     },
-    "description": "Live link from Rhino 8 to real-world 3D context: send selected geometry to a browser viewer on Google Photorealistic 3D Tiles (via Cesium) or to Google Earth Pro, at its EarthAnchorPoint location. Named views, sun/shadow study, and resolution-exact screenshots with context/model passes for compositing.",
+    "description": "EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.",
     "copyright": "Copyright (c) 2026 Jimmy Wang",
     "license": "MIT",
     "url": "https://github.com/J1mmywzh/EarthLink"

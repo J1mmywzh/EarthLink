@@ -1,12 +1,9 @@
 # EarthLink for Rhino 8
 
-**0.1.0 — initial preview; the installable package has not yet been published to Yak.**
-The PackageManager installation below becomes available after publication.
+**0.1.1 — initial preview for Rhino 8.**
 
 
-EarthLink connects a Rhino model to a browser viewer in its real-world 3D context. It grew out of an architectural studio workflow: checking a design against its surroundings without repeatedly exporting and placing it by hand.
-Select geometry, run **`SendToEarth`**, and it appears at its real-world location in your browser (and optionally
-in Google Earth Pro). With Live enabled, edits update the browser model. Built for Rhino 8 on macOS and Windows; Windows testing is pending.
+EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
 ## Start here
 
@@ -26,13 +23,12 @@ For command options, capture passes, sharing, troubleshooting, data locations, a
 
 ## The project
 
-Developed by Jimmy Wang as an architecture and software project. EarthLink brings model placement, design alternatives, camera views, and sun studies into one workflow. The code is shared to make that workflow inspectable and open to improvement.
+EarthLink brings model placement, design alternatives, camera views, and sun studies into one workflow.
 
 Python handles Rhino geometry, export, and synchronization; CesiumJS handles the browser viewer. The local server runs as a separate process, while Rhino updates run on its UI timer. See [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md), and [third-party services](docs/THIRD_PARTY.md).
 
 ## Preview status
-- macOS: integration testing was reported for the internal 0.2.0 build. The rebuilt 0.1.0 package still needs an installed-plugin check.
-- Windows: supported by the implementation, but testing remains pending.
+- Initial preview, tested by its author in Rhino 8.
 - Re-sample ground height when changing sites. Deleting every object in a live set can leave its last exported geometry visible; remove the set in the viewer to clear it.
 - Re-export to Earth Pro after browser-only updates; older Earth Pro files can be pruned.
 
@@ -93,8 +89,8 @@ the same pixel size → layer the render over the **Context only** capture, usin
 
 ```
 python3 -m pytest tests                    # server + Earth Pro conversion (no Rhino needed)
-python3 tools/build.py 0.1.0 --push-test   # build + push to McNeel's test server (wiped nightly)
-python3 tools/build.py 0.1.0 --push        # publish (after `yak login`)
+python3 tools/build.py 0.1.1 --push-test   # build + push to McNeel's test server (wiped nightly)
+python3 tools/build.py 0.1.1 --push        # publish (after `yak login`)
 ```
 GitHub Actions (`.github/workflows/ci.yml`) runs the tests on macOS, Windows and Linux plus a headless viewer check.
 Bump the version for every release (published versions can't be replaced) and add a line to `CHANGELOG.md`.

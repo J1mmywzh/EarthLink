@@ -5,7 +5,7 @@ Requires Rhino 8 for commands and package builds. The server and COLLADA tests r
 ```sh
 python3 -m pip install pytest
 python3 -m pytest -q tests
-python3 tools/build.py 0.1.0
+python3 tools/build.py 0.1.1
 ```
 
 For the browser smoke check, follow `.github/workflows/ci.yml`: create isolated fixture data, start `earthlink/server.py` with an explicit `--viewer` pointing to this source's `shared/viewer`, install Playwright and Chromium, then run `node tests/viewer_smoke.mjs http://127.0.0.1:8765/`. Do not run fixture generation against your real home folder or runtime data.
@@ -19,7 +19,7 @@ The package appears under `build/rh8/`. Its manifest, archive filename, and plug
 Only push a package after reviewing its contents and testing it. To try a release on McNeel's disposable test server:
 
 ```sh
-python3 tools/build.py 0.1.0 --push-test
+python3 tools/build.py 0.1.1 --push-test
 ```
 
 This command uploads externally and requires Yak authentication. Production publication uses `--push` and is a separate action. Published version/distribution combinations cannot be overwritten. See [McNeel's publishing guide](https://developer.rhino3d.com/guides/yak/pushing-a-package-to-the-server/).

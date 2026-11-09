@@ -1,6 +1,6 @@
 # EarthLink user manual
 
-For EarthLink 0.1.0, an initial preview for Rhino 8. Read the preview limitations below before relying on a result. Windows integration testing is pending.
+For EarthLink 0.1.1, an initial preview for Rhino 8. Read the preview limitations below before relying on a result. Windows integration testing is pending.
 
 ## 1. What EarthLink does
 
@@ -135,7 +135,7 @@ The server binds to `127.0.0.1:8765` by default; it is not a public hosting serv
 | Earth Pro model disappears | Re-send with EarthPro enabled to regenerate its retained files |
 | Commands work from source only | Verify the installed package separately; source execution is not an installed-plugin check |
 
-The development handover reported extensive macOS integration tests for internal 0.2.0. Initial public 0.1.0 uses the same runtime implementation, with updated release metadata/docs. Installed 0.1.0, Windows, and full current end-to-end validation remain pending. No claim of map accuracy, survey accuracy, or production readiness is made by the initial-preview label.
+The development handover reported extensive macOS integration tests for internal 0.2.0. The author reports testing the initial public 0.1.0 package. Version 0.1.1 updates release metadata and documentation with the same runtime implementation. Windows and full independent end-to-end validation remain unverified. No claim of map accuracy, survey accuracy, or production readiness is made by the initial-preview label.
 
 ## 13. For an agent assisting a user
 
