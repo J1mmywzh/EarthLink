@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0-beta.4 — preview, 2026-11-09
+- Large models are fast in the viewer. Rhino's glTF writer makes one piece per Brep face (43,072 pieces for a 7,000-object building), and the browser drew each separately every frame (about 4 fps). Each export is now merged into one piece per material (39 for that building): under 4 ms per frame instead of about 240 ms, a file a third the size (63 MB → 19 MB), and faster loading. The shape, materials and the placement layer are unchanged. Resend each set once.
+- **Hide map under model** works on large models. The outline used to be built by merging every triangle and timed out after 30 s; it is now painted on a fine grid and traced in about 0.1 s. Courtyards, separate buildings and concave corners are kept, and the outline is a handful of polygons (11 for that building), so the cut-out map stays fast too. Removed the two geometry libraries it needed.
+
 ## 0.2.0-beta.3 — preview, 2026-11-09
 - Search: addresses that start with a house number ("180 Cayuga Park Lane") were mistaken for coordinates and never searched; suggestions now stay while you type on.
 - Orbit and zoom about 10 % slower (trackpad, mouse and − / +).

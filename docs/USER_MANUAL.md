@@ -1,6 +1,6 @@
 # EarthLink user manual
 
-For EarthLink 0.2.0-beta.3, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
+For EarthLink 0.2.0-beta.4, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
 
 ## 1. What EarthLink does
 
@@ -95,7 +95,7 @@ Collisions use what is drawn: your exported model mesh (both face sides) and the
 
 - **Materials**, **Clay**, and **Ghost** change viewer appearance without changing Rhino materials.
 - **Section cut** clips the displayed model at a chosen local height.
-- **Hide map under model** clips all Google geometry within the union of visible uploaded geometry projected horizontally. Concave outlines, disconnected pieces, and uncovered courtyard holes are preserved. Ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. Coverage follows the exported render mesh within its meshing and raster precision.
+- **Hide map under model** clips all Google geometry within the union of visible uploaded geometry projected horizontally. Concave outlines, disconnected pieces, and uncovered courtyard holes are preserved. Ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. The outline is traced on a grid of about two million cells over the model's plan (a few decimetres for a city block, finer for a single building), reaching up to one grid cell past the model and never short of it; gaps under 1 m² are covered.
 - **Measure** picks two visible surface points and reports distance in metres and feet/inches plus height difference. Press Esc to clear. Photorealistic mesh picking is approximate and is not a survey measurement.
 
 ## 8. Capture images

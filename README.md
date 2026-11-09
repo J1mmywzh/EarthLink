@@ -2,7 +2,7 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Preview: 0.2.0-beta.3** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+**Preview: 0.2.0-beta.4** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
@@ -71,7 +71,7 @@ Save named views in Rhino or the viewer. With view sync enabled, they appear in 
 - Send selections as separate named sets; show, hide, compare, or style them independently.
 - Materials, Clay, and Ghost control model display.
 - **Edit** a set to place it on the site: drag, nudge or rotate, then **Apply**. Placement is an EarthLink layer saved with the set in your Rhino file and applied on every update; your Rhino geometry never moves, so you can keep modelling on Rhino's grid at 0,0. **Original position** removes the placement.
-- **Hide map under model** removes Google content within the visible model's projected geometry, preserving concave edges, separate pieces, and uncovered courtyards. It removes ground as well as buildings and vegetation. It does not use a padded bounding rectangle.
+- **Hide map under model** removes Google content within the visible model's plan outline (traced on a grid of about two million cells over the model's plan, a few decimetres for a city block, never short of the model), preserving concave edges, separate pieces, and uncovered courtyards over 1 m². It removes ground as well as buildings and vegetation. It does not use a padded bounding rectangle.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
 ## Capture and share

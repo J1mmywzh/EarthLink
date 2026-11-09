@@ -18,8 +18,7 @@ from earthlink import env  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
-VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js",
-                 "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt")
+VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js")
 
 
 # ======================================================================= Rhino-side control

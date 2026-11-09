@@ -8,7 +8,7 @@
   "id": "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30",
   "identity": {
     "name": "EarthLink",
-    "version": "0.2.0-beta.3",
+    "version": "0.2.0-beta.4",
     "publisher": {
       "name": "Jimmy Wang"
     },
@@ -173,22 +173,6 @@
     {
       "id": "4011ca4f-16b5-538e-8362-26e8c323146a",
       "uri": "shared/viewer/walk.js"
-    },
-    {
-      "id": "a2c55313-2f18-5d85-ba15-bb2c815f9700",
-      "uri": "shared/viewer/vendor/LICENSE-earcut.txt"
-    },
-    {
-      "id": "828965f4-0efc-598e-a381-c5fe26a6cf3b",
-      "uri": "shared/viewer/vendor/LICENSE-polygon-clipping.txt"
-    },
-    {
-      "id": "d71c3fe5-50dc-59da-8adb-1f07c0cde28c",
-      "uri": "shared/viewer/vendor/earcut.js"
-    },
-    {
-      "id": "baf7a925-7465-5bd9-9d2f-1674ba4796a8",
-      "uri": "shared/viewer/vendor/polygon-clipping.js"
     }
   ]
 }

@@ -32,3 +32,24 @@ def test_invalid_glb_fails_without_inventing_bounds(tmp_path):
     assert geometry is not None
     p=tmp_path/'bad.glb';p.write_bytes(b'no model')
     with pytest.raises(ValueError):geometry.derive(p)
+
+def _tris(g):
+    v=g['vertices'];return sorted(tuple(sorted(tuple(v[k]) for k in g['indices'][i:i+3])) for i in range(0,len(g['indices']),3))
+
+def test_merge_makes_one_piece_per_material_without_changing_the_shape(tmp_path):
+    p=tmp_path/'m.glb';make_glb(p)
+    data=p.read_bytes();n=struct.unpack_from('<I',data,12)[0];j=json.loads(data[20:20+n]);binary=data[28+n:]
+    # many objects sharing two materials, some moved or turned, nested like a block
+    for k in range(20):
+        j['nodes'].append({'mesh':k%2,'translation':[40*k,0,0],'rotation':[0,0.3826834,0,0.9238795] if k%3==0 else [0,0,0,1]})
+    j['nodes'].append({'children':[len(j['nodes'])-1],'translation':[0,5,0]});j['scenes'][0]['nodes']+=list(range(2,len(j['nodes'])-2))+[len(j['nodes'])-1]
+    js=json.dumps(j).encode();js+=b' '*(-len(js)%4)
+    p.write_bytes(b'glTF'+struct.pack('<II',2,28+len(js)+len(binary))+struct.pack('<II',len(js),0x4e4f534a)+js+struct.pack('<II',len(binary),0x004e4942)+binary)
+    before=geometry.derive(p)
+    assert geometry.merge_glb(p)==(22,2)
+    after=geometry.derive(p)
+    a,b=_tris(after),_tris(before)
+    assert len(a)==len(b) and all(abs(x-y)<1e-3 for ta,tb in zip(a,b) for pa,pb in zip(ta,tb) for x,y in zip(pa,pb))
+    data=p.read_bytes();n=struct.unpack_from('<I',data,12)[0];j=json.loads(data[20:20+n])
+    assert len(j['materials'])==2 and sorted(m['primitives'][0]['material'] for m in j['meshes'])==[0,1]
+    assert all('min' in j['accessors'][m['primitives'][0]['attributes']['POSITION']] for m in j['meshes'])

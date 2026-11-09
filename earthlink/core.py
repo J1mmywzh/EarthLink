@@ -325,6 +325,10 @@ def send_set(doc, name, to_earthpro=False):
     vd = os.path.join(live, sd, "v%05d" % version)
     os.makedirs(vd, exist_ok=True)
     bbox = _export_glb(doc, objs, os.path.join(vd, "model.glb"), placement_transform(doc, name))
+    try:            # one piece per material: the browser draws tens, not tens of thousands, of pieces per frame
+        geometry.merge_glb(os.path.join(vd, "model.glb"))
+    except Exception:
+        pass        # the unmerged file still displays, only slower
     scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
     entry = {"glb": vd_rel + "/model.glb", "version": version, "objects": len(objs),
              "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],
