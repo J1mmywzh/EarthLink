@@ -15,12 +15,12 @@
 
   // Per-feature rates at Sensitivity 100 %. Degrees per pixel unless noted.
   const RATE = {
-    orbit: 0.16, tilt: 0.145,          // two fingers
-    orbitMouse: 0.3, tiltMouse: 0.27,  // right-drag
+    orbit: 0.144, tilt: 0.13,          // two fingers
+    orbitMouse: 0.27, tiltMouse: 0.243, // right-drag
     pan: 1.1,                          // x the distance under the fingers (1 = exact follow)
-    pinch: 0.015, scroll: 0.0075,      // zoom: log-distance per wheel delta unit (trackpad)
-    wheel: 0.0035, dragZoom: 0.006,    // mouse wheel, Ctrl + right-drag
-    hold: Math.LN2 / 0.55,             // +/- held: distance halves every 0.55 s
+    pinch: 0.0135, scroll: 0.0068,     // zoom: log-distance per wheel delta unit (trackpad)
+    wheel: 0.0032, dragZoom: 0.0054,   // mouse wheel, Ctrl + right-drag
+    hold: Math.LN2 / 0.61,             // +/- held: distance halves every 0.61 s
     look: 0.08, lookMouse: 0.15,       // walking
   };
   const GESTURE_GAP = 220;   // ms without wheel events that ends a gesture (momentum included)
@@ -320,7 +320,7 @@
         kick();
       },
       zoomStep(sign) {                                     // click: a short eased zoom
-        if (!hooks.allowed()) return; begin(); pivot = centre(); anchor = null; ease.add("zoom", sign * 0.55 * sens()); kick();
+        if (!hooks.allowed()) return; begin(); pivot = centre(); anchor = null; ease.add("zoom", sign * 0.5 * sens()); kick();
       },
       hold(sign) { if (!hooks.allowed()) return; if (!hold) { begin(); pivot = centre(); anchor = null; holdStart = performance.now(); } hold = sign; kick(); },
       release() { hold = 0; },

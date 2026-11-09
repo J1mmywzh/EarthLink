@@ -31,13 +31,18 @@ def port_in_use(port=None):
         return False
 
 
-def _ping():
+def _ping(full=False):
     try:
         import urllib.request
         with urllib.request.urlopen("http://127.0.0.1:%d/api/ping" % env.PORT, timeout=1) as r:
-            return json.loads(r.read()).get("earthlink")
+            info = json.loads(r.read())
+            return info if full and info.get("earthlink") else bool(info.get("earthlink"))
     except Exception:
         return False
+
+
+def _same_dir(a, b):
+    return bool(a and b) and os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
 
 
 def running():
@@ -45,13 +50,26 @@ def running():
 
 
 def start(viewer_dir=None):
-    """Launch the server process if needed. Returns 'started', 'running' or 'busy'."""
+    """Launch the server process if needed. Returns 'started', 'running' or 'busy'.
+    A server left over from another EarthLink version (it serves a different viewer folder, which an
+    update may have removed) is replaced."""
+    vdir = viewer_dir or env.viewer_dir()
     if port_in_use():
-        return "running" if _ping() else "busy"
+        info = _ping(full=True)
+        if not info:
+            return "busy"
+        if _same_dir(info.get("viewer"), vdir):
+            return "running"
+        stop()
+        for _ in range(30):
+            time.sleep(0.1)
+            if not port_in_use():
+                break
+        else:
+            return "busy"
     py = env.python_exe()
     if not py:
         raise RuntimeError("no Python 3 found to run the viewer server")
-    vdir = viewer_dir or env.viewer_dir()
     log = open(os.path.join(env.data_dir(), "server.log"), "a")
     kw = {}
     if env.IS_WIN:
@@ -274,7 +292,7 @@ def serve(viewer_dir, port):
             if path == "/":
                 self.send_response(302); self.send_header("Location", "/viewer/"); self.end_headers()
             elif path == "/api/ping":
-                self._json({"earthlink": True, "pid": os.getpid()})
+                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir})
             elif path == "/api/config":
                 s = env.load_settings()
                 self._json({"ion_token": s.get("ion_token", ""), "google_key": s.get("google_key", "")})

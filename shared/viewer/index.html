@@ -1624,8 +1624,14 @@
     if (it.kind === "site") return flyToSite();
     remember(it.name, it.dest); flyToPlace(it.dest);
   }
-  function refresh(places = suggestCache.get(q.value.trim().toLowerCase()) || []) {
+  const LATLON = /^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/;
+  let lastPlaces = { text: "", list: [] };
+  function refresh(places) {
     const text = q.value.trim().toLowerCase();
+    places = places || suggestCache.get(text);
+    if (places?.length) lastPlaces = { text, list: places };
+    else if (lastPlaces.list.length && text.startsWith(lastPlaces.text.slice(0, Math.max(3, lastPlaces.text.length - 2)))) places = lastPlaces.list;   // keep the last matches while typing on
+    else places = [];
     const recent = recents().filter(r => !text || r.name.toLowerCase().includes(text)).slice(0, text ? 3 : 5)
       .map(r => ({ kind: "recent", name: r.name, dest: unpackDest(r.dest) }));
     const site = !text && anchor() ? [{ kind: "site", name: meta?.name || "My site" }] : [];
@@ -1634,7 +1640,7 @@
   }
   async function suggest(text) {
     const key = text.toLowerCase();
-    if (!geocoder || text.length < 3 || /^-?\d+(\.\d+)?\s*[, ]/.test(text)) return;
+    if (!geocoder || text.length < 3 || LATLON.test(text)) return;   // "180 Cayuga…" is an address, not coordinates
     if (!suggestCache.has(key)) {
       try {
         const res = await geocoder.geocode(text);
@@ -1648,7 +1654,7 @@
   q.onfocus = () => refresh();
   q.oninput = () => {
     $("qClear").hidden = !q.value; refresh();
-    clearTimeout(suggestTimer); suggestFor = q.value.trim(); suggestTimer = setTimeout(() => suggest(suggestFor), 280);
+    clearTimeout(suggestTimer); suggestFor = q.value.trim(); suggestTimer = setTimeout(() => suggest(suggestFor), 200);
   };
   q.onblur = () => setTimeout(() => results.classList.remove("open"), 120);
   q.onkeydown = e => {
@@ -1664,7 +1670,7 @@
     e.preventDefault();
     const text = q.value.trim(); if (active >= 0 && items[active]) return choose(items[active]);
     if (!text) return flyToSite();
-    const ll = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    const ll = text.match(LATLON);
     if (ll) {
       const lat = +ll[1], lon = +ll[2];
       if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return msg("That is not a valid “lat, lon”.");
@@ -1678,8 +1684,8 @@
     }
     if (!geocoder) return msg("Place search needs a Cesium ion token or Google key. Coordinates work.");
     clearTimeout(suggestTimer); await suggest(text);
-    const first = (suggestCache.get(text.toLowerCase()) || [])[0];
-    if (first) choose(first); else msg("No place found.");
+    const first = (suggestCache.get(text.toLowerCase()) || [])[0] || (lastPlaces.list.length && text.toLowerCase().startsWith(lastPlaces.text) ? lastPlaces.list[0] : null);
+    if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
   window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };

@@ -125,3 +125,23 @@ def test_rename_view(srv):
     v = {"name": "North", "pos": [0, 0, 1], "dir": [0, 1, 0], "up": [0, 0, 1], "vfov": 0.7}
     call(srv, "/api/views", {"op": "put", "view": v})
     assert [x["name"] for x in call(srv, "/api/views", {"op": "rename", "name": "North", "new": "North (dusk)"})["views"]] == ["North (dusk)"]
+
+
+def test_a_server_from_another_version_is_replaced(monkeypatch, tmp_path):
+    """After an update the old server serves a removed folder (404): start() must replace it."""
+    from earthlink import server as S
+    state = {"up": True, "stopped": 0, "launched": None}
+    monkeypatch.setattr(S, "port_in_use", lambda: state["up"])
+    monkeypatch.setattr(S, "_ping", lambda full=False: {"earthlink": True, "viewer": "/old/0.1.1/shared"} if full else True)
+    def stop():
+        state["stopped"] += 1; state["up"] = False; return True
+    monkeypatch.setattr(S, "stop", stop)
+    monkeypatch.setattr(S.env, "python_exe", lambda: "python3")
+    monkeypatch.setattr(S.env, "data_dir", lambda: str(tmp_path))
+    class P:
+        def __init__(self, args, **kw): state["launched"] = args; state["up"] = True
+    monkeypatch.setattr(S.subprocess, "Popen", P)
+    new = str(tmp_path / "new" / "shared"); os.makedirs(new)
+    assert S.start(new) == "started" and state["stopped"] == 1 and new in state["launched"]
+    monkeypatch.setattr(S, "_ping", lambda full=False: {"earthlink": True, "viewer": new} if full else True)
+    assert S.start(new) == "running" and state["stopped"] == 1

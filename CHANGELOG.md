@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Search: addresses that start with a house number ("180 Cayuga Park Lane") were mistaken for coordinates and never searched; suggestions now stay while you type on.
+- Orbit and zoom about 10 % slower (trackpad, mouse and − / +).
+- Opening the viewer after an update replaces a server left running by the previous version (it served a removed folder: "File not found").
+
 ## 0.2.0-beta.2 — preview, 2026-11-09
 - Navigation rebuilt to follow Rhino 8 for Mac, with or without a model and at any scale: two fingers orbit about the point at the centre of the view, Shift pans with the ground following the fingers, pinch zooms toward the cursor; Parallel pans (Shift changes nothing). Mouse: right-drag, Shift/middle-drag, wheel, Ctrl + right-drag.
 - No more roll, Earth flips, inverted pans or mouse/trackpad mix-ups: one input path (Cesium's own controls are off), gestures keep one mode through their momentum, per-frame easing, level horizon near straight-down views, camera kept above Google's mesh.
