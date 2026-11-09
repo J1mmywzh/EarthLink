@@ -13,7 +13,7 @@ const assert=require('node:assert/strict');
    for(const w of list){c.dispatchEvent(new WheelEvent('wheel',{deltaX:w.x||0,deltaY:w.y||0,deltaMode:0,shiftKey:!!w.shift,ctrlKey:!!w.ctrl,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true}));if(gap>=0)await new Promise(f=>setTimeout(f,gap));}},[list,gap]);
  const cam=()=>page.evaluate(()=>{EL.viewer.render();const c=EL.viewer.camera,s=EL.viewer.scene,w=s.canvas.clientWidth,h=s.canvas.clientHeight,ray=c.getPickRay(new Cesium.Cartesian2(w/2,h/2)),t=EL.surfaceHit(ray),ctr=t===null?null:Cesium.Ray.getPoint(ray,t);
    return{pos:[c.positionWC.x,c.positionWC.y,c.positionWC.z],dir:[c.directionWC.x,c.directionWC.y,c.directionWC.z],up:[c.upWC.x,c.upWC.y,c.upWC.z],right:[c.rightWC.x,c.rightWC.y,c.rightWC.z],
-     heading:Cesium.Math.toDegrees(c.heading),roll:Cesium.Math.toDegrees(c.roll),centre:ctr?[ctr.x,ctr.y,ctr.z]:null,width:c.frustum.width};});
+     heading:Cesium.Math.toDegrees(c.heading),roll:Cesium.Math.toDegrees(c.roll),pitch:Cesium.Math.toDegrees(c.pitch),centre:ctr?[ctr.x,ctr.y,ctr.z]:null,width:c.frustum.width};});
  const dist=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i])),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),turn=d=>((d%360)+540)%360-180;
  await page.evaluate(()=>EL.fit(0));await settle();
 
@@ -37,7 +37,7 @@ const assert=require('node:assert/strict');
  // Shift pans; releasing Shift during the momentum tail cannot turn the pan into an orbit
  a=await cam();await wheel([...Array(8).fill({x:6,shift:true}),...Array(12).fill({x:4})],-1);await settle();b=await cam();
  assert.ok(Math.abs(turn(b.heading-a.heading))<0.05,'no orbit after Shift is released');
- assert.ok(dot(b.pos.map((v,i)=>v-a.pos[i]),a.right)>0.5,'fingers left move the scene left');
+ {const d=b.pos.map((v,i)=>v-a.pos[i]);assert.ok(dot(d,a.right)>0.5,'fingers left move the scene left '+JSON.stringify({right:dot(d,a.right),up:dot(d,a.up),fwd:dot(d,a.dir),dh:turn(b.heading-a.heading),roll:b.roll,pitch:b.pitch}));}
 
  // a fast trackpad swipe is not read as a mouse wheel (no zoom)
  a=await cam();await wheel([{x:0,y:4},{x:0,y:120},{x:0,y:110}],-1);await settle();b=await cam();

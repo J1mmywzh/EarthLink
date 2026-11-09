@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-beta.3 — preview, 2026-11-09
 - Search: addresses that start with a house number ("180 Cayuga Park Lane") were mistaken for coordinates and never searched; suggestions now stay while you type on.
 - Orbit and zoom about 10 % slower (trackpad, mouse and − / +).
 - Opening the viewer after an update replaces a server left running by the previous version (it served a removed folder: "File not found").

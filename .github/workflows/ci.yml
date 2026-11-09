@@ -15,7 +15,11 @@ jobs:
         with: { node-version: '22' }
       - run: pip install pytest
       - run: python -m compileall -q earthlink commands tools
-      - run: python -m pytest -q tests
+      - name: pytest
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q -rf tests 2>&1 | tee pytest.log || { grep -m5 -E "^FAILED|^E " pytest.log | sed "s/^/::error title=pytest::/"; exit 1; }
       - run: node --test tests/navigation.test.cjs tests/walk.test.cjs tests/footprints.test.cjs
   viewer:
     runs-on: ubuntu-24.04
