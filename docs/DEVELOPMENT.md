@@ -9,7 +9,7 @@ node --test tests/navigation.test.cjs tests/walk.test.cjs tests/footprints.test.
 python3 tools/build.py 0.2.0-beta.2
 ```
 
-For browser checks, install `playwright@1.65.0` and Chromium, start `python3 tests/serve_fixture.py --port 8765`, then run these checks sequentially:
+For browser checks, install `playwright@1.65.0` and Chromium, start `python3 tests/serve_fixture.py --port 8765`, then run these checks sequentially (CI runs only the smoke test; the gesture checks are timing-sensitive on CI's software renderer, so run them locally before each release):
 
 ```sh
 node tests/viewer_smoke.mjs http://127.0.0.1:8765/
