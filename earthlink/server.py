@@ -18,6 +18,9 @@ from earthlink import env  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles")
+VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js",
+                 "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/rapier.mjs",
+                 "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt", "vendor/LICENSE-rapier.txt")
 
 
 # ======================================================================= Rhino-side control
@@ -194,10 +197,15 @@ def _export_share(viewer_dir, embed_token):
     s = env.load_settings()
     path = os.path.join(env.snapshot_dir(), "%s_share_%s.zip" % (env.safe_name(meta.get("name", "model")), time.strftime("%Y%m%d-%H%M%S")))
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.write(os.path.join(viewer_dir, "index.html"), "index.html")
+        for asset in VIEWER_ASSETS:
+            source = os.path.join(viewer_dir, *asset.split("/"))
+            if os.path.isfile(source):
+                z.write(source, asset)
         z.writestr("live/meta.json", json.dumps(meta, indent=1))
         for st in meta["sets"].values():
             z.write(os.path.join(env.live_dir(), *st["glb"].split("/")), "live/" + st["glb"])
+            if st.get("geometry"):
+                z.write(os.path.join(env.live_dir(), *st["geometry"].split("/")), "live/" + st["geometry"])
         z.writestr("live/views.json", json.dumps({"views": env.load_views(meta.get("project") or meta.get("name"))}, indent=1))
         z.writestr("live/settings.json", json.dumps({k: s.get(k) for k in SETTING_KEYS}, indent=1))
         z.writestr("live/share.json", json.dumps({"static": True, "ion_token": s.get("ion_token", "") if embed_token else "",

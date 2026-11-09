@@ -85,6 +85,7 @@ def test_snapshot_and_share(srv):
     z = call(srv, "/api/export_share", {"embed_token": False})["file"]
     names = zipfile.ZipFile(z).namelist()
     assert {"index.html", "live/meta.json", "live/views.json", "live/share.json", "live/set_Main/v00001/model.glb"} <= set(names)
+    assert {"navigation.js","footprints.js","footprint-worker.js","live/set_Main/v00001/geometry.json"} <= set(names)
 
 
 def _requests(srv):

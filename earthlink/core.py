@@ -14,7 +14,7 @@ import Rhino
 import Rhino.Geometry as rg
 import System
 
-from earthlink import env, collada
+from earthlink import env, collada, geometry
 
 KEEP_VERSIONS = 3
 SECTION = "EarthLink"
@@ -329,6 +329,13 @@ def send_set(doc, name, to_earthpro=False):
              "sent_at": time.strftime("%Y-%m-%d %H:%M:%S"),
              "live": bool(get_sets(doc).get(name, {}).get("live"))}
     msgs, master = [], None
+    try:
+        mesh = geometry.derive(os.path.join(vd, "model.glb"))
+        env.write_json(os.path.join(vd, "geometry.json"), mesh)
+        entry["geometry"] = vd_rel + "/geometry.json"
+    except Exception as ex:
+        entry["geometry_error"] = str(ex)
+        msgs.append("Cutout unavailable for this export")
     if to_earthpro:
         try:
             tris = collada.glb_to_dae(os.path.join(vd, "model.glb"), vd)

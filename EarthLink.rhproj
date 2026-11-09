@@ -157,6 +157,42 @@
     {
       "id": "4b1d7a95-ae6f-4fc0-9a7d-9c5ebfb63a84",
       "uri": "shared/viewer/index.html"
+    },
+    {
+      "id": "55dbeac0-4018-5fe6-a07d-d2ebdf74934b",
+      "uri": "shared/viewer/footprint-worker.js"
+    },
+    {
+      "id": "d26b1e9b-a7e7-5558-8ff7-6ffc2d7686aa",
+      "uri": "shared/viewer/footprints.js"
+    },
+    {
+      "id": "b91a4055-f5a9-5086-8121-0be795383024",
+      "uri": "shared/viewer/navigation.js"
+    },
+    {
+      "id": "a2c55313-2f18-5d85-ba15-bb2c815f9700",
+      "uri": "shared/viewer/vendor/LICENSE-earcut.txt"
+    },
+    {
+      "id": "828965f4-0efc-598e-a381-c5fe26a6cf3b",
+      "uri": "shared/viewer/vendor/LICENSE-polygon-clipping.txt"
+    },
+    {
+      "id": "c4c9079f-ff7c-5171-bef0-cc1c24a1f258",
+      "uri": "shared/viewer/vendor/LICENSE-rapier.txt"
+    },
+    {
+      "id": "d71c3fe5-50dc-59da-8adb-1f07c0cde28c",
+      "uri": "shared/viewer/vendor/earcut.js"
+    },
+    {
+      "id": "baf7a925-7465-5bd9-9d2f-1674ba4796a8",
+      "uri": "shared/viewer/vendor/polygon-clipping.js"
+    },
+    {
+      "id": "1a842a68-8013-53a5-b3be-a0fbeb7f4e6d",
+      "uri": "shared/viewer/vendor/rapier.mjs"
     }
   ]
 }

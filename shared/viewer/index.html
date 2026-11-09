@@ -97,6 +97,13 @@
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
 
+  #navDock { position:absolute;right:14px;bottom:40px;z-index:6;display:flex;align-items:center;padding:6px;border-radius:16px;gap:4px; }
+  #navDock button { width:38px;height:38px;background:transparent;border:0;border-radius:10px;display:grid;place-items:center;font-size:22px;color:var(--fg); }
+  #navDock button.on {color:var(--accent);background:var(--fill);}
+  #navDock .divider {height:22px;width:1px;background:var(--sep);margin:0 3px;}
+  #navCard {top:auto;right:14px;bottom:98px;width:285px;}
+  .navLabel {display:flex;justify-content:space-between;margin:12px 0 7px;}
+  #navCard input[type=range] {width:100%;}
   #frame { position: absolute; border: 1.5px solid var(--accent); border-radius: 2px; box-shadow: 0 0 0 9999px rgba(0,0,0,.28); pointer-events: none; display: none; z-index: 3; }
   #toast { position: absolute; left: 50%; top: 14px; transform: translate(-50%, -8px); z-index: 30; border-radius: 999px; padding: 8px 16px; max-width: min(640px, calc(100% - 120px)); font-weight: 500; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; text-align: center; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -138,6 +145,8 @@
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M8 21l2-8V8h4v5l2 8M6 12l4-4M18 12l-4-4M10 13h4"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M16 8l-2.5 5.5L8 16l2.5-5.5z"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
 </svg>
 
@@ -171,9 +180,9 @@
         <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
         <div class="item" id="fovRow"><span class="grow">Lens</span><span class="val" id="fovLbl"></span></div>
         <div class="item" id="fovSlider"><input type="range" id="fov" min="15" max="100" step="1"></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino viewport</div><div class="s">Live, like Enscape</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync named views</div><div class="s">Save in either app, see it in both</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync sun with Rhino</div><div class="s">Same date and time as Rhino's Sun</div></span><label class="switch"><input type="checkbox" id="syncSun"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino viewport</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync named views</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync sun with Rhino</div></span><label class="switch"><input type="checkbox" id="syncSun"><span></span></label></div>
       </div>
     </div>
     <div class="group">
@@ -191,14 +200,28 @@
 <div id="controls">
   <div class="stack glass"><button id="toggleSide" title="Show or hide the sidebar"><svg class="i"><use href="#i-side"/></svg></button></div>
   <div class="stack glass">
-    <button id="fly" title="Go to model"><svg class="i"><use href="#i-loc"/></svg></button>
     <button id="shadows" title="Shadows"><svg class="i"><use href="#i-sun"/></svg></button>
-    <button id="clip" title="Hide existing buildings in the footprint"><svg class="i"><use href="#i-cut"/></svg></button>
-    <button id="measureBtn" title="Measure (click two points, Esc to clear)"><svg class="i"><use href="#i-ruler"/></svg></button>
+    <button id="clip" title="Hide map under model"><svg class="i"><use href="#i-cut"/></svg></button>
+    <button id="measureBtn" title="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
   </div>
   <div class="stack glass"><button id="captureBtn" title="Capture"><svg class="i"><use href="#i-cam"/></svg></button></div>
 </div>
 
+<div id="navDock" class="glass">
+  <button id="walkBtn" title="Walk" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
+  <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i"><use href="#i-compass"/></svg></button>
+  <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-loc"/></svg></button>
+  <span class="divider"></span>
+  <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button><button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+</div>
+<div id="navCard" class="glass pop">
+  <h3>Navigation <button class="mini" data-close="navCard" aria-label="Close navigation"><svg class="i"><use href="#i-x"/></svg></button></h3>
+  <label class="navLabel"><span id="tiltTitle">Tilt</span><span class="val" id="tiltValue"></span></label>
+  <input id="navTilt" aria-label="Tilt" type="range" min="0" max="85" value="35" step="0.1">
+  <label class="navLabel">Heading <span class="val" id="headingValue"></span></label>
+  <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.9" value="0" step="0.1">
+  <div class="row" style="justify-content:space-between;margin-top:12px"><button id="northBtn" class="link">Reset to north</button><select id="inputDevice" aria-label="Input device" style="width:auto"><option value="auto">Auto</option><option value="trackpad">Trackpad</option><option value="mouse">Mouse</option></select></div>
+</div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
   <select id="preset"></select>
@@ -249,7 +272,7 @@
 
 <div id="siteCard" class="glass pop">
   <h3><span id="siteTitle">Site Location</span><button class="mini" data-close="siteCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <p class="s" id="siteHelp" style="margin:0 0 10px">Search or enter “lat, lon”, then click the spot where the model's EarthAnchorPoint base point should sit.</p>
+  
   <form id="searchForm"><input type="search" id="search" placeholder="Search a place, or 42.4405, -76.5108"></form>
   <div class="lbl">Picked point</div>
   <div class="t" id="pickedLbl">Click on the map</div>
@@ -270,10 +293,10 @@
 
 <div id="keys" class="modal"><div class="sheet glass">
   <h2>Connect a 3D map</h2>
-  <p>Paste one of these to see photorealistic surroundings. It stays on this computer.</p>
-  <label>Cesium ion access token — free, recommended</label>
+  
+  <label>Cesium ion token</label>
   <input id="itok" type="text" placeholder="eyJ…">
-  <label>or Google Maps Platform API key (Map Tiles API)</label>
+  <label>Google Maps key</label>
   <input id="gkey" type="text" placeholder="AIza…">
   <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="pill" id="skip">Not Now</button><button class="primary" id="savekeys">Connect</button></div>
 </div></div>
@@ -284,6 +307,7 @@
   <div class="row" style="justify-content:flex-end; margin-top:18px" id="askBtns"></div>
 </div></div>
 
+<script src="./navigation.js"></script>
 <script>
 (async () => {
   const $ = id => document.getElementById(id);
@@ -376,6 +400,7 @@
 
   let S = await api("/api/settings");
   const saveS = patch => { Object.assign(S, patch); api("/api/settings", patch); };
+  let nav = null, walk = null;
   let rhinoCam = null;   // last camera Rhino sent (Follow Rhino viewport)
 
   // segmented control helper
@@ -599,18 +624,49 @@
     if (rhinoCam && $("follow").checked) applyView(rhinoCam, 0);   // the site frame moved: keep Rhino's view on the model
   }
 
+  let clipKey = "";
+  const geometryJobs=new Map();
+  function footprintJob(mesh) {
+    return new Promise((resolve,reject)=>{
+      const worker=new Worker("./footprint-worker.js"), timer=setTimeout(()=>finish(null,Error("Cutout took too long")),30000);
+      const finish=(value,error)=>{clearTimeout(timer);worker.terminate();error?reject(error):resolve(value);};
+      worker.onmessage=e=>e.data.error?finish(null,Error(e.data.error)):finish(e.data.polygons);
+      worker.onerror=()=>finish(null,Error("Cutout unavailable"));worker.postMessage(mesh);
+    });
+  }
+  async function loadDerived(name,model,entry) {
+    if(!entry.geometry)return;
+    const key=`${meta.project}/${entry.geometry}/${entry.version}`;
+    if(!geometryJobs.has(key))geometryJobs.set(key,(async()=>{
+      const response=await fetch(`${DATA}live/${entry.geometry}?v=${entry.version}`);if(!response.ok)throw Error("Resend the model for cutout");
+      const mesh=await response.json(),polygons=await footprintJob(mesh);return {mesh,polygons};
+    })());
+    try {
+      const data=await geometryJobs.get(key);
+      if(models[name]!==model||meta?.sets?.[name]?.geometry!==entry.geometry)return;
+      model._elGeometry=data.mesh;model._elFootprints=data.polygons;clipKey="";applyClip();
+    } catch(error) {if(models[name]===model){model._elGeometryError=error.message;if(S.clip)msg("Cutout unavailable. Resend the model.");}}
+    while(geometryJobs.size>12)geometryJobs.delete(geometryJobs.keys().next().value);
+  }
   function applyClip() {
     $("clip").classList.toggle("on", !!S.clip);
     if (!tileset || !anchor()) return;
     if (!S.clip) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; return; }
-    const g = S.clip_margin ?? 1, M = frame();
-    const polys = visibleSets().filter(n => meta.sets[n] && meta.sets[n].bbox_m).map(n => {
-      const [mn, mx] = meta.sets[n].bbox_m, Mn = Cesium.Matrix4.multiply(M, offsetMatrix(n), new Cesium.Matrix4());
-      return new Cesium.ClippingPolygon({ positions: [[mn[0] - g, mn[1] - g], [mx[0] + g, mn[1] - g], [mx[0] + g, mx[1] + g], [mn[0] - g, mx[1] + g]]
-        .map(([x, y]) => Cesium.Matrix4.multiplyByPoint(Mn, new Cesium.Cartesian3(x, y, mn[2]), new Cesium.Cartesian3())) });
-    });
-    if (polys.length) tileset.clippingPolygons = new Cesium.ClippingPolygonCollection({ polygons: polys });
-    else if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false;
+    const visible=visibleSets(),M=frame();
+    const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,offsets[n]]),Array.from({length:16},(_,i)=>M[i])]);
+    if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;return;}
+    const polygons=[];
+    for(const name of visible){
+      const model=models[name];if(!model?._elFootprints)continue;
+      const matrix=Cesium.Matrix4.multiply(M,offsetMatrix(name),new Cesium.Matrix4());
+      for(const ring of model._elFootprints)polygons.push(new Cesium.ClippingPolygon({positions:ring.map(([x,y])=>Cesium.Matrix4.multiplyByPoint(matrix,new Cesium.Cartesian3(x,y,0),new Cesium.Cartesian3()))}));
+    }
+    if(polygons.length>4096){if(tileset.clippingPolygons)tileset.clippingPolygons.enabled=false;return msg("Cutout is too complex.");}
+    if(!Cesium.ClippingPolygonCollection.isSupported(scene)){return msg("Cutout is unavailable in this browser.");}
+    const previous=tileset.clippingPolygons;
+    tileset.clippingPolygons=polygons.length?new Cesium.ClippingPolygonCollection({polygons}):undefined;
+    if(previous&&!previous.isDestroyed())previous.destroy();
+    clipKey=key;
   }
 
   // ---------------------------------------------------------------- display style & section
@@ -657,7 +713,8 @@
     $("dot").className = "flash";
     $("modelName").textContent = m.name || "EarthLink";
     const names = Object.keys(m.sets || {});
-    $("status").textContent = `${names.length} set${names.length === 1 ? "" : "s"} · version ${m.version} · ${String(m.sent_at || "").slice(11, 16)}`;
+    $("status").textContent = "";
+    scene.screenSpaceCameraController.enableInputs = false;
     if (!projectChanged) for (const n of Object.keys(models)) {     // renamed sets: same file, new name - keep the loaded model
       if (names.includes(n)) continue;
       const nn = names.find(k => !models[k] && m.sets[k].glb === (models[n]._elGlb || ""));
@@ -675,6 +732,7 @@
         await new Promise(r => { if (next.ready) return r(); const off = next.readyEvent.addEventListener(() => { off(); r(); }); setTimeout(r, 15000); });
         if (models[n]) scene.primitives.remove(models[n]);
         models[n] = next;
+        loadDerived(n,next,s);
         if (offsets[n] && offsets[n].applied) delete offsets[n];   // Rhino moved the geometry; the preview is now real
       } catch (e) { msg(`Could not load “${n}”: ${e.message}`); }
     }
@@ -694,14 +752,14 @@
       const s = meta.sets[n], el = document.createElement("div");
       el.className = "item" + (hid.has(n) ? " off" : "");
       el.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-cube"/></svg></span>` +
-        `<span class="grow"><div class="t">${esc(n)}</div><div class="s">${s.objects} object${s.objects === 1 ? "" : "s"} · v${s.version}${s.live ? " · live" : ""}</div></span>` +
+        `<span class="grow"><div class="t">${esc(n)}</div></span>` +
         `<span class="acts"><button class="mini" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
         (RHINO ? `<button class="mini" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") + `</span>` +
         `<button class="mini ${hid.has(n) ? "" : "on"}" title="Show / hide"><svg class="i" style="width:16px;height:16px"><use href="#${hid.has(n) ? "i-eyeoff" : "i-eye"}"/></svg></button>`;
       const btns = el.querySelectorAll("button"), eye = btns[btns.length - 1];
       eye.onclick = () => setHidden(n, !hidden().has(n));
       btns[0].onclick = () => openSetCard(n);
-      if (offsets[n]) el.querySelector(".s").textContent += " · moved, not applied";
+      if (offsets[n]) el.title = "Move pending";
       if (RHINO) btns[1].onclick = async () => {
         if (await ask({ title: `Remove “${n}”?`, text: "It disappears from EarthLink. The geometry in Rhino is not touched.", ok: "Remove", danger: true })) {
           await api("/api/sets", { op: "delete", name: n });
@@ -726,9 +784,9 @@
   };
 
   function flyTo() {
+    if (nav) return nav.fit();
     const bs = modelsSphere(); if (!bs) return;
-    viewer.camera.flyToBoundingSphere(bs, { duration: flewOnce ? 1.2 : 0, offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(30), Cesium.Math.toRadians(-25), bs.radius * 3.2) });
-    flewOnce = true;
+    viewer.camera.flyToBoundingSphere(bs, { duration:0, offset:new Cesium.HeadingPitchRange(0,-0.8,bs.radius*3.2) });
   }
   function restoreCamera() {
     const c = store.get("camera"); if (!c) return false;
@@ -756,7 +814,7 @@
     return { name, source: "viewer", pos: toLocal(M, c.positionWC), dir: toLocal(M, c.directionWC, true), up: toLocal(M, c.upWC, true),
              ...getLens(), date: $("date").value, minutes: +$("hour").value, saved_at: new Date().toISOString() };
   }
-  function applyView(v, duration = 1.0) {
+  function applyView(v, duration = 0) {
     if (!anchor()) return;
     const M = frame();
     if (v.date) $("date").value = v.date;
@@ -766,7 +824,7 @@
     const dest = toWorld(M, v.pos),
           direction = Cesium.Cartesian3.normalize(toWorld(M, v.dir, true), new Cesium.Cartesian3()),
           up = Cesium.Cartesian3.normalize(toWorld(M, v.up, true), new Cesium.Cartesian3());
-    const finish = () => { setLens({ ...v, projection: p }); selProj(p); };
+    const finish = () => { setLens({ ...v, projection: p }); selProj(p); if(nav)nav.adopt(); };
     if (p === "perspective" && duration && !isOrtho() && projection === "perspective") {
       viewer.camera.flyTo({ destination: dest, orientation: { direction, up }, duration, complete: finish });
     } else {
@@ -778,7 +836,7 @@
   }
   async function refreshViews() {
     views = (await api("/api/views")).views || [];
-    $("views").innerHTML = views.length ? "" : `<div class="empty">No saved views yet</div>`;
+    $("views").innerHTML = views.length ? "" : `<div class="empty">No views</div>`;
     const PN = { perspective: "Perspective", two_point: "Two-Point", parallel: "Parallel" };
     for (const v of views) {
       const li = document.createElement("div");
@@ -786,7 +844,7 @@
       const t = v.minutes != null ? `${String(Math.floor(v.minutes / 60)).padStart(2, "0")}:${String(v.minutes % 60).padStart(2, "0")}` : "";
       const sub = [PN[v.projection || "perspective"], t, v.source === "rhino" ? "from Rhino" : ""].filter(Boolean).join(" · ");
       li.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#${v.source === "rhino" ? "i-rhino" : "i-view"}"/></svg></span>` +
-        `<span class="grow"><div class="t">${esc(v.name)}</div><div class="s">${esc(sub)}</div></span>` +
+        `<span class="grow"><div class="t">${esc(v.name)}</div></span>` +
         (RHINO ? `<span class="acts"><button class="mini" title="Rename"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
         `<button class="mini" title="Replace with the current camera"><svg class="i" style="width:14px;height:14px"><use href="#i-redo"/></svg></button>` +
         `<button class="mini" title="Delete"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></span>` : "");
@@ -810,7 +868,7 @@
   $("addView").classList.toggle("hide", !RHINO);
   $("addView").onclick = async () => {
     if (!anchor()) return msg("Send a model from Rhino first.");
-    const name = await ask({ title: "Save View", text: "Saves the camera, lens and sun time" + (S.sync_views !== false ? ", and adds it to Rhino's named views." : "."), value: `View ${views.length + 1}`, ok: "Save" });
+    const name = await ask({ title: "Save View",  value: `View ${views.length + 1}`, ok: "Save" });
     if (!name) return;
     await api("/api/views", { op: "put", view: captureCamera(name) });
     refreshViews(); msg(`Saved “${name}”`);
@@ -824,8 +882,6 @@
     picking = true; picked = null; $("rot").value = 0; $("rotLbl").textContent = "0°";
     document.body.classList.add("picking");
     $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
-    $("siteHelp").textContent = (first ? "This file has no site location yet. " : "") + "Click the spot where the model's EarthAnchorPoint base point should sit — search a place first, or type exact “lat, lon” to pick that point." +
-      (geocoder ? "" : " (Place search needs a Cesium ion token.)");
     $("pickedLbl").textContent = first || !anchor() ? "Click on the map" : "Current location — click to move";
     $("siteApply").disabled = true;
     closePops("siteCard"); $("siteCard").classList.add("open");
@@ -924,7 +980,7 @@
     const r = await api("/api/sets", { op: "rename", name: old, new: nn });
     renaming = false;
     if (r.error) { $("setName").value = old; return msg(r.error); }
-    msg(`Renamed to “${nn}” — in Rhino too`);
+    
   }
   $("setNameForm").onsubmit = e => { e.preventDefault(); renameSet(); $("setName").blur(); };
   $("setName").onblur = renameSet;
@@ -945,9 +1001,9 @@
   const setDrag = on => {   // while on, dragging anywhere moves the set; map navigation pauses
     $("dragOn").checked = on;
     document.body.classList.toggle("picking", on);
-    scene.screenSpaceCameraController.enableInputs = !on;
+    scene.screenSpaceCameraController.enableInputs = !anchor() && !on;
   };
-  $("dragOn").onchange = () => { setDrag($("dragOn").checked); if ($("dragOn").checked) msg("Drag to move the set — switch Drag off to navigate again", 3500); };
+  $("dragOn").onchange = () => { setDrag($("dragOn").checked); if ($("dragOn").checked) msg("Drag enabled", 1800); };
   function groundPoint(pos, z) {   // where the mouse ray meets the horizontal plane at local height z
     const M = frame(), ray = viewer.camera.getPickRay(pos);
     const origin = Cesium.Matrix4.multiplyByPoint(M, new Cesium.Cartesian3(0, 0, z), new Cesium.Cartesian3());
@@ -963,7 +1019,7 @@
   function clearMeasure() { mPts = []; if (mEnt) { viewer.entities.remove(mEnt); mEnt = null; } $("measureLbl").style.display = "none"; }
   $("measureBtn").onclick = () => {
     measuring = !measuring; $("measureBtn").classList.toggle("on", measuring); document.body.classList.toggle("measuring", measuring);
-    if (!measuring) clearMeasure(); else msg("Click two points to measure — Esc to clear", 2500);
+    if (!measuring) clearMeasure(); 
   };
   function fmtLen(m) {
     const ft = m / 0.3048, f = Math.floor(ft), inch = Math.round((ft - f) * 12);
@@ -1219,15 +1275,15 @@
   const closePops = except => document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); });
   const toggleCapture = open => { closePops("captureCard"); $("captureCard").classList.toggle("open", open); $("captureBtn").classList.toggle("on", open); if (!open) { $("showFrame").checked = false; drawFrame(); } };
   $("captureBtn").onclick = () => toggleCapture(!$("captureCard").classList.contains("open"));
-  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.dataset.close === "siteCard" ? closeSite() : b.dataset.close === "setCard" ? closeSetCard() : toggleCapture(false));
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.dataset.close === "siteCard" ? closeSite() : b.dataset.close === "setCard" ? closeSetCard() : b.dataset.close === "captureCard" ? toggleCapture(false) : $(b.dataset.close).classList.remove("open"));
   const setSide = h => { $("sidebar").classList.toggle("hidden", h); $("toggleSide").classList.toggle("on", !h); store.set("sideHidden", h); };
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
   $("fly").onclick = flyTo;
-  $("clip").onclick = () => { saveS({ clip: !S.clip }); applyClip(); if (!tileset) msg("Clipping applies to the 3D map — connect a token first."); };
+  $("clip").onclick = () => { saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
   $("resample").onclick = () => sampleGround(true);
   document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
-  selProj = seg("projSeg", "perspective", v => setProjection(v));
+  selProj = seg("projSeg", "perspective", v => { setProjection(v); if(nav)nav.adopt(); });
   $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
   // the three link switches can also be changed from Rhino (EarthLinkSync): pick that up without a reload
   let toggledAt = 0;
@@ -1249,7 +1305,92 @@
   $("syncSun").onchange = () => { saveS({ sync_sun: $("syncSun").checked }); if ($("syncSun").checked) applySun(false); };
   restyle(); showSite(); showFov();
 
-  window.EL = { viewer, models, offsets, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  // One site-local camera owns every navigation control and gesture.
+  let orbit = null, pointer = null;
+  const cameraCanvas = scene.canvas;
+  const array = v => [v.x, v.y, v.z];
+  const navigationAllowed = () => !!anchor() && !picking && !measuring && !$("dragOn").checked && !$("busy").offsetParent && !$("ask").classList.contains("open");
+  const freeCamera = () => {
+    if (S.link_viewport) { saveS({link_viewport:false}); $("follow").checked=false; toggledAt=Date.now(); }
+    viewer.camera.cancelFlight();
+  };
+  function navLabels() {
+    if (!orbit) return;
+    const two=projection==="two_point";
+    $("tiltTitle").textContent=two?"Vertical framing":"Tilt";
+    $("navTilt").min=two?10:0;
+    $("navTilt").value=orbit.tilt;
+    $("navTilt").setAttribute("aria-label",two?"Vertical framing":"Tilt");
+    $("tiltValue").textContent=`${(two?orbit.tilt-90:orbit.tilt).toFixed(0)}°`;
+    $("navHeading").value=orbit.heading; $("headingValue").textContent=`${orbit.heading.toFixed(0)}°`;
+  }
+  nav = {
+    adopt() {
+      if (!anchor()) return false;
+      const M=frame(), c=viewer.camera, pos=toLocal(M,c.positionWC), dir=toLocal(M,c.directionWC,true);
+      const bs=modelsSphere(), center=bs?toLocal(M,bs.center):[0,0,0];
+      let virtual=dir;
+      if(projection==="two_point"){
+        const pitch=Math.atan(c.frustum._elShift||0),h=Math.atan2(dir[0],dir[1]);
+        virtual=[Math.sin(h)*Math.cos(pitch),Math.cos(h)*Math.cos(pitch),Math.sin(pitch)];
+      }
+      const distance=Math.max(.1,center.reduce((v,x,i)=>v+(x-pos[i])*virtual[i],0));
+      orbit=new EarthLinkNavigation.Orbit({target:pos.map((v,i)=>v+virtual[i]*distance),distance,
+        heading:Math.atan2(virtual[0],virtual[1])*180/Math.PI,tilt:Math.acos(Math.max(-1,Math.min(1,-virtual[2])))*180/Math.PI,
+        projection,halfHeight:getLens().half_height||30});
+      navLabels();return true;
+    },
+    apply() {
+      if(!orbit||!anchor())return;
+      const p=orbit.pose(),M=frame(),c=viewer.camera;
+      if(isOrtho()) {const a=aspect();c.frustum.width=2*p.halfHeight*(a>1?a:1);}
+      else c.frustum._elShift=p.shift;
+      c.setView({destination:toWorld(M,p.position),orientation:{direction:toWorld(M,p.direction,true),up:toWorld(M,p.up,true)}});
+      scene.requestRender();navLabels();
+    },
+    fit() {
+      if(!navigationAllowed())return;
+      if(walk)walk.exit(); freeCamera();if(!orbit&&!nav.adopt())return;
+      const bs=modelsSphere();if(!bs)return;
+      orbit.target=toLocal(frame(),bs.center);orbit.distance=Math.max(.1,bs.radius/Math.sin((vfov()||.7)/2)*1.15);
+      orbit.halfHeight=Math.max(.1,bs.radius*1.15/Math.min(1,aspect()));orbit.projection=projection;nav.apply();
+    },
+    zoom(factor) {if(!navigationAllowed()||walk)return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.zoom(factor);nav.apply();}
+  };
+  $("navBtn").onclick=()=>{nav.adopt();const on=!$("navCard").classList.contains("open");closePops("navCard");$("navCard").classList.toggle("open",on);};
+  $("northBtn").onclick=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.north();nav.apply();};
+  $("navHeading").oninput=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.heading=+$("navHeading").value;nav.apply();};
+  $("navTilt").oninput=()=>{if(!navigationAllowed())return;freeCamera();if(!orbit&&!nav.adopt())return;orbit.tilt=+$("navTilt").value;nav.apply();};
+  $("inputDevice").value=store.get("inputDevice")||(/Mac/.test(navigator.platform)?"trackpad":"auto");
+  $("inputDevice").onchange=()=>store.set("inputDevice",$("inputDevice").value);
+  $("zoomIn").onclick=()=>nav.zoom(.8);$("zoomOut").onclick=()=>nav.zoom(1.25);
+  $("walkBtn").onclick=()=>msg("Walk is being tested.");
+  cameraCanvas.addEventListener("contextmenu",e=>e.preventDefault());
+  cameraCanvas.addEventListener("pointerdown",e=>{
+    if(!navigationAllowed()||![1,2].includes(e.button)||walk)return;
+    freeCamera();nav.adopt();pointer={id:e.pointerId,x:e.clientX,y:e.clientY};cameraCanvas.setPointerCapture(e.pointerId);e.preventDefault();
+  });
+  cameraCanvas.addEventListener("pointermove",e=>{
+    if(!pointer||pointer.id!==e.pointerId||!navigationAllowed()||!orbit)return;
+    const dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;pointer.x=e.clientX;pointer.y=e.clientY;
+    const pan=e.shiftKey||(projection==="parallel"&&!e.ctrlKey&&!e.metaKey);
+    const units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
+    if(pan)orbit.pan(-dx*units,dy*units);else orbit.orbit(dx*.25,dy*.25);nav.apply();e.preventDefault();
+  });
+  const releasePointer=()=>{pointer=null;};
+  window.addEventListener("pointerup",releasePointer);cameraCanvas.addEventListener("pointercancel",releasePointer);cameraCanvas.addEventListener("lostpointercapture",releasePointer);window.addEventListener("blur",releasePointer);
+  cameraCanvas.addEventListener("wheel",e=>{
+    if(!navigationAllowed()||walk)return;
+    e.preventDefault();freeCamera();if(!orbit&&!nav.adopt())return;
+    const a=EarthLinkNavigation.wheelAction(e,$("inputDevice").value),units=2*(isOrtho()?orbit.halfHeight:orbit.distance*Math.tan((vfov()||.7)/2))/Math.max(1,cameraCanvas.clientHeight);
+    if(a.type==="zoom")orbit.zoom(a.factor);
+    else if(a.type==="pan"||projection==="parallel")orbit.pan(-a.x*units,a.y*units);
+    else orbit.orbit(a.x*.3,a.y*.3);
+    nav.apply();
+  },{passive:false});
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)releasePointer();});
+
+  window.EL = { viewer, models, offsets, nav, get orbit(){return orbit;}, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {
