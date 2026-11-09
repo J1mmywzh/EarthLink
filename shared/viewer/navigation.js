@@ -30,5 +30,9 @@
     if(e.ctrlKey||mouse)return {type:'zoom',factor:Math.exp(clamp(y,-200,200)*.008)};
     return {type:e.shiftKey?'pan':'orbit',x,y};
   }
-  return {Orbit,wheelAction};
+  function neutralDirection(direction,up){
+    const vertical=direction.reduce((s,n,i)=>s+n*up[i],0),h=direction.map((n,i)=>n-up[i]*vertical),length=Math.hypot(...h)||1;
+    const d=h.map((n,i)=>.5*n/length-up[i]),norm=Math.hypot(...d);return d.map(n=>n/norm);
+  }
+  return {Orbit,wheelAction,neutralDirection};
 });

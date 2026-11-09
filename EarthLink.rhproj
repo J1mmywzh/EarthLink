@@ -8,7 +8,7 @@
   "id": "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30",
   "identity": {
     "name": "EarthLink",
-    "version": "0.1.1",
+    "version": "0.2.0-beta.1",
     "publisher": {
       "name": "Jimmy Wang"
     },
@@ -201,6 +201,10 @@
     {
       "id": "6fc56c10-9ce4-5cf0-a9a4-e574b6852e8d",
       "uri": "shared/viewer/walking.js"
+    },
+    {
+      "id": "9999c55e-6465-570c-93d1-97b290074447",
+      "uri": "shared/viewer/bounded-picks.js"
     }
   ]
 }

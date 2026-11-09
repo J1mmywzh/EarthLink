@@ -58,6 +58,7 @@
   .val { color: var(--fg2); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
   .seg { display: inline-flex; background: var(--fill); border-radius: 8px; padding: 2px; gap: 2px; }
   .seg button { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--fg); }
+  #projSeg button {padding:4px 6px;white-space:nowrap;}
   .seg button.sel { background: var(--glass-strong); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
   .pill { background: var(--fill); border-radius: 8px; padding: 5px 10px; font-weight: 500; }
   .pill:hover { background: var(--fill-hover); }
@@ -143,6 +144,7 @@
   <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
   <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M8 21l2-8V8h4v5l2 8M6 12l4-4M18 12l-4-4M10 13h4"/></symbol>
   <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M16 8l-2.5 5.5L8 16l2.5-5.5z"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
@@ -208,7 +210,7 @@
 <div id="navDock" class="glass">
   <button id="walkBtn" title="Walk" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
   <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i"><use href="#i-compass"/></svg></button>
-  <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-loc"/></svg></button>
+  <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-fit"/></svg></button>
   <span class="divider"></span>
   <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button><button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
 </div>
@@ -312,6 +314,7 @@
 <script src="./navigation.js"></script>
 <script src="./walking.js"></script>
 <script src="./map-contacts.js"></script>
+<script src="./bounded-picks.js"></script>
 <script>
 (async () => {
   const $ = id => document.getElementById(id);
@@ -406,6 +409,7 @@
   let settingsWrites=Promise.resolve();
   const saveS = patch => { Object.assign(S,patch);settingsWrites=settingsWrites.catch(()=>{}).then(()=>api("/api/settings",patch)).catch(()=>msg("Could not save changes."));return settingsWrites; };
   let nav = null, walk = null;
+  let groundJob=Promise.resolve();
   let rhinoCam = null;   // last camera Rhino sent (Follow Rhino)
 
   // segmented control helper
@@ -453,7 +457,7 @@
   $("shadows").onclick=()=>{const open=!$("sunCard").classList.contains("open");closePops("sunCard");$("sunCard").classList.toggle("open",open);};
   if(S.sun_utc)sunFromUtc(S.sun_utc,S.sun_enabled);else applySun(true);
   if(RHINO&&S.sync_sun!==false){const j=await api("/api/sun");if(j?.utc)sunFromUtc(j.utc,j.enabled);}
-  scene.preRender.addEventListener(()=>{if(S.sun_enabled===false)Cesium.Cartesian3.clone(viewer.camera.directionWC,neutralLight.direction);});
+  scene.preRender.addEventListener(()=>{if(S.sun_enabled===false){const c=viewer.camera,up=Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(c.positionWC,new Cesium.Cartesian3())||Cesium.Cartesian3.UNIT_Z;const d=EarthLinkNavigation.neutralDirection([c.directionWC.x,c.directionWC.y,c.directionWC.z],[up.x,up.y,up.z]);Cesium.Cartesian3.fromArray(d,0,neutralLight.direction);}});
 
   // ---------------------------------------------------------------- lens & projection (perspective / two-point / parallel)
   // Two-point keeps the camera axis level and shifts the lens (like a shift lens), so verticals stay vertical.
@@ -755,7 +759,7 @@
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
-    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(); sampleGround(false); refreshViews(); }
+    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(); groundJob=sampleGround(false); refreshViews(); }
     setTimeout(() => $("dot").className = "live", 400);
   }
   function renderSets() {
@@ -1097,7 +1101,7 @@
     if (!dragging) return;
     dragging = null; renderSets();
   }, Cesium.ScreenSpaceEventType.LEFT_UP);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) clearMeasure(); if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) {measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");} if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); } });
 
   // ---------------------------------------------------------------- capture
   let detail = store.get("detail") ?? 8;
@@ -1303,7 +1307,7 @@
   setSide(!!store.get("sideHidden"));
   $("fly").onclick = flyTo;
   $("clip").onclick = () => { saveS({ clip: !S.clip }); applyClip(); if(!tileset)msg("Connect a map first."); else if(S.clip&&visibleSets().some(n=>!meta.sets[n]?.geometry))msg("Resend the model for cutout."); };
-  $("resample").onclick = () => sampleGround(true);
+  $("resample").onclick = () => {if(walk)walk.exit();groundJob=sampleGround(true);};
   document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
   selProj = seg("projSeg", "perspective", v => { setProjection(v); if(nav)nav.adopt(); });
   $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
@@ -1408,7 +1412,7 @@
     freeCamera();closePops();
     const returning=captureCamera(""),state={placing:true,keys:new Set(),body:null,cache:new Map(),context:null,pending:false,last:performance.now(),heading:0,pitch:0};
     state.exit=()=>{
-      if(walk!==state)return;walk=null;state.body?.free();document.body.classList.remove("picking");
+      if(walk!==state)return;walk=null;msg("");state.queries?.stop();state.body?.free();document.body.classList.remove("picking");
       $("walkBtn").classList.remove("on");$("walkBtn").setAttribute("aria-pressed","false");
       const {date,minutes,...camera}=returning;applyView(camera,0);pointer=null;
     };
@@ -1421,7 +1425,7 @@
     const M=frame(),exclude=Object.values(models);
     const query=async(origin,direction,max)=>{
       const ray=new Cesium.Ray(toWorld(M,origin),Cesium.Cartesian3.normalize(toWorld(M,direction,true),new Cesium.Cartesian3()));
-      const result=await scene.pickFromRayMostDetailed(ray,exclude,.05);
+      const result=await state.queries.cast(ray,exclude,.05);
       return result?.position?toLocal(M,result.position):null;
     };
     let timer;
@@ -1430,10 +1434,18 @@
   }
   async function placeWalker(screen){
     const state=walk;if(!state?.placing||state.pending)return;
-    const point=scene.pickPositionSupported?scene.pickPosition(screen):null;
+    let point=scene.pickPositionSupported?scene.pickPosition(screen):null;
     if(!point)return msg("Choose a solid surface.");
-    state.pending=true;$("busyText").textContent="Loading…";$("busy").style.display="flex";
+    state.pending=true;msg("Loading…",6000);
     try{
+      await groundJob;state.queries?.stop();state.queries=null;
+      if(tileset&&typeof scene.pickFromRayMostDetailed==="function"){
+        const precise=await scene.pickFromRayMostDetailed(viewer.camera.getPickRay(screen),[],.05);
+        if(!precise?.position)throw Error("Surface unavailable.");
+        point=precise.position;
+      }
+      if(walk!==state)return;
+      if(tileset)state.queries=new EarthLinkBoundedPicks.Queries(scene);
       const feet=toLocal(frame(),point),mesh=walkMesh(),context=await mapContacts(state,feet);
       if(walk!==state)return;
       const body=await EarthLinkWalking.create(mesh,{feet,context});
@@ -1441,8 +1453,8 @@
       const camera=captureCamera("");state.heading=Math.atan2(camera.dir[0],camera.dir[1])*180/Math.PI;state.pitch=0;
       state.body=body;state.context=context;state.contextTime=performance.now();state.placing=false;state.last=performance.now();
       setProjection("perspective");state.eyeZ=body.eye[2];document.body.classList.remove("picking");msg("");drawWalk();
-    }catch(error){if(walk===state)msg(error.message==="Not enough room"?"Choose a clear surface.":error.message);}
-    finally{state.pending=false;$("busy").style.display="none";}
+    }catch(error){state.queries?.stop();if(walk===state)msg(error.message==="Not enough room"?"Choose a clear surface.":error.message);}
+    finally{state.pending=false;}
   }
   function drawWalk(dt=0){
     if(!walk?.body)return;const eye=walk.body.eye;
@@ -1455,7 +1467,7 @@
   async function refreshContacts(state){
     state.pending=true;const feet=state.body.feet;
     try{const next=await mapContacts(state,feet);if(walk===state&&next){state.body.updateContext(next);state.context=next;state.contextTime=performance.now();}}
-    catch(error){if(walk===state)state.contextTime=0;}
+    catch(error){state.queries?.cancelPending();if(walk===state){state.contextTime=0;state.retryAt=performance.now()+1000;}}
     finally{state.pending=false;}
   }
   const stopWalkingInput=()=>{if(walk){walk.keys.clear();walk.jump=false;walk.last=performance.now();}};
@@ -1480,7 +1492,7 @@
     const feet=state.body.feet,moving=!!(forward||right),speed=input.sprint?3.8:1.4;
     if(tileset){
       const context=state.context,delta=context?Math.max(Math.abs(feet[0]-context.center[0]),Math.abs(feet[1]-context.center[1])):Infinity;
-      if(!state.pending&&moving&&(delta>.12||now-state.contextTime>1500))refreshContacts(state);
+      if(!state.pending&&now>(state.retryAt||0)&&moving&&(delta>.12||now-state.contextTime>1500))refreshContacts(state);
       const next=[feet[0]+input.x*speed*dt,feet[1]+input.y*speed*dt,feet[2]];
       const outside=!context||Math.max(Math.abs(next[0]-context.center[0]),Math.abs(next[1]-context.center[1]))>context.radius;
       if(outside){input.x=0;input.y=0;}

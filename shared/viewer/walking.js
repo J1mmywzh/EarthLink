@@ -30,7 +30,7 @@
       this.controller=this.world.createCharacterController(.01);this.controller.setUp({x:0,y:0,z:1});
       this.controller.enableAutostep(.2,.2,false);this.controller.enableSnapToGround(.25);
       this.controller.setMaxSlopeClimbAngle(Math.PI/4);this.controller.setMinSlopeSlideAngle(Math.PI/3);
-      this.velocity=0;this.grounded=true;this.accumulator=0;this.jumpHeld=false;
+      this.velocity=0;this.grounded=true;this.accumulator=0;this.jumpHeld=false;this.queuedJump=false;
     }
     get feet(){const p=this.body.translation();return[p.x,p.y,p.z-.9];}
     get eye(){const p=this.feet;return[p[0],p[1],p[2]+1.65];}
@@ -46,13 +46,13 @@
     step(input={},dt=1/60){
       if(!Number.isFinite(dt)||dt<=0)return this.feet;
       const jump=!!input.jump&&!this.jumpHeld;this.jumpHeld=!!input.jump;
+      if(jump)this.queuedJump=true;
       this.accumulator=Math.min(.1,this.accumulator+Math.min(.1,dt));
-      let pendingJump=jump;
       while(this.accumulator>=1/60-1e-10){
         this.accumulator-=1/60;
         let x=Number.isFinite(input.x)?input.x:0,y=Number.isFinite(input.y)?input.y:0;
         const length=Math.max(1,Math.hypot(x,y)),speed=input.sprint?3.8:1.4;x=x/length*speed/60;y=y/length*speed/60;
-        if(pendingJump&&this.grounded){this.velocity=Math.sqrt(2*9.81*.45);this.grounded=false;}pendingJump=false;
+        if(this.queuedJump&&this.grounded){this.velocity=Math.sqrt(2*9.81*.45);this.grounded=false;}this.queuedJump=false;
         this.velocity-=9.81/60;
         const desired={x,y,z:this.velocity/60};
         this.controller.computeColliderMovement(this.collider,desired);

@@ -3,30 +3,33 @@ on: [push, pull_request]
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.9" }       # Rhino 8 ships CPython 3.9
+        with: { python-version: '3.9', architecture: x64 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
       - run: pip install pytest
       - run: python -m compileall -q earthlink commands tools
       - run: python -m pytest -q tests
+      - run: node --test tests/navigation.test.cjs tests/footprints.test.cjs tests/walking.test.cjs tests/map_contacts.test.cjs tests/bounded_picks.test.cjs
   viewer:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.9" }
+        with: { python-version: '3.9', architecture: x64 }
       - uses: actions/setup-node@v4
-        with: { node-version: "20" }
-      - run: npm install playwright@1.48.2 && npx playwright install --with-deps chromium
-      - name: start a test server and load the viewer
+        with: { node-version: '22' }
+      - run: npm install playwright@1.65.0 && npx playwright install --with-deps chromium
+      - name: fixture viewer
         shell: bash
         run: |
-          export HOME=$RUNNER_TEMP/home EARTHLINK_PORT=8765
-          python -c "import sys; sys.path.insert(0,'.'); from tests.fixtures import make_live; make_live('$RUNNER_TEMP/home')"
-          python earthlink/server.py --viewer shared/viewer --port 8765 &
+          python tests/serve_fixture.py --port 8765 &
           sleep 2
           node tests/viewer_smoke.mjs http://127.0.0.1:8765/
+          node tests/viewer_controls.cjs http://127.0.0.1:8765/

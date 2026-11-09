@@ -23,10 +23,16 @@ This guide is for an assistant helping someone use or develop EarthLink. Start w
 
 ## Test and release discipline
 
-Use isolated temporary application data and the supplied fixture. Do not read or print user tokens. Do not publish live model exports, private notes, captures, account credentials, or runtime files. Keep plugin GUID stable. Test the installed package in Rhino separately from unit tests. Windows support is implemented but awaits integration testing. Track the three known issues in ARCHITECTURE.md rather than claiming they are resolved.
+Use isolated temporary application data and the supplied fixture. Do not read or print user tokens. Do not publish live model exports, private notes, captures, account credentials, or runtime files. Keep plugin GUID stable. Test the installed package in Rhino separately from unit tests. Windows support is implemented but awaits integration testing. Track the retained known issues in ARCHITECTURE.md rather than claiming they are resolved.
 
 A build does not authorize installation, a Rhino restart, or public publication. For public uploads, confirm that the user requested the destination and visibility. Do not add a contact email or claim test results without evidence. Report exactly which checks ran and which remain pending.
 
 ## Git and cross-computer work
 
 Pull before editing. Inspect changes, run appropriate checks, commit, and push completed source changes when authorized. Confirm the remote has the intended commit before calling it synchronized. An ignored file is not cloud-backed by Git. Do not force-add ignored local records or force-push to resolve divergence.
+
+## Viewer development preview
+
+Read the README navigation and walking controls before driving the viewer. Do not reintroduce permanent gesture legends, eye-height labels or explanatory subtitles; use short labels, essential values and actionable messages. Resend legacy sets to create geometry sidecars. Walking and cutouts must use the same displayed export/version and set transforms. Preserve courtyard holes and disconnected regions; never fall back to an enclosing rectangle.
+
+Walking uses physical own-model collision geometry and guarded transient map contacts. Test streamed context separately from synthetic fixtures; map scan holes and loading can stop motion. Do not claim full context collision coverage from flat-floor tests. Keep the person/camera parameters in the manual, not the interface. Preserve the previous orbit camera on exit and stop movement on blur, capture or competing tools.

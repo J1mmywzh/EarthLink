@@ -1,96 +1,95 @@
-# EarthLink for Rhino 8
-
-**0.1.1 — initial preview for Rhino 8.**
-
+# EarthLink
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-## Start here
-
-- **Using EarthLink:** read the [step-by-step user manual](docs/USER_MANUAL.md).
-- **Helping as an agent:** read the [agent guide](docs/AGENT_GUIDE.md).
-- **Developing or building:** read the [architecture](docs/ARCHITECTURE.md) and [development guide](docs/DEVELOPMENT.md).
-
-## Quick start
-
-1. Install the `.yak` package into Rhino 8 and restart Rhino when convenient.
-2. Run `EarthLinkViewer` or `EarthLinkSettings` and enter your own map token/key.
-3. Select geometry, run `SendToEarth`, and use `Set=Main`, `Viewer=On`.
-4. If no EarthAnchorPoint exists, choose PickOnMap and apply your site location to Rhino.
-5. Inspect the result; choose Live=On for watched edits and EarthLinkSync for views, camera following, and sun.
-
-For command options, capture passes, sharing, troubleshooting, data locations, and preview limitations, use the full manual linked above. FollowViewport sends Rhino’s camera to the browser; it is not continuous browser-to-Rhino viewport control.
-
-## The project
-
-EarthLink brings model placement, design alternatives, camera views, and sun studies into one workflow.
-
-Python handles Rhino geometry, export, and synchronization; CesiumJS handles the browser viewer. The local server runs as a separate process, while Rhino updates run on its UI timer. See [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md), and [third-party services](docs/THIRD_PARTY.md).
-
-## Preview status
-- Initial preview, tested by its author in Rhino 8.
-- Re-sample ground height when changing sites. Deleting every object in a live set can leave its last exported geometry visible; remove the set in the viewer to clear it.
-- Re-export to Earth Pro after browser-only updates; older Earth Pro files can be pruned.
+**Development preview: 0.2.0-beta.1.** The published PackageManager release is 0.1.1. The navigation and walking changes described below require this development preview.
 
 ## Install
-Rhino → `PackageManager` → search **EarthLink** → Install → restart Rhino.
 
-## First use
-1. **Map access (once per computer):** create a free [Cesium ion](https://ion.cesium.com) account → Access Tokens →
-   copy the Default token. Paste it when the viewer asks, or run `EarthLinkSettings` → `CesiumToken`.
-   (A Google Maps Platform key with the Map Tiles API also works.) EarthLink stores the token locally; the browser uses it to access the external map service.
-2. **Site location (once per file)** — either way works and both stay in step:
-   - run `SendToEarth` on a file without a location and choose **PickOnMap**: search the place (or type `lat, lon`)
-     in the viewer, click where the model's base point should sit, turn the model if needed, **Apply to Rhino**; or
-   - run Rhino's `EarthAnchorPoint` as usual.
+In Rhino 8, run **PackageManager**, search **EarthLink**, and install. Restart Rhino when ready. For a development build, install its `.yak` package locally instead.
 
-   The viewer's **Site → Edit Location** writes Rhino's EarthAnchorPoint (latitude, longitude, north), and any change made
-   with `EarthAnchorPoint` re-sends the model to the new spot. An existing anchor keeps its elevation settings.
+You need your own Cesium ion token or Google Maps Platform key with Map Tiles API access. Enter it in **EarthLinkSettings** or the viewer's connection dialog. Google Earth Pro is optional.
+
+## Send a model
+
+1. Check the Rhino file's units and EarthAnchorPoint.
+2. Select geometry and run **SendToEarth**.
+3. Choose a design set. Enable **Live** to update it as you edit.
+4. If the file has no location, choose **PickOnMap**, select the site, and apply it to Rhino.
+5. Inspect the model in the browser. Use **Fit model** to frame it.
+
+Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Curves and annotations are not exported as surfaces.
+
+After upgrading from 0.1.x, send each set once to generate the geometry needed for precise cutouts and walking.
+
+## Navigate
+
+| Action | Trackpad | Mouse |
+| --- | --- | --- |
+| Orbit | Two-finger slide | Right-drag |
+| Pan | Shift + two fingers | Shift + right-drag |
+| Zoom | Pinch | Wheel |
+
+Parallel views pan by default; hold Ctrl/Command while right-dragging to rotate. The horizon stays level. The compass opens heading and tilt controls, **Reset to north**, and an input-device preference. Mac defaults to Trackpad; select Mouse when using a mouse. **Fit model** frames visible design sets. **− / +** zoom out and in.
+
+Two-Point preserves verticals and provides **Vertical framing** instead of top-down tilt. For a true top view, use Perspective or Parallel.
+
+Using browser navigation turns off **Follow Rhino**. Enable it again to follow the Rhino viewport.
+
+## Walk
+
+Choose the person button, then click a floor or map surface.
+
+| Control | Action |
+| --- | --- |
+| W A S D or arrow keys | Move |
+| Shift | Sprint |
+| Space | Jump |
+| Right-drag or two-finger slide | Look |
+| Esc or person button | Return to the previous orbit view |
+
+Walking uses a 1.80 m person with the camera about 1.65 m above the floor. Walls and ceilings block movement; ordinary steps up to 0.20 m are climbed automatically. There is no head bob. Save a view or capture an image from the walking camera as usual.
+
+Collision against your model uses the exported mesh. Scanned-map contacts are approximate; missing or unloaded surfaces can pause movement. A cutout removes Google's ground too, so include a floor or site surface where the design replaces it. Section cuts disable Walk. Changing the displayed geometry or recalling a view leaves Walk safely.
+
+## Sun and views
+
+Open **Sun** to control sunlight, date, time, and dynamic shadows. Turning sunlight off uses neutral lighting and hides the time controls. Shadows photographed into Google's imagery remain part of the map texture.
+
+**Sync with Rhino** exchanges the sun's enabled state and time. Rhino's current sun is used when connecting or reconnecting synchronization. Time uses the browser computer's time zone, including the selected date's daylight-saving offset.
+
+Save named views in Rhino or the viewer. With view sync enabled, they appear in both. Saved views retain the camera, projection, lens, and sun time; recalling a time does not switch sunlight on.
+
+## Design sets and display
+
+- Send selections as separate named sets; show, hide, compare, or style them independently.
+- Materials, Clay, and Ghost control model display.
+- Viewer moves remain a preview until **Apply to Rhino**. Applied moves are one Rhino undo step.
+- **Hide map under model** removes Google content within the visible model's projected geometry, preserving concave edges, separate pieces, and uncovered courtyards. It removes ground as well as buildings and vegetation. It does not use a padded bounding rectangle.
+- **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
+
+## Capture and share
+
+Open **Capture** to choose image size, detail, and full/context/model passes. The model pass has a transparent background. Capture the current view or all saved views. Images include camera metadata.
+
+**Share** exports a static viewer ZIP with the current sets and views. Serve its extracted folder through a web server. Visitors use their own map token unless you explicitly include one; restrict an included token to the shared site. Keep required map attribution visible.
 
 ## Commands
-| Command | What it does |
-|---|---|
-| `SendToEarth` | Send selected objects. `Set=` design set (Main, Scheme B…), `Live=On` re-sends the set ~1 s after you edit it, `Viewer`, `EarthPro`. |
-| `EarthLinkViewer` | Open the viewer. |
-| `EarthLinkSync` | `NamedViews` two-way named views · `FollowViewport` viewer follows Rhino's camera · `Sun` viewer sun ⇄ Rhino Sun. |
-| `EarthLinkSettings` | Token/key, Earth Pro default, rename or remove a design set, screenshot folder, data folder, stop the server. |
 
-## Viewer
-- **Design Sets** — any number of groups on the same page (`SendToEarth Set=…`). Show/hide each, **Compare** shows one
-  at a time. **Edit** a set to rename it (renames it in Rhino too), give it its own display (Materials / Clay / Ghost),
-  or move it: drag on the map, nudge east/north/up, rotate — previewed in the viewer, then **Apply to Rhino** moves
-  those objects in your file as one undo step and re-sends them. Remove a set (Rhino geometry untouched).
-- **Views** — synced with Rhino named views both ways (save, rename, update, delete in either app).
-- **Display** — Materials, **Clay** (white massing) or **Ghost** (adjustable opacity); **Section cut** at any height.
-- **Camera** — Perspective, Two-Point (verticals stay vertical) or Parallel; lens in degrees and 35 mm equivalent;
-  follow Rhino viewport; sync named views; **sync sun with Rhino** (Rhino's Sun also gets the site's location and north).
-- **Site** — location, edit on the map, height adjustment and ground re-sampling.
-- **Measure** (ruler button) — click two points; metres and feet-inches, with height difference.
-- **Capture** — presets or a custom size at exact pixels; **Full / Context only / Model only (transparent)** passes;
-  default folder or **Ask each time**; camera embedded in each PNG. **Share…** exports a self-contained viewer (zip)
-  for any static web host.
+| Command | Purpose |
+| --- | --- |
+| `SendToEarth` | Send selected geometry, choose sets and Live behavior |
+| `EarthLinkViewer` | Open the viewer |
+| `EarthLinkSync` | Configure views, viewport following, and sun sync |
+| `EarthLinkSettings` | Set map credentials, capture folder, and Earth Pro options |
 
-### Rendering workflow
-Save views (viewer or Rhino) → with *Sync sun* on, Rhino's Sun matches the viewer → render those named views in Rhino at
-the same pixel size → layer the render over the **Context only** capture, using **Model only** as a mask.
+## Manuals and development
 
-## How it works
-- Export happens in a hidden Rhino document: your file, selection and undo history are never touched.
-- EarthLink keeps a small record in the file's Document User Text (section `EarthLink`): a project id (views follow the
-  project, not the file name) and the objects in each design set.
-- The viewer server is a separate process on `127.0.0.1:8765`, run on Rhino's bundled Python; it only answers the
-  EarthLink page. Sync runs on Rhino's UI timer — no background threads inside Rhino.
-- Keep Draco compression off in Rhino's glTF export options (the default) for the Earth Pro link.
-- Map data © Google, shown through Cesium; attributions appear in the viewer. Each user uses their own token/key.
+- [User manual](docs/USER_MANUAL.md): installation, full workflow, troubleshooting, and limitations.
+- [Agent guide](docs/AGENT_GUIDE.md): safe operation and development guidance for assistants.
+- [Architecture](docs/ARCHITECTURE.md) and [development](docs/DEVELOPMENT.md): source structure, tests, builds, and releases.
+- [Third-party services and licenses](docs/THIRD_PARTY.md).
 
-## Develop / release
-`commands/` one script per command · `earthlink/` shared package (embedded in the plugin) · `shared/viewer/index.html` ·
-`icons/` · `tests/` · `EarthLink.rhproj` (Rhino Script Editor project).
+EarthLink uses Rhino 8 Python, a separate local Python server, CesiumJS 1.140, and a browser viewer with no frontend build step. Original EarthLink code is MIT licensed; bundled dependencies retain their own licenses.
 
-```
-python3 -m pytest tests                    # server + Earth Pro conversion (no Rhino needed)
-python3 tools/build.py 0.1.1 --push-test   # build + push to McNeel's test server (wiped nightly)
-python3 tools/build.py 0.1.1 --push        # publish (after `yak login`)
-```
-GitHub Actions (`.github/workflows/ci.yml`) runs the tests on macOS, Windows and Linux plus a headless viewer check.
-Bump the version for every release (published versions can't be replaced) and add a line to `CHANGELOG.md`.
+This preview has synthetic geometry/API/browser tests. Installed-Rhino acceptance, real trackpad feel, and Windows integration require separate checks. Map content and collision samples are visual context, not survey data. Known retained issues are listed in the user manual.

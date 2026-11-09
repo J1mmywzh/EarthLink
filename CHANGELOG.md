@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0-beta.1 — development preview, 2026-11-09
+- Site-local Rhino-style navigation, compass/heading/tilt, true-north reset, fit and zoom controls.
+- Physical walking prototype: surface placement, WASD, sprint, jump, gravity, wall/ceiling collisions and steps; sampled map contacts pause at missing surfaces.
+- One sunlight enabled state, neutral off lighting, reciprocal Rhino sun enable/time and a compact Sun panel; removed the permanent timebar.
+- Exported mesh footprints preserve concave shapes, islands and courtyard holes without padded rectangular masks.
+- Removed persistent instructions and redundant secondary interface copy; expanded the manuals.
+- Fixed concurrent temporary-file collisions in JSON/settings saves. Added behavioral/browser tests, bundled dependency licenses, complete share resources and compatible CI runners.
+- Published 0.1.0/0.1.1 artifacts are unchanged. Installed-Rhino/Windows acceptance remains separate.
+
 ## 0.1.1 — 2026-11-08
 - Refined the public product description. No runtime functionality changes.
 

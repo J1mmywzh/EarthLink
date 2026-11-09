@@ -30,3 +30,6 @@ test('wheel normalizes pinch, pixel trackpad and coarse mouse input',()=>{
   assert.equal(N.wheelAction({deltaY:3,deltaX:0,ctrlKey:true},'trackpad').type,'zoom');
   assert.equal(N.wheelAction({deltaY:5,deltaX:2,deltaMode:0,shiftKey:true},'trackpad').type,'pan');
 });
+test('neutral lighting still lights ground at eye level and when looking upward',()=>{
+ assert.ok(N);for(const d of [[0,1,0],[0,0,1],[0,0,-1]]){const l=N.neutralDirection(d,[0,0,1]);assert.ok(l[2]<-.8);near(Math.hypot(...l),1);}
+});

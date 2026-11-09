@@ -18,7 +18,7 @@ from earthlink import env  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
-VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js", "map-contacts.js",
+VIEWER_ASSETS = ("index.html", "navigation.js", "footprints.js", "footprint-worker.js", "walking.js", "map-contacts.js", "bounded-picks.js",
                  "vendor/polygon-clipping.js", "vendor/earcut.js", "vendor/rapier.mjs",
                  "vendor/LICENSE-polygon-clipping.txt", "vendor/LICENSE-earcut.txt", "vendor/LICENSE-rapier.txt")
 

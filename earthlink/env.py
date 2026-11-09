@@ -1,5 +1,6 @@
 """Paths, settings and OS helpers (macOS + Windows)."""
 import os, sys, json, subprocess, tempfile
+from contextlib import contextmanager
 
 PLUGIN_ID = "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30"   # = "id" in EarthLink.rhproj (never change it)
 PORT = int(os.environ.get("EARTHLINK_PORT", "8765"))
@@ -189,11 +190,35 @@ def load_settings():
     return s
 
 
+@contextmanager
+def _settings_lock():
+    # Coordinate Rhino and the separate server without creating threads in Rhino.
+    with open(os.path.join(data_dir(), ".settings.lock"), "a+b") as lock:
+        if IS_WIN:
+            import msvcrt
+            if os.fstat(lock.fileno()).st_size == 0:
+                lock.write(b"\0"); lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if IS_WIN:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 def save_settings(patch):
-    s = load_settings()
-    s.update({k: v for k, v in patch.items() if k in DEFAULTS})
-    write_json(_settings_path(), s)
-    return s
+    with _settings_lock():
+        s = load_settings()
+        s.update({k: v for k, v in patch.items() if k in DEFAULTS})
+        write_json(_settings_path(), s)
+        return s
 
 
 def open_url(url):

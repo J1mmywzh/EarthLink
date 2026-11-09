@@ -1,6 +1,6 @@
 # EarthLink user manual
 
-For EarthLink 0.1.1, an initial preview for Rhino 8. Read the preview limitations below before relying on a result. Windows integration testing is pending.
+For EarthLink 0.2.0-beta.1, a development preview for Rhino 8. The published PackageManager release remains 0.1.1. Read the preview limitations below before relying on a result. Windows integration testing is pending.
 
 ## 1. What EarthLink does
 
@@ -38,11 +38,11 @@ EarthLink stores credentials in local application data, not in the Rhino model. 
 3. Run `SendToEarth`. For a first send, use `Set=Main`, `Viewer=On`, `EarthPro=Off`. Choose `Live=On` if you want edits watched automatically.
 4. If the file already has an EarthAnchorPoint, the model is sent at that anchor. Check the latitude, longitude, model base point, north, elevation, and elevation reference first.
 5. If the file has no anchor, choose **PickOnMap**. Find the site, or type exact `latitude, longitude`, click the model's base-point location on the map, optionally rotate it, then choose **Apply to Rhino**. The selected design set is sent after Rhino applies the anchor.
-6. Check orientation, scale, and height against a known reference. Use **Go to model** to frame the design.
+6. Check orientation, scale, and height against a known reference. Use **Fit model** to frame the design.
 
 A new picked anchor uses GroundLevel at zero elevation. Editing an existing anchor preserves its elevation and reference. Clicking an elevated surface can pick a roof or tree; inspect the chosen height. **Re-sample** estimates ground around the model; use the height controls to inspect placement. The browser height adjustment changes viewer placement only; it does not write a new Rhino EarthAnchorPoint elevation.
 
-For site edits later, use Rhino's `EarthAnchorPoint` command or the viewer's **Site → Edit Location**. Latitude, longitude, and rotation changes applied from the viewer reach Rhino, and anchor edits in Rhino trigger re-export while sync is active.
+For site edits later, use Rhino's `EarthAnchorPoint` command or the viewer's **Site → Edit**. Latitude, longitude, and rotation changes applied from the viewer reach Rhino, and anchor edits in Rhino trigger re-export while sync is active.
 
 ## 5. Design sets and live updates
 
@@ -67,21 +67,29 @@ Run `EarthLinkSync` and configure:
 | FollowViewport | Browser camera follows the synced Rhino document's active viewport |
 | Sun | Viewer time and Rhino Sun date/time synchronize; the anchor supplies Rhino Sun location and north |
 
-**FollowViewport is one-way.** Navigating the browser does not continuously drive Rhino's active viewport. A view saved in the browser can become a Rhino named view through named-view sync. For free browser navigation, turn Follow Rhino viewport off.
+**FollowViewport is one-way.** Navigating the browser does not continuously drive Rhino's active viewport. A view saved in the browser can become a Rhino named view through named-view sync. Browser navigation automatically leaves Follow Rhino. Enable Follow again to resume it.
 
-In **Views**, select a saved view to recall it, or use **Save View**. Browser-saved views include camera, projection/lens, and sun time. Perspective, Two-Point, and Parallel projections are supported. Two-Point keeps verticals vertical using lens shift. The lens control reports a vertical field of view and a 35 mm equivalent.
+In **Views**, select a saved view to recall it, or use **Save View**. Browser-saved views include camera, projection/lens, and sun time. Perspective, Two-Point, and Parallel projections are supported. Two-Point keeps verticals vertical using lens shift. The Lens control displays a 35 mm equivalent. Two-Point uses Vertical framing; true top-down tilt is available in Perspective and Parallel.
 
 On first named-view reconciliation, Rhino wins conflicting cameras with the same name. Afterwards, the changed side wins; simultaneous conflicting edits favor Rhino. Because deletes also synchronize, avoid editing the same named view independently in both apps at once.
 
-The viewer clock uses the browser computer's local time zone. For the selected date, its time-zone offset is sent to Rhino. The current time slider covers 05:00–21:00. Full nighttime times and differing computer/site time zones need care; this preview is not an unrestricted site-time-zone sun scheduler.
+The Sun panel controls sunlight, date, all 24 hours, and dynamic shadows. Sunlight off uses neutral illumination and hides date/time controls. Sync with Rhino exchanges both the enabled state and UTC time; Rhino is authoritative when connecting or reconnecting. The browser computer's per-date time-zone offset is sent to Rhino. This is not an independent site-time-zone scheduler. Photographed shadows in Google's textures cannot be removed by disabling dynamic sunlight.
 
 When switching Rhino documents, run SendToEarth or EarthLinkViewer/Sync for the file you intend to link. One local viewer/exchange area is active at a time. Keep Rhino open and responsive for two-way requests.
+
+## Navigation and walking
+
+Two-finger slide or right-drag orbits a perspective view. Shift modifies either to pan. Pinch or mouse wheel zooms. Parallel views pan by default; Ctrl/Command + right-drag rotates. The horizon remains level and navigation has no inertial spinning. The compass opens heading/tilt, Reset to north, and device preference. Mac defaults to Trackpad; choose Mouse for a mouse. Fit model preserves orientation while framing visible sets. Two-Point provides finite vertical framing rather than a top-down endpoint.
+
+To Walk, select the person button and click a supporting floor or map surface. WASD/arrows move, Shift sprints, Space jumps, right-drag/two fingers looks, and Esc or the person button restores the previous orbit camera and projection. The person is 1.80 m tall with eyes at approximately 1.65 m. Walking speed is 1.4 m/s; sprint is 3.8 m/s; proposed maximum automatic step is 0.20 m. These are navigation parameters, not building-code criteria. There is no head bob or walking instructions overlay.
+
+Own-model collisions use the exported mesh. Google context uses transient local ray-sampled contacts; tile data is not exported as collision geometry. Scan holes, roughness, changing detail and unavailable tiles can limit movement. Empty clipped space has no invented walking plane. Include actual floors/site surfaces. Section cuts disable Walk; changing geometry, visibility or active editing tools exits it to keep collision and display coherent. Captures pause movement and preserve the walking eye position. Browser navigation leaves Follow Rhino; it does not turn Follow back on automatically.
 
 ## 7. Display and measurement
 
 - **Materials**, **Clay**, and **Ghost** change viewer appearance without changing Rhino materials.
 - **Section cut** clips the displayed model at a chosen local height.
-- **Hide existing buildings in the footprint** clips map context within the visible sets' bounding footprints, not exact building outlines.
+- **Hide map under model** clips all Google geometry within the union of visible uploaded geometry projected horizontally. Concave outlines, disconnected pieces, and uncovered courtyard holes are preserved. Ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. Coverage follows the exported render mesh within its meshing and raster precision.
 - **Measure** picks two visible surface points and reports distance in metres and feet/inches plus height difference. Press Esc to clear. Photorealistic mesh picking is approximate and is not a survey measurement.
 
 ## 8. Capture images
@@ -125,7 +133,7 @@ The server binds to `127.0.0.1:8765` by default; it is not a public hosting serv
 | Symptom | Check or workaround |
 | --- | --- |
 | Map missing | Check credentials, network access, and service access; Not Now skips tiles |
-| Model missing | Check set visibility, supported geometry, units, anchor, and Go to model; read Rhino command output |
+| Model missing | Check set visibility, supported geometry, units, anchor, and Fit model; read Rhino command output |
 | Model floats or is buried | Check anchor reference/elevation; Re-sample for each new site; inspect surface picked on the map |
 | Wrong orientation | Check EarthAnchorPoint model north and base point; use Edit Location's rotation |
 | Browser says Rhino not reachable | Run EarthLinkViewer; check Rhino is responsive and port 8765 is not occupied by another app |
@@ -135,7 +143,7 @@ The server binds to `127.0.0.1:8765` by default; it is not a public hosting serv
 | Earth Pro model disappears | Re-send with EarthPro enabled to regenerate its retained files |
 | Commands work from source only | Verify the installed package separately; source execution is not an installed-plugin check |
 
-The development handover reported extensive macOS integration tests for internal 0.2.0. The author reports testing the initial public 0.1.0 package. Version 0.1.1 updates release metadata and documentation with the same runtime implementation. Windows and full independent end-to-end validation remain unverified. No claim of map accuracy, survey accuracy, or production readiness is made by the initial-preview label.
+The previous public 0.1.1 release retains the author-tested 0.1.0 runtime. This development preview adds geometry/API/physics and browser fixture tests. Installed-Rhino acceptance, trackpad feel, and Windows integration remain separate checks. Scanned context is not survey data; walking contacts are approximate and may stop at missing surfaces.
 
 ## 13. For an agent assisting a user
 

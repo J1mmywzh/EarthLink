@@ -14,3 +14,11 @@ test('resuming after a long pause does not leap through obstacles',async()=>{con
 test('invalid geometry and unsupported spawn fail explicitly',async()=>{assert.ok(W);await assert.rejects(()=>W.create({schema:1,vertices:[],indices:[]},{feet:[0,0,0]}));});
 test('unknown floor is distinguishable from real support',async()=>{const w=await make();settle(w);assert.equal(w.supportedAt([0,0,0]),true);assert.equal(w.supportedAt([50,50,0]),false);w.free();});
 test('transient map contacts support a person without an invented infinite plane',async()=>{assert.ok(W);const M=require('../shared/viewer/map-contacts.js');const context=await M.sample([0,0,0],async(o,d,max)=>d[2]<0?[o[0],o[1],0]:null);const w=await W.create({schema:1,vertices:[],indices:[]},{context,feet:[0,0,0]});settle(w);assert.ok(w.grounded);assert.equal(w.supportedAt([5,5,0]),false);w.free();});
+test('a jump pulse survives frames shorter than one physics tick',async()=>{const w=await make();settle(w);w.step({jump:true},1/240);let peak=0;for(let i=0;i<240;i++){w.step({},1/240);peak=Math.max(peak,w.feet[2]);}assert.ok(peak>.3);w.free();});
+test('rolling sampled contacts climb ordinary stairs and block a tall step',async()=>{
+ const M=require('../shared/viewer/map-contacts.js'),source=await make(mesh([[.8,-1,0,1,2,.18],[1.8,-1,0,1,2,.36],[2.8,-1,0,1,2,1.2]]),[-5,0,.02]);
+ const ray=async(o,d,max)=>{const r=new source.R.Ray({x:o[0],y:o[1],z:o[2]},{x:d[0],y:d[1],z:d[2]}),h=source.world.castRayAndGetNormal(r,max,true,undefined,undefined,source.collider);return h?o.map((n,i)=>n+d[i]*h.timeOfImpact):null;};
+ let context=await M.sample([0,0,0],ray);const w=await W.create({schema:1,vertices:[],indices:[]},{feet:[0,0,0],context});settle(w);let top=0;
+ for(let i=0;i<240;i++){if(Math.abs(w.feet[0]-context.center[0])>.12){context=await M.sample(w.feet,ray);w.updateContext(context);}w.step({x:1},1/60);top=Math.max(top,w.feet[2]);}
+ assert.ok(top>.32,`stairs climbed: ${top}`);assert.ok(w.feet[0]<2.55,`tall step blocked: ${w.feet[0]}`);w.free();source.free();
+});
