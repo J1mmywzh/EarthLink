@@ -1,0 +1,1277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EarthLink</title>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+  :root {
+    --glass: rgba(246,246,248,.78); --glass-strong: rgba(250,250,252,.92); --fg: #1d1d1f; --fg2: #6e6e73; --fg3: #a1a1a6;
+    --sep: rgba(60,60,67,.14); --fill: rgba(120,120,128,.12); --fill-hover: rgba(120,120,128,.2); --accent: #007aff; --on-accent: #fff;
+    --green: #34c759; --orange: #ff9500; --red: #ff3b30; --shadow: 0 6px 30px rgba(0,0,0,.14), 0 1px 3px rgba(0,0,0,.08); --map: #dfe3e6;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --glass: rgba(36,36,38,.78); --glass-strong: rgba(44,44,46,.94); --fg: #f5f5f7; --fg2: #a1a1a6; --fg3: #6e6e73;
+    --sep: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-hover: rgba(120,120,128,.34); --accent: #0a84ff; --red: #ff453a;
+    --shadow: 0 6px 30px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.3); --map: #1c1d1f; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--map); color: var(--fg);
+    font: 13px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #cesium { width: 100%; height: 100%; }
+  .glass { background: var(--glass); backdrop-filter: saturate(180%) blur(22px); -webkit-backdrop-filter: saturate(180%) blur(22px); box-shadow: var(--shadow); border: .5px solid var(--sep); }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .hide { display: none !important; }
+
+  #sidebar { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 300px; border-radius: 14px; z-index: 5; display: flex; flex-direction: column; overflow: hidden; transition: transform .28s ease, opacity .28s; }
+  #sidebar.hidden { transform: translateX(-330px); opacity: 0; pointer-events: none; }
+  #sideHead { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: center; }
+  #modelName { font-size: 17px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #status { color: var(--fg2); font-size: 12px; }
+  #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); flex: none; margin-top: 2px; }
+  #dot.live { background: var(--green); } #dot.flash { background: var(--orange); }
+  #sideBody { overflow-y: auto; padding: 0 10px 12px; flex: 1; }
+  .group { margin-top: 14px; }
+  .ghead { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 6px; font-size: 13px; font-weight: 650; gap: 6px; }
+  .link { color: var(--accent); font-weight: 500; padding: 2px 4px; border-radius: 6px; }
+  .link:hover { background: var(--fill); }
+  .link.danger { color: var(--red); }
+  .card { background: var(--glass-strong); border-radius: 10px; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-height: 40px; }
+  .item + .item { border-top: .5px solid var(--sep); }
+  .item .ic { width: 28px; height: 28px; border-radius: 50%; background: var(--fill); display: grid; place-items: center; color: var(--accent); flex: none; }
+  .item .grow { flex: 1; min-width: 0; }
+  .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s { color: var(--fg2); font-size: 11.5px; }
+  .item.click { cursor: pointer; } .item.click:hover { background: var(--fill); }
+  .item .acts { display: none; gap: 2px; } .item:hover .acts { display: flex; }
+  .item.off .t { color: var(--fg3); }
+  .mini { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--fg2); }
+  .mini:hover { background: var(--fill-hover); color: var(--fg); }
+  .mini.on { color: var(--accent); }
+  .empty { color: var(--fg2); padding: 12px; text-align: center; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .val { color: var(--fg2); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+  .seg { display: inline-flex; background: var(--fill); border-radius: 8px; padding: 2px; gap: 2px; }
+  .seg button { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--fg); }
+  .seg button.sel { background: var(--glass-strong); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .pill { background: var(--fill); border-radius: 8px; padding: 5px 10px; font-weight: 500; }
+  .pill:hover { background: var(--fill-hover); }
+  .primary { background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 7px 14px; font-weight: 600; }
+  .primary:hover { filter: brightness(1.08); }
+  .primary.danger { background: var(--red); }
+  select, input[type=number], input[type=date], input[type=text], input[type=search] { font: inherit; color: var(--fg); background: var(--fill); border: 0; border-radius: 7px; padding: 5px 8px; outline: none; }
+  select:focus, input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+  input[type=number] { width: 72px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--fill); cursor: pointer; font-size: 12px; font-weight: 500; user-select: none; }
+  .chip input { display: none; }
+  .chip:has(input:checked) { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--fg2); font-size: 12px; }
+  .switch { position: relative; width: 42px; height: 25px; flex: none; }
+  .switch input { display: none; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--fill-hover); transition: background .2s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  .switch input:checked + span { background: var(--green); }
+  .switch input:checked + span::after { transform: translateX(17px); }
+
+  #controls { position: absolute; top: 12px; right: 12px; z-index: 6; display: flex; flex-direction: column; gap: 10px; }
+  .stack { border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  .stack button { width: 40px; height: 40px; display: grid; place-items: center; color: var(--fg); }
+  .stack button + button { border-top: .5px solid var(--sep); }
+  .stack button:hover { background: var(--fill); }
+  .stack button.on { color: var(--accent); }
+
+  #timebar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 6; border-radius: 999px; padding: 8px 16px; display: flex; align-items: center; gap: 12px; width: min(520px, calc(100% - 360px)); min-width: 300px; }
+  #timebar input[type=date] { background: transparent; padding: 2px 0; width: 120px; }
+  #hourLbl { min-width: 44px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #timebar .sun { color: var(--orange); }
+
+  .pop { position: absolute; top: 12px; right: 64px; width: 320px; border-radius: 14px; z-index: 7; padding: 14px 16px 16px; display: none; max-height: calc(100% - 24px); overflow-y: auto; }
+  .pop.open { display: block; }
+  .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
+  .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
+  .pop select, .pop input[type=search] { width: 100%; }
+
+  #frame { position: absolute; border: 1.5px solid var(--accent); border-radius: 2px; box-shadow: 0 0 0 9999px rgba(0,0,0,.28); pointer-events: none; display: none; z-index: 3; }
+  #toast { position: absolute; left: 50%; top: 14px; transform: translate(-50%, -8px); z-index: 30; border-radius: 999px; padding: 8px 16px; max-width: min(640px, calc(100% - 120px)); font-weight: 500; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; text-align: center; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #busy { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; z-index: 20; background: rgba(0,0,0,.12); }
+  #busy .glass { border-radius: 14px; padding: 14px 20px; display: flex; gap: 12px; align-items: center; font-weight: 500; }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--fill-hover); border-top-color: var(--accent); animation: sp .8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .modal { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.25); z-index: 40; }
+  .modal.open { display: flex; }
+  .sheet { width: min(400px, calc(100% - 32px)); border-radius: 16px; padding: 20px 22px; background: var(--glass-strong); }
+  .sheet h2 { margin: 0 0 6px; font-size: 17px; }
+  .sheet p { color: var(--fg2); margin: 0 0 14px; }
+  .sheet label { display: block; font-size: 12px; color: var(--fg2); margin: 10px 0 5px; }
+  .sheet input[type=text] { width: 100%; }
+  #measureLbl { position: absolute; z-index: 8; pointer-events: none; border-radius: 8px; padding: 4px 8px; font-weight: 600; font-variant-numeric: tabular-nums; display: none; }
+  .cesium-viewer-bottom { left: auto !important; right: 12px !important; bottom: 6px !important; }
+  .cesium-widget-credits { left: auto !important; right: 12px !important; bottom: 6px !important; }
+  body.picking .cesium-widget canvas { cursor: crosshair; }
+  body.measuring .cesium-widget canvas { cursor: crosshair; }
+  @media (max-width: 760px) { #sidebar { width: calc(100% - 76px); } #timebar { width: calc(100% - 24px); min-width: 0; bottom: 12px; } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-loc" viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="M9 9h6v6H9z"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-side" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-view" viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 012-2h3M16 4h3a2 2 0 012 2v3M21 15v3a2 2 0 01-2 2h-3M8 20H5a2 2 0 01-2-2v-3"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-rhino" viewBox="0 0 24 24"><path d="M4 18l4-9 4 4 3-7 5 12z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0112 5c6.4 0 10 7 10 7a17 17 0 01-3.2 4.1M6.3 6.3A17 17 0 002 12s3.6 7 10 7a9.6 9.6 0 004.3-1"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
+</svg>
+
+<div id="stage"><div id="cesium"></div></div>
+<div id="frame"></div>
+<div id="measureLbl" class="glass"></div>
+
+<aside id="sidebar" class="glass">
+  <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status">Waiting for Rhino…</div></div></div>
+  <div id="sideBody">
+    <div class="group" id="setsGroup">
+      <div class="ghead">Design Sets <button id="flipSets" class="link" title="Show one set at a time, in turn">Compare</button></div>
+      <div class="card" id="sets"></div>
+    </div>
+    <div class="group">
+      <div class="ghead">Views <button id="addView" class="link">Save View</button></div>
+      <div class="card" id="views"></div>
+    </div>
+    <div class="group">
+      <div class="ghead">Display</div>
+      <div class="card">
+        <div class="item"><div class="seg" id="styleSeg" style="width:100%"><button data-v="materials" style="flex:1">Materials</button><button data-v="clay" style="flex:1">Clay</button><button data-v="ghost" style="flex:1">Ghost</button></div></div>
+        <div class="item" id="ghostRow"><span class="grow">Opacity</span><input type="range" id="ghost" min="0.1" max="0.9" step="0.05" style="width:120px"></div>
+        <div class="item"><span class="grow">Section cut</span><label class="switch"><input type="checkbox" id="sectionOn"><span></span></label></div>
+        <div class="item" id="sectionRow"><input type="range" id="sectionH" min="0" max="1" step="0.001"><span class="val" id="sectionLbl" style="min-width:58px;text-align:right"></span></div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="ghead">Camera</div>
+      <div class="card">
+        <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
+        <div class="item" id="fovRow"><span class="grow">Lens</span><span class="val" id="fovLbl"></span></div>
+        <div class="item" id="fovSlider"><input type="range" id="fov" min="15" max="100" step="1"></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino viewport</div><div class="s">Live, like Enscape</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync named views</div><div class="s">Save in either app, see it in both</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync sun with Rhino</div><div class="s">Same date and time as Rhino's Sun</div></span><label class="switch"><input type="checkbox" id="syncSun"><span></span></label></div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="ghead">Site <button id="editSite" class="link rhinoOnly">Edit Location</button></div>
+      <div class="card">
+        <div class="item"><span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-pin"/></svg></span><span class="grow"><div class="t" id="siteLatLon">—</div><div class="s" id="siteInfo"></div></span></div>
+        <div class="item"><span class="grow">Height adjustment</span><span class="val" id="hval"></span></div>
+        <div class="item"><div class="row" style="gap:6px"><button class="pill" data-n="-1">−1 m</button><button class="pill" data-n="-0.1">−0.1</button><button class="pill" data-n="0.1">+0.1</button><button class="pill" data-n="1">+1 m</button></div></div>
+        <div class="item"><span class="grow s" id="hinfo"></span><button class="link" id="resample">Re-sample</button></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div id="controls">
+  <div class="stack glass"><button id="toggleSide" title="Show or hide the sidebar"><svg class="i"><use href="#i-side"/></svg></button></div>
+  <div class="stack glass">
+    <button id="fly" title="Go to model"><svg class="i"><use href="#i-loc"/></svg></button>
+    <button id="shadows" title="Shadows"><svg class="i"><use href="#i-sun"/></svg></button>
+    <button id="clip" title="Hide existing buildings in the footprint"><svg class="i"><use href="#i-cut"/></svg></button>
+    <button id="measureBtn" title="Measure (click two points, Esc to clear)"><svg class="i"><use href="#i-ruler"/></svg></button>
+  </div>
+  <div class="stack glass"><button id="captureBtn" title="Capture"><svg class="i"><use href="#i-cam"/></svg></button></div>
+</div>
+
+<div id="captureCard" class="glass pop">
+  <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
+  <select id="preset"></select>
+  <div class="row" id="customRow" style="margin-top:8px"><input type="number" id="cw" min="64" step="1"><span class="val">×</span><input type="number" id="ch" min="64" step="1"><span class="val">px</span></div>
+  <div class="lbl">Passes</div>
+  <div class="row">
+    <label class="chip"><input type="checkbox" id="pFull" checked>Full</label>
+    <label class="chip"><input type="checkbox" id="pCtx">Context only</label>
+    <label class="chip"><input type="checkbox" id="pModel">Model · transparent</label>
+  </div>
+  <div class="lbl">Detail</div>
+  <div class="row" style="justify-content:space-between">
+    <div class="seg" id="detailSeg"><button data-v="16">Standard</button><button data-v="8">High</button><button data-v="4">Max</button></div>
+    <label class="chip"><input type="checkbox" id="showFrame">Show frame</label>
+  </div>
+  <div class="lbl">Save</div>
+  <div class="seg" id="saveSeg" style="width:100%"><button data-v="folder" style="flex:1">Default folder</button><button data-v="ask" style="flex:1">Ask each time</button></div>
+  <div class="row" id="folderRow" style="margin-top:8px"><span class="path" id="folderPath"></span><button class="link" id="changeFolder">Change…</button><button class="link" id="openFolder">Show</button></div>
+  <div class="row" style="margin-top:14px; justify-content:space-between">
+    <button class="link rhinoOnly" id="shareBtn" title="Export a self-contained viewer to share">Share…</button>
+    <span class="row"><button class="pill" id="snapAll">All Saved Views</button><button class="primary" id="snap">Capture</button></span>
+  </div>
+</div>
+
+<div id="setCard" class="glass pop">
+  <h3><span>Edit Set</span><button class="mini" data-close="setCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
+  <div class="lbl" style="margin-top:0">Name</div>
+  <form id="setNameForm"><input type="text" id="setName" style="width:100%"></form>
+  <div class="lbl">Display</div>
+  <div class="seg" id="setStyleSeg" style="width:100%"><button data-v="" style="flex:1">Default</button><button data-v="materials" style="flex:1">Materials</button><button data-v="clay" style="flex:1">Clay</button><button data-v="ghost" style="flex:1">Ghost</button></div>
+  <div class="rhinoOnly">
+    <div class="lbl">Position <span class="val" id="moveLbl"></span></div>
+    <div class="row"><label class="chip"><input type="checkbox" id="dragOn">Drag on map</label></div>
+    <div class="row" style="margin-top:8px; gap:6px">
+      <span class="val" style="width:38px">East</span><button class="pill" data-mv="dx" data-d="-1">−1</button><button class="pill" data-mv="dx" data-d="-0.1">−0.1</button><button class="pill" data-mv="dx" data-d="0.1">+0.1</button><button class="pill" data-mv="dx" data-d="1">+1</button>
+    </div>
+    <div class="row" style="margin-top:6px; gap:6px">
+      <span class="val" style="width:38px">North</span><button class="pill" data-mv="dy" data-d="-1">−1</button><button class="pill" data-mv="dy" data-d="-0.1">−0.1</button><button class="pill" data-mv="dy" data-d="0.1">+0.1</button><button class="pill" data-mv="dy" data-d="1">+1</button>
+    </div>
+    <div class="row" style="margin-top:6px; gap:6px">
+      <span class="val" style="width:38px">Up</span><button class="pill" data-mv="dz" data-d="-1">−1</button><button class="pill" data-mv="dz" data-d="-0.1">−0.1</button><button class="pill" data-mv="dz" data-d="0.1">+0.1</button><button class="pill" data-mv="dz" data-d="1">+1</button>
+    </div>
+    <div class="lbl">Rotate <span class="val" id="setRotLbl"></span></div>
+    <input type="range" id="setRot" min="-180" max="180" step="0.5" value="0">
+    <div class="row" style="margin-top:14px; justify-content:flex-end"><button class="pill" id="setReset">Reset</button><button class="primary" id="setApply" disabled>Apply to Rhino</button></div>
+  </div>
+</div>
+
+<div id="siteCard" class="glass pop">
+  <h3><span id="siteTitle">Site Location</span><button class="mini" data-close="siteCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
+  <p class="s" id="siteHelp" style="margin:0 0 10px">Search or enter “lat, lon”, then click the spot where the model's EarthAnchorPoint base point should sit.</p>
+  <form id="searchForm"><input type="search" id="search" placeholder="Search a place, or 42.4405, -76.5108"></form>
+  <div class="lbl">Picked point</div>
+  <div class="t" id="pickedLbl">Click on the map</div>
+  <div class="lbl">Rotate model <span class="val" id="rotLbl"></span></div>
+  <input type="range" id="rot" min="-180" max="180" step="0.5" value="0">
+  <div class="row" style="margin-top:14px; justify-content:flex-end"><button class="pill" id="siteCancel">Cancel</button><button class="primary" id="siteApply" disabled>Apply to Rhino</button></div>
+</div>
+
+<div id="timebar" class="glass">
+  <svg class="i sun"><use href="#i-sun"/></svg>
+  <input type="date" id="date">
+  <input type="range" id="hour" min="300" max="1260" step="5" style="flex:1">
+  <span id="hourLbl"></span>
+</div>
+
+<div id="toast" class="glass"></div>
+<div id="busy"><div class="glass"><div class="spin"></div><span id="busyText">Capturing…</span></div></div>
+
+<div id="keys" class="modal"><div class="sheet glass">
+  <h2>Connect a 3D map</h2>
+  <p>Paste one of these to see photorealistic surroundings. It stays on this computer.</p>
+  <label>Cesium ion access token — free, recommended</label>
+  <input id="itok" type="text" placeholder="eyJ…">
+  <label>or Google Maps Platform API key (Map Tiles API)</label>
+  <input id="gkey" type="text" placeholder="AIza…">
+  <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="pill" id="skip">Not Now</button><button class="primary" id="savekeys">Connect</button></div>
+</div></div>
+
+<div id="ask" class="modal"><div class="sheet glass">
+  <h2 id="askTitle"></h2><p id="askText"></p>
+  <input id="askInput" type="text">
+  <div class="row" style="justify-content:flex-end; margin-top:18px" id="askBtns"></div>
+</div></div>
+
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const store = { get(k) { try { return JSON.parse(localStorage.getItem("earthlink:" + k)); } catch (e) { return null; } },
+                  set(k, v) { try { localStorage.setItem("earthlink:" + k, JSON.stringify(v)); } catch (e) {} } };
+  let toastTimer = null;
+  const msg = (t, ms = 4500) => {
+    const el = $("toast"); clearTimeout(toastTimer);
+    if (!t) { el.classList.remove("show"); return; }
+    el.textContent = t; el.classList.add("show");
+    toastTimer = setTimeout(() => el.classList.remove("show"), ms);
+  };
+  const dark = () => window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+
+  // ---------------------------------------------------------------- in-page dialogs (instead of prompt/confirm)
+  function ask({ title, text = "", value = null, ok = "OK", cancel = "Cancel", danger = false, extra = null }) {
+    return new Promise(res => {
+      $("askTitle").textContent = title; $("askText").textContent = text;
+      $("askInput").classList.toggle("hide", value === null); $("askInput").value = value ?? "";
+      const btns = $("askBtns"); btns.innerHTML = "";
+      const close = v => { $("ask").classList.remove("open"); document.removeEventListener("keydown", key); res(v); };
+      const mk = (label, cls, v) => { const b = document.createElement("button"); b.className = cls; b.textContent = label; b.onclick = () => close(v()); btns.appendChild(b); return b; };
+      mk(cancel, "pill", () => null);
+      if (extra) mk(extra.label, "pill", () => extra.value);
+      mk(ok, "primary" + (danger ? " danger" : ""), () => value === null ? true : $("askInput").value.trim());
+      const key = e => { if (e.key === "Escape") close(null); if (e.key === "Enter") close(value === null ? true : $("askInput").value.trim()); };
+      document.addEventListener("keydown", key);
+      $("ask").classList.add("open");
+      if (value !== null) setTimeout(() => { $("askInput").focus(); $("askInput").select(); }, 30);
+    });
+  }
+
+  // ---------------------------------------------------------------- server (Rhino) or static share
+  const RHINO = await fetch("/api/ping").then(r => r.ok && r.json()).then(j => !!(j && j.earthlink)).catch(() => false);
+  const DATA = RHINO ? "/" : "./";
+  document.querySelectorAll(".rhinoOnly").forEach(el => el.classList.toggle("hide", !RHINO));
+  const api = async (p, body) => {
+    if (RHINO) return fetch(p, body !== undefined ? { method: "POST", headers: { "Content-Type": "application/json", "X-EarthLink": "1" }, body: JSON.stringify(body) } : {}).then(r => r.json());
+    // static share: read-only files; settings kept in this browser
+    if (body !== undefined) { if (p === "/api/settings") store.set("shareSettings", Object.assign(store.get("shareSettings") || {}, body)); return {}; }
+    const file = { "/api/config": "live/share.json", "/api/settings": "live/settings.json", "/api/views": "live/views.json", "/api/meta": "live/meta.json" }[p];
+    if (!file) return {};
+    const j = await fetch(DATA + file).then(r => r.json()).catch(() => ({}));
+    if (p === "/api/settings") Object.assign(j, store.get("shareSettings") || {}, { save_mode: "ask" });
+    if (p === "/api/config" && !j.ion_token && !j.google_key) return store.get("shareKeys") || {};
+    return j;
+  };
+
+  // ---------------------------------------------------------------- map keys
+  let cfg = await api("/api/config");
+  if (!cfg.google_key && !cfg.ion_token && !store.get("skipKeys")) {
+    $("keys").classList.add("open");
+    cfg = await new Promise(res => {
+      $("savekeys").onclick = async () => {
+        const c = { google_key: $("gkey").value.trim(), ion_token: $("itok").value.trim() };
+        if (RHINO) await api("/api/config", c); else store.set("shareKeys", c);
+        res(c);
+      };
+      $("skip").onclick = () => { store.set("skipKeys", true); res({}); };
+    });
+    $("keys").classList.remove("open");
+  }
+  if (cfg.ion_token) Cesium.Ion.defaultAccessToken = cfg.ion_token;
+  if (cfg.google_key) Cesium.GoogleMaps.defaultApiKey = cfg.google_key;
+  const haveTiles = !!(cfg.google_key || cfg.ion_token);
+
+  // ---------------------------------------------------------------- viewer
+  const viewer = new Cesium.Viewer("cesium", {
+    baseLayer: false, baseLayerPicker: false, geocoder: false, timeline: false, animation: false,
+    homeButton: false, sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false,
+    infoBox: false, selectionIndicator: false, shadows: true,
+    contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: true } },
+  });
+  const scene = viewer.scene;
+  scene.globe.baseColor = Cesium.Color.fromCssColorString(dark() ? "#2c2d30" : "#dfe3e6");
+  Object.assign(viewer.shadowMap, { softShadows: true, size: 4096, darkness: 0.35, maximumDistance: 1500 });
+  viewer.clock.shouldAnimate = false;
+
+  let tileset = null;
+  if (haveTiles) {
+    try {
+      tileset = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
+      tileset.shadows = Cesium.ShadowMode.ENABLED;
+      scene.primitives.add(tileset);
+      scene.globe.show = false;
+    } catch (e) { msg("3D tiles failed to load: " + e.message + " — check the token/key (EarthLinkSettings in Rhino).", 9000); }
+  }
+
+  let S = await api("/api/settings");
+  const saveS = patch => { Object.assign(S, patch); api("/api/settings", patch); };
+  let rhinoCam = null;   // last camera Rhino sent (Follow Rhino viewport)
+
+  // segmented control helper
+  const seg = (id, value, onPick) => {
+    const btns = [...$(id).querySelectorAll("button")];
+    const sel = v => btns.forEach(b => b.classList.toggle("sel", b.dataset.v === String(v)));
+    btns.forEach(b => b.onclick = () => { sel(b.dataset.v); onPick(b.dataset.v); });
+    sel(value); return sel;
+  };
+
+  // ---------------------------------------------------------------- sun (two-way with Rhino's Sun)
+  const localISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  $("date").value = store.get("date") || localISO(new Date());
+  $("hour").value = store.get("hour") ?? 900;
+  let sunPost = null;
+  function applySun(fromRhino = false) {
+    const m = +$("hour").value, hh = String(Math.floor(m / 60)).padStart(2, "0"), mm = String(m % 60).padStart(2, "0");
+    $("hourLbl").textContent = `${hh}:${mm}`;
+    const d = new Date(`${$("date").value}T${hh}:${mm}:00`);
+    if (isNaN(d)) return;
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(d);
+    store.set("date", $("date").value); store.set("hour", m);
+    if (!fromRhino && RHINO && S.sync_sun !== false) {
+      clearTimeout(sunPost);
+      sunPost = setTimeout(() => api("/api/sun", { utc: d.toISOString().slice(0, 19) + "Z", tz: -d.getTimezoneOffset() }), 400);
+    }
+  }
+  function sunFromUtc(utc) {
+    const d = new Date(utc); if (isNaN(d)) return;
+    $("date").value = localISO(d); $("hour").value = d.getHours() * 60 + d.getMinutes();
+    applySun(true);
+  }
+  $("date").oninput = $("hour").oninput = () => applySun(false);
+  applySun(true);
+  if (RHINO && S.sync_sun !== false) { const sj = await api("/api/sun"); if (sj && sj.utc) sunFromUtc(sj.utc); }   // start from the shared sun, whoever set it last
+  const applyShadows = () => { viewer.shadows = !!S.shadows; $("shadows").classList.toggle("on", !!S.shadows); };
+  $("shadows").onclick = () => { saveS({ shadows: !S.shadows }); applyShadows(); };
+  applyShadows();
+
+  // ---------------------------------------------------------------- lens & projection (perspective / two-point / parallel)
+  // Two-point keeps the camera axis level and shifts the lens (like a shift lens), so verticals stay vertical.
+  // Cesium measures lens offsets at its near plane, which changes per frame, so the shift is kept as a ratio.
+  (() => {
+    const PF = Cesium.PerspectiveFrustum.prototype;
+    if (PF.__elPatched) return;
+    PF.__elPatched = true;
+    Object.defineProperty(PF, "yOffset", { configurable: true,
+      get() { return this._elShift ? this.near * this._elShift : (this._elYOff || 0); },
+      set(v) { this._elYOff = v; } });
+    const clone = PF.clone;
+    PF.clone = function (result) { const r = clone.call(this, result); r._elShift = this._elShift; return r; };
+  })();
+  let projection = "perspective";
+  const aspect = () => scene.canvas.width / Math.max(1, scene.canvas.height);
+  const isOrtho = () => viewer.camera.frustum instanceof Cesium.OrthographicFrustum;
+  const vfov = () => isOrtho() ? null : viewer.camera.frustum.fovy;
+  // picking must follow the shifted lens too (orbit pivot, measure, site picking)
+  const getPickRay = viewer.camera.getPickRay.bind(viewer.camera);
+  viewer.camera.getPickRay = (pos, result) => {
+    const ray = getPickRay(pos, result), c = viewer.camera, k = c.frustum._elShift;
+    if (!ray || isOrtho() || !k) return ray;
+    const d = ray.direction, dd = Cesium.Cartesian3.dot(d, c.directionWC);
+    Cesium.Cartesian3.multiplyByScalar(d, 1 / dd, d);
+    Cesium.Cartesian3.add(d, Cesium.Cartesian3.multiplyByScalar(c.upWC, k, new Cesium.Cartesian3()), d);
+    Cesium.Cartesian3.normalize(d, d);
+    return ray;
+  };
+  function setVfov(rad) {
+    if (isOrtho() || !rad) return;
+    const a = aspect();
+    viewer.camera.frustum.fov = a > 1 ? 2 * Math.atan(Math.tan(rad / 2) * a) : rad;   // Cesium's fov is the wider axis
+    showFov();
+  }
+  function getLens() {
+    const f = viewer.camera.frustum, a = aspect();
+    if (isOrtho()) return { projection: "parallel", half_height: a > 1 ? f.width / 2 / a : f.width / 2 };
+    const L = { projection, vfov: f.fovy };
+    if (projection === "two_point") L.shift = f._elShift || 0;
+    return L;
+  }
+  function setLens(L) {
+    if (L.projection === "parallel") {
+      if (!isOrtho()) viewer.camera.switchToOrthographicFrustum();
+      const a = aspect(), hh = L.half_height || 50;
+      viewer.camera.frustum.width = a > 1 ? 2 * hh * a : 2 * hh;
+    } else {
+      if (isOrtho()) viewer.camera.switchToPerspectiveFrustum();
+      viewer.camera.frustum._elShift = L.projection === "two_point" ? (L.shift || 0) : 0;
+      setVfov(L.vfov);
+    }
+    projection = L.projection || "perspective";
+    showFov();
+  }
+  let selProj = () => {};
+  function setProjection(p) {
+    const c = viewer.camera, f = c.frustum;
+    if (p === projection) return;
+    if (projection === "two_point" && !isOrtho()) {   // fold the lens shift back into the camera pitch
+      const total = Math.atan(f._elShift || 0) + c.pitch; f._elShift = 0;
+      c.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: total, roll: 0 } });
+    }
+    if (p === "parallel") {
+      const bs = modelsSphere(), dist = bs ? Cesium.Cartesian3.distance(c.positionWC, bs.center) : 100;
+      setLens({ projection: "parallel", half_height: Math.max(1, dist * Math.tan((vfov() || 0.7) / 2)) });
+    } else {
+      setLens({ projection: p, vfov: isOrtho() ? 0.7 : vfov(), shift: 0 });
+      if (p === "two_point") {
+        const c2 = viewer.camera; c2.frustum._elShift = Math.tan(c2.pitch);
+        c2.setView({ destination: c2.positionWC.clone(), orientation: { heading: c2.heading, pitch: 0, roll: 0 } });
+      }
+    }
+    selProj(p);
+  }
+  scene.preRender.addEventListener(() => {   // keep two-point level while orbiting
+    if (projection !== "two_point" || isOrtho()) return;
+    const c = viewer.camera, f = c.frustum;
+    if (Math.abs(c.pitch) > 1e-6 || Math.abs(c.roll) > 1e-6) {
+      const lim = Cesium.Math.toRadians(80);
+      f._elShift = Math.tan(Math.max(-lim, Math.min(lim, Math.atan(f._elShift || 0) + c.pitch)));
+      c.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: 0, roll: 0 } });
+    }
+  });
+  function showFov() {
+    $("fovRow").classList.toggle("hide", isOrtho()); $("fovSlider").classList.toggle("hide", isOrtho());
+    if (isOrtho()) return;
+    const v = vfov(), deg = Cesium.Math.toDegrees(v);
+    $("fov").value = Math.round(deg);
+    $("fovLbl").textContent = `${deg.toFixed(0)}° · ${(12 / Math.tan(v / 2)).toFixed(0)} mm`;   // 35 mm equivalent (24 mm frame height)
+  }
+  $("fov").oninput = () => setVfov(Cesium.Math.toRadians(+$("fov").value));
+  let keepL = null;
+  window.addEventListener("resize", () => { keepL = keepL ?? getLens(); setTimeout(() => { setLens(keepL); keepL = null; drawFrame(); }, 60); });
+
+  // ---------------------------------------------------------------- placement
+  let meta = null;             // live/meta.json: { project, name, anchor, sets: {name: {glb, bbox_m, ...}} }
+  const models = {};           // set name -> Cesium.Model
+  let flewOnce = false, preview = null;   // preview = { lat, lon, h, rot } while editing the site location
+  const anchor = () => (meta && meta.anchor) || null;
+  function baseHeight() {
+    const a = anchor(); if (!a) return 0;
+    let h;
+    if (a.zero === "MeanSeaLevel") h = a.elev + (S.geoid_offset ?? -33.5);
+    else if (a.zero === "GroundLevel") h = (S.ground_h ?? 0) + a.elev;
+    else h = a.elev;
+    return h + (S.nudge || 0);
+  }
+  function frame() {
+    const a = anchor();
+    if (preview) {
+      const M = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(preview.lon, preview.lat, preview.h));
+      return Cesium.Matrix4.multiply(M, Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(-preview.rot))), new Cesium.Matrix4());
+    }
+    return Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(a.lon, a.lat, baseHeight()));
+  }
+  const visibleSets = () => Object.keys(models).filter(n => models[n].show);
+  function modelsSphere(names = visibleSets()) {
+    const ss = names.map(n => models[n] && models[n].boundingSphere).filter(Boolean);
+    return ss.length ? Cesium.BoundingSphere.fromBoundingSpheres(ss) : null;
+  }
+  function showSite() {
+    const a = anchor();
+    $("hval").textContent = (S.nudge >= 0 ? "+" : "") + (S.nudge || 0).toFixed(2) + " m";
+    if (!a) { $("siteLatLon").textContent = "No site location yet"; $("siteInfo").textContent = ""; return; }
+    $("siteLatLon").textContent = `${a.lat.toFixed(6)}, ${a.lon.toFixed(6)}`;
+    const rot = ((90 - a.north) % 360 + 360) % 360;
+    $("siteInfo").textContent = `${a.zero === "GroundLevel" ? "ground" : a.zero === "MeanSeaLevel" ? "sea level" : a.zero} ${a.elev} m · model turned ${rot.toFixed(1)}°`;
+    $("hinfo").textContent = a.zero === "MeanSeaLevel" ? `geoid offset ${S.geoid_offset} m`
+      : a.zero === "GroundLevel" ? `ground ${S.ground_h == null ? "not sampled" : S.ground_h.toFixed(2) + " m"}` : "";
+  }
+
+  async function tilesSettled(maxMs) {
+    const t0 = Date.now(); await sleep(300);
+    while (Date.now() - t0 < maxMs) {
+      if (!tileset || !tileset.show || tileset.tilesLoaded) { await sleep(250); if (!tileset || !tileset.show || tileset.tilesLoaded) return true; }
+      await sleep(200);
+    }
+    return false;
+  }
+  async function sampleGround(force) {
+    const a = anchor();
+    if (!a || a.zero !== "GroundLevel" || !tileset) return;
+    if (S.ground_h != null && !force) return;
+    msg("Sampling ground height…");
+    const wasClip = tileset.clippingPolygons ? tileset.clippingPolygons.enabled : false;
+    if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false;
+    try {
+      await tilesSettled(8000);
+      // the anchor plus a ring just outside every footprint; the median ignores a stray roof or tree
+      const pts = [Cesium.Cartographic.fromDegrees(a.lon, a.lat)];
+      const M = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(a.lon, a.lat, 0));
+      for (const s of Object.values(meta.sets || {})) {
+        if (!s.bbox_m) continue;
+        const [mn, mx] = s.bbox_m, g = 3;
+        for (let i = 0; i < 12; i++) {
+          const t = i / 12, x = mn[0] - g + (mx[0] - mn[0] + 2 * g) * (i < 6 ? t * 2 : 1 - (t - 0.5) * 2), y = i < 6 ? mn[1] - g : mx[1] + g;
+          pts.push(Cesium.Cartographic.fromCartesian(Cesium.Matrix4.multiplyByPoint(M, new Cesium.Cartesian3(x, y, 0), new Cesium.Cartesian3())));
+        }
+      }
+      const hs = (await scene.sampleHeightMostDetailed(pts, Object.values(models))).map(c => c && c.height).filter(Number.isFinite).sort((x, y) => x - y);
+      if (hs.length) { saveS({ ground_h: hs[Math.floor(hs.length / 2)] }); msg(""); }
+      else msg("No ground found around the site — use the height buttons.");
+    } catch (e) { msg("Ground sampling failed: " + e.message); }
+    if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = wasClip;
+    placeModels(); showSite();
+  }
+  // per-set move preview (metres east/north/up, clockwise degrees about the set's base centre) until Rhino applies it
+  const offsets = {};
+  function offsetMatrix(n) {
+    const o = offsets[n]; if (!o) return Cesium.Matrix4.IDENTITY;
+    const p = new Cesium.Cartesian3(...o.pivot);
+    const T = Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(o.dx, o.dy, o.dz));
+    const R = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(-o.rot)));
+    const Tp = Cesium.Matrix4.fromTranslation(p), Tn = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.negate(p, new Cesium.Cartesian3()));
+    return [T, Tp, R, Tn].reduce((a, b) => Cesium.Matrix4.multiply(a, b, new Cesium.Matrix4()));
+  }
+  function placeModels() {
+    if (!anchor()) return;
+    const M = frame();
+    for (const [n, m] of Object.entries(models)) m.modelMatrix = Cesium.Matrix4.multiply(M, offsetMatrix(n), new Cesium.Matrix4());
+    applyClip(); applySection();
+    if (rhinoCam && $("follow").checked) applyView(rhinoCam, 0);   // the site frame moved: keep Rhino's view on the model
+  }
+
+  function applyClip() {
+    $("clip").classList.toggle("on", !!S.clip);
+    if (!tileset || !anchor()) return;
+    if (!S.clip) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; return; }
+    const g = S.clip_margin ?? 1, M = frame();
+    const polys = visibleSets().filter(n => meta.sets[n] && meta.sets[n].bbox_m).map(n => {
+      const [mn, mx] = meta.sets[n].bbox_m, Mn = Cesium.Matrix4.multiply(M, offsetMatrix(n), new Cesium.Matrix4());
+      return new Cesium.ClippingPolygon({ positions: [[mn[0] - g, mn[1] - g], [mx[0] + g, mn[1] - g], [mx[0] + g, mx[1] + g], [mn[0] - g, mx[1] + g]]
+        .map(([x, y]) => Cesium.Matrix4.multiplyByPoint(Mn, new Cesium.Cartesian3(x, y, mn[2]), new Cesium.Cartesian3())) });
+    });
+    if (polys.length) tileset.clippingPolygons = new Cesium.ClippingPolygonCollection({ polygons: polys });
+    else if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false;
+  }
+
+  // ---------------------------------------------------------------- display style & section
+  const hidden = () => new Set(S.hidden_sets || []);
+  function styleModel(m, n) {
+    const st = (n && (S.set_styles || {})[n]) || S.style || "materials";
+    if (st === "clay") { m.color = Cesium.Color.fromCssColorString("#f2f1ec"); m.colorBlendMode = Cesium.ColorBlendMode.REPLACE; }
+    else if (st === "ghost") { m.color = Cesium.Color.WHITE.withAlpha(+(S.ghost ?? 0.45)); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
+    else { m.color = Cesium.Color.WHITE; m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
+  }
+  const restyle = () => {
+    Object.entries(models).forEach(([n, m]) => styleModel(m, n));
+    const anyGhost = [S.style, ...Object.values(S.set_styles || {})].includes("ghost");
+    $("ghostRow").classList.toggle("hide", !anyGhost);
+  };
+  seg("styleSeg", S.style || "materials", v => { saveS({ style: v }); restyle(); });
+  $("ghost").value = S.ghost ?? 0.45;
+  $("ghost").oninput = () => { S.ghost = +$("ghost").value; restyle(); };
+  $("ghost").onchange = () => saveS({ ghost: +$("ghost").value });
+
+  function zRange() {
+    let lo = Infinity, hi = -Infinity;
+    for (const n of visibleSets()) { const b = meta.sets[n] && meta.sets[n].bbox_m; if (b) { lo = Math.min(lo, b[0][2]); hi = Math.max(hi, b[1][2]); } }
+    return isFinite(lo) ? [lo, hi] : [0, 10];
+  }
+  function applySection() {
+    const on = $("sectionOn").checked;
+    $("sectionRow").classList.toggle("hide", !on);
+    const [lo, hi] = zRange(), h = lo + (hi - lo) * +$("sectionH").value;
+    $("sectionLbl").textContent = `${h.toFixed(2)} m`;
+    for (const m of Object.values(models)) {
+      m.clippingPlanes = on ? new Cesium.ClippingPlaneCollection({ planes: [new Cesium.ClippingPlane(new Cesium.Cartesian3(0, 0, -1), h)],
+        edgeWidth: 1.5, edgeColor: Cesium.Color.fromCssColorString("#ff3b30") }) : undefined;
+    }
+  }
+  $("sectionH").value = 0.5;
+  $("sectionOn").onchange = applySection; $("sectionH").oninput = applySection;
+
+  // ---------------------------------------------------------------- design sets
+  async function loadMeta(m) {
+    const first = !meta;
+    const projectChanged = meta && meta.project !== m.project;
+    meta = m;
+    $("dot").className = "flash";
+    $("modelName").textContent = m.name || "EarthLink";
+    const names = Object.keys(m.sets || {});
+    $("status").textContent = `${names.length} set${names.length === 1 ? "" : "s"} · version ${m.version} · ${String(m.sent_at || "").slice(11, 16)}`;
+    if (!projectChanged) for (const n of Object.keys(models)) {     // renamed sets: same file, new name - keep the loaded model
+      if (names.includes(n)) continue;
+      const nn = names.find(k => !models[k] && m.sets[k].glb === (models[n]._elGlb || ""));
+      if (nn) { models[nn] = models[n]; delete models[n]; if (offsets[n]) { offsets[nn] = offsets[n]; delete offsets[n]; } if (editing === n) editing = nn; }
+    }
+    for (const n of Object.keys(models)) if (!names.includes(n) || projectChanged) { scene.primitives.remove(models[n]); delete models[n]; delete offsets[n]; }
+    for (const n of names) {
+      const s = m.sets[n];
+      if (models[n] && models[n]._elVersion === s.version) continue;
+      try {
+        const next = await Cesium.Model.fromGltfAsync({ url: `${DATA}live/${s.glb}?v=${s.version}`, modelMatrix: frame(),
+          shadows: Cesium.ShadowMode.ENABLED, forwardAxis: Cesium.Axis.X });   // Rhino glTF is already east/north/up
+        next._elVersion = s.version; next._elGlb = s.glb;
+        scene.primitives.add(next);
+        await new Promise(r => { if (next.ready) return r(); const off = next.readyEvent.addEventListener(() => { off(); r(); }); setTimeout(r, 15000); });
+        if (models[n]) scene.primitives.remove(models[n]);
+        models[n] = next;
+        if (offsets[n] && offsets[n].applied) delete offsets[n];   // Rhino moved the geometry; the preview is now real
+      } catch (e) { msg(`Could not load “${n}”: ${e.message}`); }
+    }
+    const hid = hidden();
+    for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
+    renderSets(); placeModels(); showSite(); if (editing) showSetCard();
+    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(); sampleGround(false); refreshViews(); }
+    setTimeout(() => $("dot").className = "live", 400);
+  }
+  function renderSets() {
+    const names = meta ? Object.keys(meta.sets || {}) : [];
+    $("setsGroup").classList.toggle("hide", names.length === 0);
+    $("flipSets").classList.toggle("hide", names.length < 2);
+    $("sets").innerHTML = "";
+    const hid = hidden();
+    for (const n of names) {
+      const s = meta.sets[n], el = document.createElement("div");
+      el.className = "item" + (hid.has(n) ? " off" : "");
+      el.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-cube"/></svg></span>` +
+        `<span class="grow"><div class="t">${esc(n)}</div><div class="s">${s.objects} object${s.objects === 1 ? "" : "s"} · v${s.version}${s.live ? " · live" : ""}</div></span>` +
+        `<span class="acts"><button class="mini" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
+        (RHINO ? `<button class="mini" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") + `</span>` +
+        `<button class="mini ${hid.has(n) ? "" : "on"}" title="Show / hide"><svg class="i" style="width:16px;height:16px"><use href="#${hid.has(n) ? "i-eyeoff" : "i-eye"}"/></svg></button>`;
+      const btns = el.querySelectorAll("button"), eye = btns[btns.length - 1];
+      eye.onclick = () => setHidden(n, !hidden().has(n));
+      btns[0].onclick = () => openSetCard(n);
+      if (offsets[n]) el.querySelector(".s").textContent += " · moved, not applied";
+      if (RHINO) btns[1].onclick = async () => {
+        if (await ask({ title: `Remove “${n}”?`, text: "It disappears from EarthLink. The geometry in Rhino is not touched.", ok: "Remove", danger: true })) {
+          await api("/api/sets", { op: "delete", name: n });
+        }
+      };
+      $("sets").appendChild(el);
+    }
+  }
+  function setHidden(n, h) {
+    const hid = hidden(); h ? hid.add(n) : hid.delete(n);
+    saveS({ hidden_sets: [...hid] });
+    if (models[n]) models[n].show = !h;
+    renderSets(); applyClip(); applySection();
+  }
+  $("flipSets").onclick = () => {   // compare: solo each set in turn
+    const names = Object.keys(meta.sets || {}); if (names.length < 2) return;
+    const vis = names.filter(n => !hidden().has(n));
+    const next = vis.length === 1 ? names[(names.indexOf(vis[0]) + 1) % names.length] : names[0];
+    saveS({ hidden_sets: names.filter(n => n !== next) });
+    names.forEach(n => models[n] && (models[n].show = n === next));
+    renderSets(); applyClip(); applySection(); msg(`Showing “${next}”`, 1800);
+  };
+
+  function flyTo() {
+    const bs = modelsSphere(); if (!bs) return;
+    viewer.camera.flyToBoundingSphere(bs, { duration: flewOnce ? 1.2 : 0, offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(30), Cesium.Math.toRadians(-25), bs.radius * 3.2) });
+    flewOnce = true;
+  }
+  function restoreCamera() {
+    const c = store.get("camera"); if (!c) return false;
+    viewer.camera.setView({ destination: new Cesium.Cartesian3(c.x, c.y, c.z), orientation: { heading: c.h, pitch: c.p, roll: c.r } });
+    return true;
+  }
+  viewer.camera.moveEnd.addEventListener(() => {
+    const p = viewer.camera.positionWC;
+    store.set("camera", { x: p.x, y: p.y, z: p.z, h: viewer.camera.heading, p: viewer.camera.pitch, r: viewer.camera.roll });
+  });
+
+  // ---------------------------------------------------------------- named views
+  let views = [];
+  const toLocal = (M, v, isDir) => {
+    const inv = Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4());
+    const r = isDir ? Cesium.Matrix4.multiplyByPointAsVector(inv, v, new Cesium.Cartesian3()) : Cesium.Matrix4.multiplyByPoint(inv, v, new Cesium.Cartesian3());
+    return [r.x, r.y, r.z];
+  };
+  const toWorld = (M, a, isDir) => {
+    const v = new Cesium.Cartesian3(a[0], a[1], a[2]);
+    return isDir ? Cesium.Matrix4.multiplyByPointAsVector(M, v, new Cesium.Cartesian3()) : Cesium.Matrix4.multiplyByPoint(M, v, new Cesium.Cartesian3());
+  };
+  function captureCamera(name) {
+    const M = frame(), c = viewer.camera;
+    return { name, source: "viewer", pos: toLocal(M, c.positionWC), dir: toLocal(M, c.directionWC, true), up: toLocal(M, c.upWC, true),
+             ...getLens(), date: $("date").value, minutes: +$("hour").value, saved_at: new Date().toISOString() };
+  }
+  function applyView(v, duration = 1.0) {
+    if (!anchor()) return;
+    const M = frame();
+    if (v.date) $("date").value = v.date;
+    if (v.minutes != null) $("hour").value = v.minutes;
+    if (v.date || v.minutes != null) applySun(false);
+    const p = v.projection || "perspective";
+    const dest = toWorld(M, v.pos),
+          direction = Cesium.Cartesian3.normalize(toWorld(M, v.dir, true), new Cesium.Cartesian3()),
+          up = Cesium.Cartesian3.normalize(toWorld(M, v.up, true), new Cesium.Cartesian3());
+    const finish = () => { setLens({ ...v, projection: p }); selProj(p); };
+    if (p === "perspective" && duration && !isOrtho() && projection === "perspective") {
+      viewer.camera.flyTo({ destination: dest, orientation: { direction, up }, duration, complete: finish });
+    } else {
+      if (projection === "two_point" && !isOrtho()) viewer.camera.frustum._elShift = 0;
+      projection = p;
+      viewer.camera.setView({ destination: dest, orientation: { direction, up } });
+      finish();
+    }
+  }
+  async function refreshViews() {
+    views = (await api("/api/views")).views || [];
+    $("views").innerHTML = views.length ? "" : `<div class="empty">No saved views yet</div>`;
+    const PN = { perspective: "Perspective", two_point: "Two-Point", parallel: "Parallel" };
+    for (const v of views) {
+      const li = document.createElement("div");
+      li.className = "item click";
+      const t = v.minutes != null ? `${String(Math.floor(v.minutes / 60)).padStart(2, "0")}:${String(v.minutes % 60).padStart(2, "0")}` : "";
+      const sub = [PN[v.projection || "perspective"], t, v.source === "rhino" ? "from Rhino" : ""].filter(Boolean).join(" · ");
+      li.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#${v.source === "rhino" ? "i-rhino" : "i-view"}"/></svg></span>` +
+        `<span class="grow"><div class="t">${esc(v.name)}</div><div class="s">${esc(sub)}</div></span>` +
+        (RHINO ? `<span class="acts"><button class="mini" title="Rename"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
+        `<button class="mini" title="Replace with the current camera"><svg class="i" style="width:14px;height:14px"><use href="#i-redo"/></svg></button>` +
+        `<button class="mini" title="Delete"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></span>` : "");
+      li.onclick = () => applyView(v);
+      if (RHINO) {
+        const [ren, upd, del] = li.querySelectorAll("button");
+        ren.onclick = async e => { e.stopPropagation();
+          const nn = await ask({ title: "Rename View", text: S.sync_views !== false ? "The Rhino named view is renamed too." : "", value: v.name, ok: "Rename" });
+          if (!nn || nn === v.name) return;
+          const r = await api("/api/views", { op: "rename", name: v.name, new: nn });
+          if (r.error) return msg(r.error);
+          refreshViews(); };
+        upd.onclick = async e => { e.stopPropagation(); await api("/api/views", { op: "put", view: captureCamera(v.name) }); refreshViews(); msg(`Updated “${v.name}”`); };
+        del.onclick = async e => { e.stopPropagation();
+          if (await ask({ title: `Delete “${v.name}”?`, text: S.sync_views !== false ? "It is also removed from Rhino's named views." : "", ok: "Delete", danger: true })) {
+            await api("/api/views", { op: "delete", name: v.name }); refreshViews(); } };
+      }
+      $("views").appendChild(li);
+    }
+  }
+  $("addView").classList.toggle("hide", !RHINO);
+  $("addView").onclick = async () => {
+    if (!anchor()) return msg("Send a model from Rhino first.");
+    const name = await ask({ title: "Save View", text: "Saves the camera, lens and sun time" + (S.sync_views !== false ? ", and adds it to Rhino's named views." : "."), value: `View ${views.length + 1}`, ok: "Save" });
+    if (!name) return;
+    await api("/api/views", { op: "put", view: captureCamera(name) });
+    refreshViews(); msg(`Saved “${name}”`);
+  };
+
+  // ---------------------------------------------------------------- site location (writes Rhino's EarthAnchorPoint)
+  let pickReq = RHINO ? await api("/api/pick") : {};
+  let picking = false, picked = null, marker = null;
+  const geocoder = cfg.ion_token ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE }) : null;
+  function openSite(first) {
+    picking = true; picked = null; $("rot").value = 0; $("rotLbl").textContent = "0°";
+    document.body.classList.add("picking");
+    $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
+    $("siteHelp").textContent = (first ? "This file has no site location yet. " : "") + "Click the spot where the model's EarthAnchorPoint base point should sit — search a place first, or type exact “lat, lon” to pick that point." +
+      (geocoder ? "" : " (Place search needs a Cesium ion token.)");
+    $("pickedLbl").textContent = first || !anchor() ? "Click on the map" : "Current location — click to move";
+    $("siteApply").disabled = true;
+    closePops("siteCard"); $("siteCard").classList.add("open");
+  }
+  function closeSite() {
+    picking = false; picked = null; preview = null; document.body.classList.remove("picking");
+    if (marker) { viewer.entities.remove(marker); marker = null; }
+    $("siteCard").classList.remove("open"); placeModels();
+  }
+  function setPicked(lat, lon, h) {
+    picked = { lat, lon, h };
+    $("pickedLbl").textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    if (marker) viewer.entities.remove(marker);
+    marker = viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, h), point: { pixelSize: 11, color: Cesium.Color.fromCssColorString("#0a84ff"), outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY } });
+    updatePreview();
+  }
+  function updatePreview() {
+    const rot = +$("rot").value; $("rotLbl").textContent = `${rot.toFixed(1)}°`;
+    if (!picked && !anchor()) return;
+    const a = anchor();
+    preview = picked ? { lat: picked.lat, lon: picked.lon, h: picked.h, rot } : { lat: a.lat, lon: a.lon, h: baseHeight(), rot };
+    placeModels();
+    $("siteApply").disabled = !(picked || rot);
+  }
+  $("rot").oninput = updatePreview;
+  $("editSite").onclick = () => openSite(false);
+  $("siteCancel").onclick = closeSite;
+  $("searchForm").onsubmit = async e => {
+    e.preventDefault();
+    const q = $("search").value.trim(); if (!q) return;
+    const ll = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (ll) {
+      const lat = +ll[1], lon = +ll[2];
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return msg("That is not a valid “lat, lon”.");
+      viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lon, lat, 600), duration: 1.5 });
+      if (picking) {   // exact coordinates: that is the picked point (ground height sampled from the 3D map)
+        let h = 0;
+        try {
+          const [c] = await scene.sampleHeightMostDetailed([Cesium.Cartographic.fromDegrees(lon, lat)], Object.values(models));
+          if (c && Number.isFinite(c.height)) h = c.height;
+        } catch (err) { /* no 3D map: ground height 0 */ }
+        setPicked(lat, lon, h);
+      }
+      return;
+    }
+    if (!geocoder) return msg("Place search needs a Cesium ion token — enter “lat, lon” instead.");
+    try {
+      const res = await geocoder.geocode(q);
+      if (!res.length) return msg("No place found.");
+      viewer.camera.flyTo({ destination: res[0].destination, duration: 1.5 });
+      msg(res[0].displayName, 3000);
+    } catch (err) { msg("Search failed: " + err.message); }
+  };
+  $("siteApply").onclick = async () => {
+    const body = { rotate: +$("rot").value || 0 };
+    if (picked) Object.assign(body, { lat: picked.lat, lon: picked.lon, ground_h: picked.h });
+    const r = await api("/api/anchor", body);
+    if (r.error) return msg(r.error);
+    msg("Sent to Rhino — the EarthAnchorPoint updates and the model is re-sent.", 6000);
+    closeSite();
+  };
+
+  // ---------------------------------------------------------------- edit a design set: rename, display, move
+  let editing = null, dragging = null;
+  const selSetStyle = seg("setStyleSeg", "", v => {
+    const st = Object.assign({}, S.set_styles || {});
+    if (v) st[editing] = v; else delete st[editing];
+    saveS({ set_styles: st }); restyle();
+  });
+  function setPivot(n) {
+    const b = meta.sets[n] && meta.sets[n].bbox_m;
+    return b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, b[0][2]] : [0, 0, 0];
+  }
+  const ensureOffset = n => offsets[n] || (offsets[n] = { dx: 0, dy: 0, dz: 0, rot: 0, pivot: setPivot(n) });
+  function showSetCard() {
+    if (!editing || !meta.sets[editing]) return closeSetCard();
+    $("setName").value = editing;
+    selSetStyle((S.set_styles || {})[editing] || "");
+    const o = offsets[editing] || { dx: 0, dy: 0, dz: 0, rot: 0 };
+    $("moveLbl").textContent = `E ${o.dx.toFixed(2)} · N ${o.dy.toFixed(2)} · Up ${o.dz.toFixed(2)} m`;
+    $("setRot").value = o.rot; $("setRotLbl").textContent = `${(+o.rot).toFixed(1)}°`;
+    $("setApply").disabled = !(o.dx || o.dy || o.dz || o.rot) || o.applied;
+  }
+  function openSetCard(n) { editing = n; closePops("setCard"); $("setCard").classList.add("open"); showSetCard(); }
+  function closeSetCard() {
+    editing = null; setDrag(false);
+    $("setCard").classList.remove("open");
+  }
+  let renaming = false;
+  async function renameSet() {
+    const nn = $("setName").value.trim();
+    if (renaming || !editing || !nn || nn === editing) return;
+    if (!RHINO) { $("setName").value = editing; return msg("Renaming needs Rhino."); }
+    renaming = true;
+    const old = editing;
+    const r = await api("/api/sets", { op: "rename", name: old, new: nn });
+    renaming = false;
+    if (r.error) { $("setName").value = old; return msg(r.error); }
+    msg(`Renamed to “${nn}” — in Rhino too`);
+  }
+  $("setNameForm").onsubmit = e => { e.preventDefault(); renameSet(); $("setName").blur(); };
+  $("setName").onblur = renameSet;
+  const moved = () => { placeModels(); renderSets(); showSetCard(); };
+  document.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => {
+    const o = ensureOffset(editing); o.applied = false;
+    o[b.dataset.mv] = Math.round((o[b.dataset.mv] + +b.dataset.d) * 100) / 100; moved();
+  });
+  $("setRot").oninput = () => { const o = ensureOffset(editing); o.applied = false; o.rot = +$("setRot").value; moved(); };
+  $("setReset").onclick = () => { delete offsets[editing]; moved(); };
+  $("setApply").onclick = async () => {
+    const o = offsets[editing]; if (!o) return;
+    const r = await api("/api/sets", { op: "move", name: editing, dx: o.dx, dy: o.dy, dz: o.dz, rot: o.rot, pivot: o.pivot });
+    if (r.error) return msg(r.error);
+    o.applied = true; showSetCard();
+    msg(`Moving “${editing}” in Rhino — Undo there reverts it`, 5000);
+  };
+  const setDrag = on => {   // while on, dragging anywhere moves the set; map navigation pauses
+    $("dragOn").checked = on;
+    document.body.classList.toggle("picking", on);
+    scene.screenSpaceCameraController.enableInputs = !on;
+  };
+  $("dragOn").onchange = () => { setDrag($("dragOn").checked); if ($("dragOn").checked) msg("Drag to move the set — switch Drag off to navigate again", 3500); };
+  function groundPoint(pos, z) {   // where the mouse ray meets the horizontal plane at local height z
+    const M = frame(), ray = viewer.camera.getPickRay(pos);
+    const origin = Cesium.Matrix4.multiplyByPoint(M, new Cesium.Cartesian3(0, 0, z), new Cesium.Cartesian3());
+    const normal = Cesium.Matrix4.multiplyByPointAsVector(M, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3());
+    const hit = ray && Cesium.IntersectionTests.rayPlane(ray, Cesium.Plane.fromPointNormal(origin, Cesium.Cartesian3.normalize(normal, normal)));
+    if (!hit) return null;
+    const inv = Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4());
+    return Cesium.Matrix4.multiplyByPoint(inv, hit, new Cesium.Cartesian3());
+  }
+
+  // ---------------------------------------------------------------- measure
+  let measuring = false, mPts = [], mEnt = null;
+  function clearMeasure() { mPts = []; if (mEnt) { viewer.entities.remove(mEnt); mEnt = null; } $("measureLbl").style.display = "none"; }
+  $("measureBtn").onclick = () => {
+    measuring = !measuring; $("measureBtn").classList.toggle("on", measuring); document.body.classList.toggle("measuring", measuring);
+    if (!measuring) clearMeasure(); else msg("Click two points to measure — Esc to clear", 2500);
+  };
+  function fmtLen(m) {
+    const ft = m / 0.3048, f = Math.floor(ft), inch = Math.round((ft - f) * 12);
+    return `${m.toFixed(2)} m · ${f}′ ${inch}″`;
+  }
+
+  // ---------------------------------------------------------------- clicks (site picking, measuring)
+  const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+  handler.setInputAction(e => {
+    if (!picking && !measuring) return;
+    const p = scene.pickPositionSupported ? scene.pickPosition(e.position) : undefined;
+    if (!p) return msg("Click on the map surface");
+    if (picking) {
+      const c = Cesium.Cartographic.fromCartesian(p);
+      setPicked(Cesium.Math.toDegrees(c.latitude), Cesium.Math.toDegrees(c.longitude), c.height);
+      return;
+    }
+    if (mPts.length >= 2) clearMeasure();
+    mPts.push(p);
+    if (mPts.length === 1) {
+      mEnt = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(() => mPts, false), width: 3,
+        material: Cesium.Color.fromCssColorString("#0a84ff"), depthFailMaterial: Cesium.Color.fromCssColorString("#0a84ff").withAlpha(0.4) } });
+    } else {
+      const d = Cesium.Cartesian3.distance(mPts[0], mPts[1]);
+      const c0 = Cesium.Cartographic.fromCartesian(mPts[0]), c1 = Cesium.Cartographic.fromCartesian(mPts[1]);
+      const mid = Cesium.Cartesian3.midpoint(mPts[0], mPts[1], new Cesium.Cartesian3());
+      const s = scene.cartesianToCanvasCoordinates(mid);
+      $("measureLbl").innerHTML = `${fmtLen(d)}<div class="s">Δh ${(c1.height - c0.height).toFixed(2)} m</div>`;
+      if (s) Object.assign($("measureLbl").style, { display: "block", left: s.x + 10 + "px", top: s.y - 10 + "px" });
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  scene.postRender.addEventListener(() => {
+    if (mPts.length === 2 && $("measureLbl").style.display === "block") {
+      const s = scene.cartesianToCanvasCoordinates(Cesium.Cartesian3.midpoint(mPts[0], mPts[1], new Cesium.Cartesian3()));
+      if (s) Object.assign($("measureLbl").style, { left: s.x + 10 + "px", top: s.y - 10 + "px" });
+    }
+  });
+  handler.setInputAction(e => {
+    if (!editing || !$("dragOn").checked) return;
+    const o = ensureOffset(editing), p = groundPoint(e.position, o.pivot[2] + o.dz);
+    if (!p) return;
+    dragging = { start: p, dx: o.dx, dy: o.dy };
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  handler.setInputAction(e => {
+    if (!dragging) return;
+    const o = offsets[editing], p = groundPoint(e.endPosition, o.pivot[2] + o.dz);
+    if (!p) return;
+    o.dx = Math.round((dragging.dx + p.x - dragging.start.x) * 100) / 100;
+    o.dy = Math.round((dragging.dy + p.y - dragging.start.y) * 100) / 100;
+    o.applied = false; placeModels(); showSetCard();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  handler.setInputAction(() => {
+    if (!dragging) return;
+    dragging = null; renderSets();
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) clearMeasure(); if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); } });
+
+  // ---------------------------------------------------------------- capture
+  let detail = store.get("detail") ?? 8;
+  const PRESETS = [
+    ["HD 1920 × 1080", 1920, 1080], ["QHD 2560 × 1440", 2560, 1440], ["4K 3840 × 2160", 3840, 2160],
+    ["Square 2048 × 2048", 2048, 2048], ["Portrait 2160 × 3840", 2160, 3840],
+    ["A3 landscape 200 dpi · 3307 × 2339", 3307, 2339], ["Match window", 0, 0], ["Custom…", -1, -1],
+  ];
+  PRESETS.forEach(([t], i) => $("preset").add(new Option(t, i)));
+  $("preset").value = store.get("preset") ?? 0;
+  $("cw").value = store.get("cw") ?? 3000; $("ch").value = store.get("ch") ?? 2000;
+  function targetSize() {
+    const p = PRESETS[+$("preset").value];
+    if (p[1] === -1) return [Math.max(64, +$("cw").value | 0), Math.max(64, +$("ch").value | 0)];
+    if (p[1] === 0) return [scene.canvas.width, scene.canvas.height];
+    return [p[1], p[2]];
+  }
+  function fitBox(w, h) {
+    const W = window.innerWidth, H = window.innerHeight, a = w / h;
+    let cw = W, ch = W / a; if (ch > H) { ch = H; cw = H * a; }
+    return [Math.floor(cw), Math.floor(ch)];
+  }
+  function drawFrame() {
+    const f = $("frame");
+    if (!$("showFrame").checked) { f.style.display = "none"; return; }
+    const [w, h] = targetSize(), [cw, ch] = fitBox(w, h);
+    Object.assign(f.style, { display: "block", width: cw + "px", height: ch + "px", left: (window.innerWidth - cw) / 2 + "px", top: (window.innerHeight - ch) / 2 + "px" });
+  }
+  function syncCaptureUi() {
+    $("customRow").classList.toggle("hide", PRESETS[+$("preset").value][1] !== -1);
+    store.set("preset", +$("preset").value); store.set("cw", +$("cw").value); store.set("ch", +$("ch").value);
+    drawFrame();
+  }
+  ["preset", "cw", "ch"].forEach(id => $(id).oninput = syncCaptureUi);
+  $("showFrame").onchange = drawFrame; syncCaptureUi();
+  seg("detailSeg", detail, v => { detail = +v; store.set("detail", detail); });
+
+  const frameDone = () => new Promise(r => { const off = scene.postRender.addEventListener(() => { off(); r(); }); scene.requestRender(); });
+  async function renderPass(w, h, pass) {
+    const keep = { models: Object.fromEntries(Object.entries(models).map(([n, m]) => [n, m.show])), tiles: tileset ? tileset.show : null,
+      globe: scene.globe.show, sky: scene.skyBox ? scene.skyBox.show : null, atmo: scene.skyAtmosphere ? scene.skyAtmosphere.show : null,
+      sun: scene.sun ? scene.sun.show : null, moon: scene.moon ? scene.moon.show : null, bg: scene.backgroundColor.clone(),
+      measure: mEnt ? mEnt.show : null };
+    if (mEnt) mEnt.show = false;
+    if (pass === "context") Object.values(models).forEach(m => m.show = false);
+    if (pass === "model") {
+      if (tileset) tileset.show = false;
+      scene.globe.show = false;
+      ["skyBox", "skyAtmosphere", "sun", "moon"].forEach(k => scene[k] && (scene[k].show = false));
+      scene.backgroundColor = Cesium.Color.TRANSPARENT;
+    }
+    try {
+      await frameDone(); await frameDone();
+      await tilesSettled(pass === "model" ? 1000 : 45000);
+      await frameDone();
+      const out = document.createElement("canvas"); out.width = w; out.height = h;
+      out.getContext("2d").drawImage(scene.canvas, 0, 0, w, h);
+      return out.toDataURL("image/png");
+    } finally {
+      Object.entries(keep.models).forEach(([n, s]) => models[n] && (models[n].show = s));
+      if (tileset) tileset.show = keep.tiles;
+      scene.globe.show = keep.globe;
+      if (scene.skyBox) scene.skyBox.show = keep.sky;
+      if (scene.skyAtmosphere) scene.skyAtmosphere.show = keep.atmo;
+      if (scene.sun) scene.sun.show = keep.sun;
+      if (scene.moon) scene.moon.show = keep.moon;
+      scene.backgroundColor = keep.bg;
+      if (mEnt) mEnt.show = keep.measure;
+    }
+  }
+
+  const selectedPasses = () => [["full", $("pFull").checked], ["context", $("pCtx").checked], ["model", $("pModel").checked]].filter(p => p[1]).map(p => p[0]);
+  const safe = s => String(s).replace(/[^A-Za-z0-9 _.-]/g, "_").replace(/^[ ._]+|[ ._]+$/g, "").slice(0, 60) || "untitled";
+  const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+  const fileName = (view, pass, w, h) => `${safe(meta ? meta.name : "model")}_${safe(view || "view")}_${pass}_${w}x${h}_${stamp()}.png`;
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  function pngWithText(dataUrl, key, text) {   // camera embedded as a PNG text chunk, so it travels with the image
+    const bin = atob(dataUrl.split(",")[1]), png = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) png[i] = bin.charCodeAt(i);
+    const enc = new TextEncoder(), body = enc.encode(key + "\0" + text), type = enc.encode("tEXt");
+    const chunk = new Uint8Array(12 + body.length), dv = new DataView(chunk.buffer);
+    dv.setUint32(0, body.length); chunk.set(type, 4); chunk.set(body, 8);
+    const crcIn = new Uint8Array(4 + body.length); crcIn.set(type, 0); crcIn.set(body, 4);
+    dv.setUint32(8 + body.length, crc32(crcIn));
+    const out = new Uint8Array(png.length + chunk.length);
+    out.set(png.subarray(0, 33), 0); out.set(chunk, 33); out.set(png.subarray(33), 33 + chunk.length);
+    return out;
+  }
+  const toDataUrl = bytes => { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return "data:image/png;base64," + btoa(s); };
+
+  async function makeSink(count) {
+    if (RHINO && (S.save_mode || "folder") === "folder") {
+      return { kind: "folder", async save(bytes, info) {
+        const r = await api("/api/snapshot", { view: info.view, pass: info.pass, width: info.w, height: info.h, png: toDataUrl(bytes), camera: info.camera });
+        if (r.error) throw new Error(r.error);
+        return r.file;
+      } };
+    }
+    if (count === 1 && window.showSaveFilePicker) {   // pickers must open straight from the click
+      const [w, h] = targetSize();
+      const handle = await window.showSaveFilePicker({ id: "earthlink", suggestedName: fileName(null, selectedPasses()[0], w, h),
+        types: [{ description: "PNG image", accept: { "image/png": [".png"] } }] });
+      return { kind: "file", async save(bytes) { const f = await handle.createWritable(); await f.write(bytes); await f.close(); return handle.name; } };
+    }
+    if (window.showDirectoryPicker) {
+      const dir = await window.showDirectoryPicker({ id: "earthlink", mode: "readwrite" });
+      return { kind: "dir", async save(bytes, info) {
+        const name = fileName(info.view, info.pass, info.w, info.h);
+        const fh = await dir.getFileHandle(name, { create: true }); const f = await fh.createWritable(); await f.write(bytes); await f.close();
+        return `${dir.name}/${name}`;
+      } };
+    }
+    return { kind: "download", async save(bytes, info) {   // Safari / Firefox: the browser's own downloads
+      const name = fileName(info.view, info.pass, info.w, info.h), url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+      const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000); await sleep(400);
+      return name;
+    } };
+  }
+
+  async function capture(viewName, sink) {
+    const [w, h] = targetSize(), passes = selectedPasses();
+    if (!passes.length) { msg("Pick at least one pass."); return []; }
+    const maxRb = scene.context.maximumRenderbufferSize || 8192;
+    if (w > maxRb || h > maxRb) { msg(`This browser/GPU renders up to ${maxRb}px per side.`); return []; }
+    const stage = $("cesium"), [cw, ch] = fitBox(w, h), lens = getLens();
+    const keepScale = viewer.resolutionScale, keepSSE = tileset ? tileset.maximumScreenSpaceError : null;
+    stage.style.width = cw + "px"; stage.style.height = ch + "px";
+    viewer.resolutionScale = w / cw;
+    if (tileset) tileset.maximumScreenSpaceError = detail;
+    viewer.resize(); setLens(lens);
+    const saved = [];
+    try {
+      const cam = captureCamera(viewName || "Current view");
+      for (const pass of passes) {
+        $("busyText").textContent = `Capturing ${viewName ? "“" + viewName + "” · " : ""}${pass} · ${w}×${h}…`;
+        const png = await renderPass(w, h, pass);
+        const camera = { ...cam, pass, width: w, height: h, anchor: anchor(), model: meta.name, sets: visibleSets(),
+                         frame: "pos/dir/up in metres east/north/up from the Rhino EarthAnchorPoint; vfov = vertical field of view (rad)" };
+        saved.push(await sink.save(pngWithText(png, "EarthLink", JSON.stringify(camera)), { view: viewName || "view", pass, w, h, camera }));
+      }
+    } finally {
+      stage.style.width = ""; stage.style.height = "";
+      viewer.resolutionScale = keepScale;
+      if (tileset) tileset.maximumScreenSpaceError = keepSSE;
+      viewer.resize(); setLens(lens);
+    }
+    return saved;
+  }
+  async function runCapture(list) {
+    if (!anchor()) return msg("Send a model from Rhino first.");
+    if (!selectedPasses().length) return msg("Pick at least one pass.");
+    let sink;
+    try { sink = await makeSink(selectedPasses().length * (list ? list.length : 1)); }
+    catch (e) { if (e.name !== "AbortError") msg("Could not open the save dialog: " + e.message); return; }
+    $("busy").style.display = "flex"; $("snap").disabled = $("snapAll").disabled = true;
+    const files = [];
+    try {
+      if (!list) files.push(...await capture(null, sink));
+      else for (const v of list) { applyView(v, 0); await sleep(150); files.push(...await capture(v.name, sink)); }
+      msg(files.length ? `Saved ${files.length} image(s)${sink.kind === "download" ? " to your browser's downloads" : ""} — ${files[files.length - 1]}` : "");
+    } catch (e) { msg("Capture failed: " + e.message); }
+    $("busy").style.display = "none"; $("snap").disabled = $("snapAll").disabled = false;
+  }
+  $("snap").onclick = () => runCapture(null);
+  $("snapAll").onclick = () => views.length ? runCapture(views) : msg("Save some views first.");
+
+  const selSave = seg("saveSeg", RHINO ? (S.save_mode || "folder") : "ask", v => {
+    saveS({ save_mode: v }); showSaveUi();
+    if (v === "ask" && !window.showSaveFilePicker) msg("This browser can't open a save dialog for pages — images go to its Downloads (set the browser to ask). Chrome and Edge show the dialog.", 7000);
+  });
+  function showSaveUi() {
+    $("saveSeg").classList.toggle("hide", !RHINO);
+    selSave(RHINO ? (S.save_mode || "folder") : "ask");
+    $("folderRow").classList.toggle("hide", !RHINO || (S.save_mode || "folder") !== "folder");
+    $("folderPath").textContent = S.snapshot_dir || ""; $("folderPath").title = S.snapshot_dir || "";
+  }
+  $("changeFolder").onclick = async () => {
+    msg("Choose a folder in the dialog…", 15000);
+    const r = await api("/api/choose_folder", {});
+    S.snapshot_dir = r.snapshot_dir; showSaveUi();
+    msg(r.changed ? "Default folder updated." : "");
+  };
+  $("openFolder").onclick = () => api("/api/open_snapshots", {});
+  $("shareBtn").onclick = async () => {
+    const embed = await ask({ title: "Share this scheme", text: "Exports a folder (zip) with this viewer, the current sets and views, to put on any static web host. Include your map token so visitors don't need one? If you do, restrict the token to that site in Cesium ion.",
+      ok: "Without token", extra: { label: "Include token", value: "embed" } });
+    if (!embed) return;
+    const r = await api("/api/export_share", { embed_token: embed === "embed" });
+    if (r.error) return msg(r.error);
+    msg("Saved " + r.file, 7000); api("/api/open_snapshots", {});
+  };
+  showSaveUi();
+
+  // ---------------------------------------------------------------- panels, toggles
+  const closePops = except => document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); });
+  const toggleCapture = open => { closePops("captureCard"); $("captureCard").classList.toggle("open", open); $("captureBtn").classList.toggle("on", open); if (!open) { $("showFrame").checked = false; drawFrame(); } };
+  $("captureBtn").onclick = () => toggleCapture(!$("captureCard").classList.contains("open"));
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.dataset.close === "siteCard" ? closeSite() : b.dataset.close === "setCard" ? closeSetCard() : toggleCapture(false));
+  const setSide = h => { $("sidebar").classList.toggle("hidden", h); $("toggleSide").classList.toggle("on", !h); store.set("sideHidden", h); };
+  $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
+  setSide(!!store.get("sideHidden"));
+  $("fly").onclick = flyTo;
+  $("clip").onclick = () => { saveS({ clip: !S.clip }); applyClip(); if (!tileset) msg("Clipping applies to the 3D map — connect a token first."); };
+  $("resample").onclick = () => sampleGround(true);
+  document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
+  selProj = seg("projSeg", "perspective", v => setProjection(v));
+  $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
+  // the three link switches can also be changed from Rhino (EarthLinkSync): pick that up without a reload
+  let toggledAt = 0;
+  async function syncToggles() {
+    if (!RHINO || Date.now() - toggledAt < 3000) return;
+    const s = await api("/api/settings").catch(() => null); if (!s || typeof s !== "object") return;
+    Object.assign(S, { link_viewport: !!s.link_viewport, sync_views: s.sync_views !== false, sync_sun: s.sync_sun !== false });
+    $("follow").checked = S.link_viewport; $("syncViews").checked = S.sync_views; $("syncSun").checked = S.sync_sun;
+  }
+  window.addEventListener("focus", syncToggles);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncToggles(); });
+  ["follow", "syncViews", "syncSun"].forEach(id => $(id).addEventListener("change", () => { toggledAt = Date.now(); }));
+  $("follow").onchange = async () => {
+    saveS({ link_viewport: $("follow").checked });
+    msg($("follow").checked ? "Following Rhino's active viewport" : "Free camera");
+    if ($("follow").checked && anchor()) { const c = await api("/api/camera"); if (c && c.pos) applyView(c, 0); }
+  };
+  $("syncViews").onchange = () => saveS({ sync_views: $("syncViews").checked });
+  $("syncSun").onchange = () => { saveS({ sync_sun: $("syncSun").checked }); if ($("syncSun").checked) applySun(false); };
+  restyle(); showSite(); showFov();
+
+  window.EL = { viewer, models, offsets, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, capture, applyView, captureCamera, refreshViews, setProjection, ask };
+
+  // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
+  if (RHINO) {
+    const es = new EventSource("/events");
+    es.addEventListener("model", e => { const m = JSON.parse(e.data); if (m && m.sets && (!meta || m.version !== meta.version)) loadMeta(m); });
+    es.addEventListener("views", () => refreshViews());
+    es.addEventListener("camera", async e => {
+      if (!$("follow").checked) await syncToggles();   // Rhino only sends its camera while following is on
+      rhinoCam = JSON.parse(e.data);
+      if ($("follow").checked && anchor()) applyView(rhinoCam, 0);
+    });
+    es.addEventListener("sun", e => { const j = JSON.parse(e.data); if (j.source === "rhino" && S.sync_sun !== false) sunFromUtc(j.utc); });
+    es.addEventListener("pick", e => { pickReq = JSON.parse(e.data) || {}; if (pickReq.project) openSite(true); });
+    es.onopen = () => { $("dot").className = "live"; if (!meta) $("status").textContent = "Connected — run SendToEarth in Rhino."; };
+    es.onerror = () => { $("dot").className = ""; $("status").textContent = "Rhino not reachable — run EarthLinkViewer in Rhino."; };
+    if (pickReq && pickReq.project) openSite(true);
+    else if (!(await api("/api/meta")).sets) refreshViews();
+  } else {
+    $("status").textContent = "Shared view";
+    const m = await api("/api/meta"); if (m.sets) loadMeta(m);
+  }
+})();
+</script>
+</body>
+</html>

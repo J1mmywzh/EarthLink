@@ -1,0 +1,32 @@
+name: checks
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.9" }       # Rhino 8 ships CPython 3.9
+      - run: pip install pytest
+      - run: python -m compileall -q earthlink commands tools
+      - run: python -m pytest -q tests
+  viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.9" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install playwright@1.48.2 && npx playwright install --with-deps chromium
+      - name: start a test server and load the viewer
+        shell: bash
+        run: |
+          export HOME=$RUNNER_TEMP/home EARTHLINK_PORT=8765
+          python -c "import sys; sys.path.insert(0,'.'); from tests.fixtures import make_live; make_live('$RUNNER_TEMP/home')"
+          python earthlink/server.py --viewer shared/viewer --port 8765 &
+          sleep 2
+          node tests/viewer_smoke.mjs http://127.0.0.1:8765/
