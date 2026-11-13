@@ -447,7 +447,6 @@
     ts.enableCollision = false;                           // navigation.js alone moves the camera
     scene.primitives.add(ts);
     watchMap(ts);
-    ts.allTilesLoaded.addEventListener(() => { try { refreshSkirt(); } catch { /* still starting up */ } });
     return ts;
   }
   // Cesium never asks again for a map tile whose request failed (Wi-Fi drop, waking from sleep, a rate limit),
@@ -695,8 +694,7 @@
     if (!a || a.zero !== "GroundLevel" || !tileset) return;
     if (S.ground_h != null && !force) return;
     msg("Sampling ground height…");
-    const wasClip = tileset.clippingPolygons ? tileset.clippingPolygons.enabled : false;
-    if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false;
+    cutPause(true);                                      // measure the map as it is, not as it is graded
     try {
       await tilesSettled(8000);
       // the anchor plus a ring just outside every footprint; the median ignores a stray roof or tree
@@ -715,7 +713,7 @@
       if (hs.length) { saveS({ ground_h: hs[Math.floor(hs.length / 2)] }); msg(""); }
       else msg("No ground found. Adjust Height.");
     } catch (e) { msg("Ground sampling failed: " + e.message); }
-    if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = wasClip;
+    cutPause(false);
     placeModels(); showSite();
   }
   /* EarthLink placement: where a set sits on the map, on top of its position in Rhino.
@@ -747,7 +745,7 @@
   // While a set is being moved or turned, the map cut-out waits: rebuilding it on every mouse move stalls the page.
   let adjustTimer = 0, adjustingNow = false;
   function adjusting() {
-    if (!adjustingNow) { adjustingNow = true; if (tileset?.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); }
+    if (!adjustingNow) { adjustingNow = true; cutPause(true); }   // the map is whole while a set moves
     clearTimeout(adjustTimer);
     adjustTimer = setTimeout(() => { adjustingNow = false; applyClip(); }, 350);
   }
@@ -773,16 +771,22 @@
     return [a[0] + p.t[0] - c[0], a[1] + p.t[1] - c[1], p.t[2]];
   }
 
-  let clipKey = "";
-  const CUT_MARGIN = 0.4;   // m the map is cut back beyond a set's base, so its ragged cut edge stays clear of the model
-  let skirt = null, skirtTimer = 0, skirtState = null;
+  /* "Hide map underneath": the map itself is reshaped on the GPU (a custom shader on the map tiles). Inside a cut
+     set's base the map is not drawn. Around it, within CUT.reach metres, the ground is graded to the base's level,
+     so the map's own pixels meet the model: no gap, no separate patch, nothing photographed. Trees and buildings
+     more than CUT.high above or below the base keep their height. It is a presentation fill, not survey data.
+     One mask in the site's frame (east, north) carries per texel: R how much to grade (1 at the base, 0 at
+     CUT.reach), G inside the base, B + A the base's height in cm above mask.h0 (16 bit). */
+  const CUT = { reach: 3, high: 4, fade: 4, under: 0.03, px: 20, max: 2048 };
+  let clipKey = "", cut = null, mapShader = null, cutPaused = false;
+  const mapTint = new Cesium.Cartesian3(1, 1, 1);         // the map's colour by time of day (see applyDaylight)
   const geometryJobs=new Map();
   function footprintJob(mesh) {
     return new Promise((resolve,reject)=>{
       const worker=new Worker("./footprint-worker.js"), timer=setTimeout(()=>finish(null,Error("Cutout took too long")),30000);
       const finish=(value,error)=>{clearTimeout(timer);worker.terminate();error?reject(error):resolve(value);};
       worker.onmessage=e=>e.data.error?finish(null,Error(e.data.error)):finish(e.data);
-      worker.onerror=()=>finish(null,Error("Cutout unavailable"));worker.postMessage({mesh,margin:CUT_MARGIN});
+      worker.onerror=()=>finish(null,Error("Cutout unavailable"));worker.postMessage({mesh,margin:0});
     });
   }
   async function loadDerived(name,model,entry) {
@@ -795,7 +799,7 @@
     try {
       const data=await geometryJobs.get(key);
       if(models[name]!==model||meta?.sets?.[name]?.geometry!==entry.geometry)return;
-      model._elGeometry=data.mesh;model._elFootprints=data.polygons;model._elRings=data.rings;model._elBase=data.base;clipKey="";applyClip();
+      model._elGeometry=data.mesh;model._elRings=data.rings;model._elBase=data.base;clipKey="";applyClip();
     } catch(error) {if(models[name]===model){model._elGeometryError=error.message;if(clipped().has(name))msg("Cutout unavailable. Resend the model.");}}
     while(geometryJobs.size>12)geometryJobs.delete(geometryJobs.keys().next().value);
   }
@@ -809,131 +813,132 @@
     if (on && !tileset) msg("Connect a map first.");
     else if (on && !meta?.sets?.[n]?.geometry) msg("Resend this set to hide the map underneath.");
   }
-  function applyClip() {
-    if (!tileset || !anchor() || adjustingNow) return;
-    const visible=cutSets(),M=frame();
-    if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); return; }
-    const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,placementOf(n).rot,placementOf(n).t]),Array.from({length:16},(_,i)=>M[i])]);
-    if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;if(!skirt)scheduleSkirt();return;}
-    const polygons=[];
-    for(const name of visible){
-      const model=models[name];if(!model?._elFootprints)continue;
-      const matrix=Cesium.Matrix4.multiply(M,placementMatrix(name),new Cesium.Matrix4());
-      for(const ring of model._elFootprints)polygons.push(new Cesium.ClippingPolygon({positions:ring.map(([x,y])=>Cesium.Matrix4.multiplyByPoint(matrix,new Cesium.Cartesian3(x,y,0),new Cesium.Cartesian3()))}));
-    }
-    if(polygons.length>4096){if(tileset.clippingPolygons)tileset.clippingPolygons.enabled=false;return msg("Cutout is too complex.");}
-    if(!Cesium.ClippingPolygonCollection.isSupported(scene)){return msg("Cutout is unavailable in this browser.");}
-    const previous=tileset.clippingPolygons;
-    tileset.clippingPolygons=polygons.length?new Cesium.ClippingPolygonCollection({polygons}):undefined;
-    if(previous&&!previous.isDestroyed())previous.destroy();
-    clipKey=key;
-    dropSkirt(); scheduleSkirt();
+  // The shader every map tile is drawn with: the cut (when a mask is set) and the colour of the time of day.
+  function mapShaderFor(ts) {
+    if (mapShader && ts.customShader === mapShader) return mapShader;
+    const blank = () => new Cesium.TextureUniform({ typedArray: new Uint8Array(4), width: 1, height: 1 });
+    const sh = new Cesium.CustomShader({
+      uniforms: {
+        u_mask: { type: Cesium.UniformType.SAMPLER_2D, value: blank() },
+        u_eyeToSite: { type: Cesium.UniformType.MAT4, value: Cesium.Matrix4.IDENTITY.clone() },
+        u_upEC: { type: Cesium.UniformType.VEC3, value: new Cesium.Cartesian3(0, 0, 1) },
+        u_rect: { type: Cesium.UniformType.VEC4, value: new Cesium.Cartesian4(0, 0, 1, 0) },   // x0, y0, size (m), h0
+        u_cut: { type: Cesium.UniformType.VEC4, value: new Cesium.Cartesian4(0, CUT.under, CUT.high, CUT.fade) },   // on, under, high, fade
+        u_texel: { type: Cesium.UniformType.FLOAT, value: 1 },
+        u_tint: { type: Cesium.UniformType.VEC3, value: mapTint },
+      },
+      varyings: { v_site: Cesium.VaryingType.VEC2 },
+      vertexShaderText: `
+        void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {
+          v_site = vec2(-1.0);
+          if (u_cut.x < 0.5) return;
+          vec3 s = (u_eyeToSite * (czm_modelView * vec4(vsOutput.positionMC, 1.0))).xyz;
+          v_site = (s.xy - u_rect.xy) / u_rect.z;
+          if (v_site.x <= 0.0 || v_site.x >= 1.0 || v_site.y <= 0.0 || v_site.y >= 1.0) return;
+          float w = texture(u_mask, v_site).r;
+          if (w <= 0.0) return;
+          vec4 h = texture(u_mask, (floor(v_site * u_texel) + 0.5) / u_texel);          // the height: one texel, not a blend
+          float base = u_rect.w + (h.b * 255.0 * 256.0 + h.a * 255.0) * 0.01 - u_cut.y;
+          float dz = base - s.z;
+          w *= 1.0 - smoothstep(u_cut.z, u_cut.z + u_cut.w, abs(dz));
+          vsOutput.positionMC += normalize((czm_inverseModelView * vec4(u_upEC, 0.0)).xyz) * dz * w;
+        }`,
+      fragmentShaderText: `
+        void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+          if (u_cut.x > 0.5 && v_site.x > 0.0 && v_site.x < 1.0 && v_site.y > 0.0 && v_site.y < 1.0 && texture(u_mask, v_site).g > 0.98) discard;
+          material.diffuse *= u_tint;
+        }`,
+    });
+    // Each pass draws with its own camera (the sun's, for shadows): take the matrices from the pass being drawn.
+    const us = scene.context.uniformState, m4 = new Cesium.Matrix4(), v3 = new Cesium.Cartesian3();
+    sh.uniformMap.u_eyeToSite = () => (cut ? Cesium.Matrix4.multiply(cut.inv, us.inverseView, m4) : Cesium.Matrix4.IDENTITY);
+    sh.uniformMap.u_upEC = () => (cut ? Cesium.Matrix4.multiplyByPointAsVector(us.view, cut.up, v3) : Cesium.Cartesian3.UNIT_Z);
+    ts.customShader = mapShader = sh;
+    return sh;
   }
-
-  /* The band that joins the cut map to the model. Around each cut set's base, the map's ground is redrawn from a
-     top-down picture of it: flat from 3 m outside the base to 0.1 m from it (so the cut's ragged edge cannot be
-     seen), then its last pixels are stretched down or up to the base's own level. No black gap, whichever is
-     higher. It is a presentation fill, not survey data. */
-  const SKIRT = { reach: CUT_MARGIN + 2.6, lip: 0.1, inset: 0.15, step: 2, under: 0.05, maxStep: 3 };   // steps over 3 m are trees or buildings, not ground
-  function dropSkirt() { clearTimeout(skirtTimer); if (skirt) { scene.primitives.remove(skirt); skirt = null; scene.requestRender(); } skirtState = null; }
-  function scheduleSkirt() { clearTimeout(skirtTimer); skirtTimer = setTimeout(buildSkirt, 250); }
-  function refreshSkirt() {                              // map detail arrived: rebuild if the band was made from less
-    if (!tileset || !cutSets().length || !skirtState) return;
-    const d = Cesium.Cartesian3.distance(viewer.camera.positionWC, skirtState.centre);
-    if (!skirtState.loaded || d < skirtState.distance / 2) scheduleSkirt();
+  function cutPause(on) {                                 // draw (and measure) the map whole for a moment
+    cutPaused = on;
+    if (mapShader) { mapShader.uniforms.u_cut.value.x = cut && !on ? 1 : 0; scene.requestRender(); }
   }
-  function buildSkirt() {
-    if (!tileset || !anchor() || document.hidden) return;
-    const C3 = Cesium.Cartesian3, M = frame(), sets = cutSets().filter(n => models[n]?._elRings?.length);
-    if (!sets.length) return dropSkirt();
-    const up = C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, C3.UNIT_Z, new C3()), new C3()), down = C3.negate(up, new C3());
-    const world = (m, x, y, z) => Cesium.Matrix4.multiplyByPoint(m, new C3(x, y, z), new C3());
-    const inv = Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4());
-    const pos = [], flat = [], idx = [];                 // world positions; plan position (anchor frame) of each vertex's colour
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  function buildCutMask(sets, M) {
+    const shapes = [];                                   // per set: rings in the site frame, and the base's height there
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, hMin = Infinity;
     for (const name of sets) {
-      const model = models[name], z0 = model._elBase || 0, S2W = Cesium.Matrix4.multiply(M, placementMatrix(name), new Cesium.Matrix4());
-      for (const ring of model._elRings) {
-        const pts = [];                                  // the ring, with a point at least every SKIRT.step metres
-        for (let i = 0; i < ring.length; i++) {
-          const a = ring[i], b = ring[(i + 1) % ring.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SKIRT.step));
-          for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
-        }
-        const first = pos.length / 3, n = pts.length, outer = [], lip = [], inner = [], rise = [];
-        for (let i = 0; i < n; i++) {
-          const p = pts[i], a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
-          const e1 = [p[0] - a[0], p[1] - a[1]], e2 = [b[0] - p[0], b[1] - p[1]], l1 = Math.hypot(...e1) || 1, l2 = Math.hypot(...e2) || 1;
-          const n1 = [e1[1] / l1, -e1[0] / l1], n2 = [e2[1] / l2, -e2[0] / l2];      // outward: the base is on the left
-          let m = [n1[0] + n2[0], n1[1] + n2[1]]; const ml = Math.hypot(...m);
-          m = ml > 1e-6 ? [m[0] / ml, m[1] / ml] : n1;
-          const k = 1 / Math.max(0.5, m[0] * n1[0] + m[1] * n1[1]);                  // mitre, limited at sharp corners
-          const o = world(S2W, p[0] + m[0] * SKIRT.reach * k, p[1] + m[1] * SKIRT.reach * k, z0);
-          outer.push(o); lip.push(world(S2W, p[0] + m[0] * SKIRT.lip * k, p[1] + m[1] * SKIRT.lip * k, z0)); inner.push(world(S2W, p[0] - m[0] * SKIRT.inset * k, p[1] - m[1] * SKIRT.inset * k, z0 - 0.02));
-          const d = mapPick(new Cesium.Ray(C3.add(o, C3.multiplyByScalar(up, 300, new C3()), new C3()), down), 600);
-          const h = d === null ? NaN : 300 - d;
-          rise.push(Math.abs(h) <= SKIRT.maxStep ? h : NaN);   // the map's ground relative to the base; NaN: unknown or not ground
-        }
-        // Follow the ground only: bridge trees, buildings and unloaded map from the ground on either side, then smooth.
-        const known = rise.map((h, i) => (Number.isNaN(h) ? -1 : i)).filter(i => i >= 0);
-        const ground = rise.map((h, i) => {
-          if (!Number.isNaN(h)) return h;
-          if (!known.length) return 0;
-          let a = known[known.length - 1] - n, b = known[0] + n;
-          for (const k of known) { if (k < i) a = k; else { b = k; break; } }
-          return rise[(a + n) % n] + (rise[b % n] - rise[(a + n) % n]) * (i - a) / (b - a);
-        });
-        for (let i = 0; i < n; i++) {
-          const o = outer[i], smooth = (ground[(i + n - 1) % n] + 2 * ground[i] + ground[(i + 1) % n]) / 4;
-          const lift = C3.multiplyByScalar(up, smooth - SKIRT.under, new C3());
-          const top = C3.add(o, lift, new C3()), edge = C3.add(lip[i], lift, new C3());
-          const l = Cesium.Matrix4.multiplyByPoint(inv, o, new C3()), e = Cesium.Matrix4.multiplyByPoint(inv, lip[i], new C3());
-          x0 = Math.min(x0, l.x); x1 = Math.max(x1, l.x); y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y);
-          pos.push(top.x, top.y, top.z, edge.x, edge.y, edge.z, inner[i].x, inner[i].y, inner[i].z);
-          flat.push(l.x, l.y, e.x, e.y, e.x, e.y);        // the last strip repeats the lip's pixels
-          const v = first + 3 * i, w = first + 3 * ((i + 1) % n);
-          idx.push(v, v + 1, w, w, v + 1, w + 1, v + 1, v + 2, w + 1, w + 1, v + 2, w + 2);
-        }
+      const m = models[name], P = placementMatrix(name), z = m._elBase || 0;
+      const rings = m._elRings.map(r => r.map(([x, y]) => { const q = Cesium.Matrix4.multiplyByPoint(P, new Cesium.Cartesian3(x, y, z), new Cesium.Cartesian3());
+        x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); return [q.x, q.y]; }));
+      const h = Cesium.Matrix4.multiplyByPoint(P, new Cesium.Cartesian3(0, 0, z), new Cesium.Cartesian3()).z;
+      hMin = Math.min(hMin, h); shapes.push({ rings, h });
+    }
+    const pad = CUT.reach + 1; x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+    const size = Math.max(x1 - x0, y1 - y0), N = size * CUT.px > 1024 ? CUT.max : 1024, px = N / size, h0 = hMin - 1;
+    const cv = document.createElement("canvas"); cv.width = cv.height = N;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    g.lineJoin = "round"; g.fillStyle = g.strokeStyle = "#fff";
+    const data = new Uint8Array(N * N * 4), W = new Float32Array(N * N), near = new Uint8Array(N * N);
+    for (const { rings, h } of shapes) {
+      let bx0 = N, by0 = N, bx1 = 0, by1 = 0;
+      const path = new Path2D();
+      for (const r of rings) { r.forEach(([x, y], i) => { const X = (x - x0) * px, Y = (y - y0) * px; i ? path.lineTo(X, Y) : path.moveTo(X, Y);
+        bx0 = Math.min(bx0, X); bx1 = Math.max(bx1, X); by0 = Math.min(by0, Y); by1 = Math.max(by1, Y); }); path.closePath(); }
+      const grow = Math.ceil(pad * px) + 2;
+      bx0 = Math.max(0, Math.floor(bx0) - grow); by0 = Math.max(0, Math.floor(by0) - grow); bx1 = Math.min(N, Math.ceil(bx1) + grow); by1 = Math.min(N, Math.ceil(by1) + grow);
+      const bw = bx1 - bx0, bh = by1 - by0; if (bw <= 0 || bh <= 0) continue;
+      const pass = width => {                             // the base, optionally grown by `width` metres
+        g.clearRect(0, 0, N, N); g.fill(path, "evenodd");
+        if (width) { g.lineWidth = 2 * width * px; g.stroke(path); }
+        return g.getImageData(bx0, by0, bw, bh).data;
+      };
+      const inside = pass(0), half = pass(CUT.reach / 2), all = pass(CUT.reach + 0.5);
+      const hv = Math.max(0, Math.min(65535, Math.round((h - h0) * 100)));
+      for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+        const k = (y * bw + x) * 4 + 3, i = (by0 + y) * N + bx0 + x;
+        if (inside[k] > data[i * 4 + 1]) data[i * 4 + 1] = inside[k];
+        if (half[k] / 255 > W[i]) W[i] = half[k] / 255;
+        if (all[k] > near[i]) { near[i] = all[k]; data[i * 4 + 2] = hv >> 8; data[i * 4 + 3] = hv & 255; }
       }
     }
-    if (!idx.length) return dropSkirt();
-
-    // One top-down picture of the map around the cut: the band's colour.
-    const canvas = scene.canvas, aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, W = Math.max(x1 - x0 + 4, (y1 - y0 + 4) * aspect), H = W / aspect;
-    const cam = viewer.camera, keep = { pos: cam.positionWC.clone(), dir: cam.directionWC.clone(), up: cam.upWC.clone(), lens: getLens(),
-      shown: Object.entries(models).map(([n, m]) => [m, m.show]), entities: viewer.entities.show };
-    const picture = document.createElement("canvas");
-    picture.width = Math.min(2048, canvas.width); picture.height = Math.max(1, Math.round(picture.width / aspect));
-    try {
-      keep.shown.forEach(([m]) => m.show = false); viewer.entities.show = false; if (skirt) skirt.show = false;
-      tileset.clippingPolygons.enabled = false;        // the picture shows the map whole
-      if (!isOrtho()) cam.switchToOrthographicFrustum();
-      cam.frustum.width = W; cam.frustum.aspectRatio = aspect;
-      cam.setView({ destination: world(M, cx, cy, 1500), orientation: { direction: down, up: C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, C3.UNIT_Y, new C3()), new C3()) } });
-      scene.requestRender(); viewer.render();
-      picture.getContext("2d").drawImage(canvas, 0, 0, picture.width, picture.height);
-    } finally {
-      keep.shown.forEach(([m, show]) => m.show = show); viewer.entities.show = keep.entities; tileset.clippingPolygons.enabled = true;
-      setLens(keep.lens);
-      cam.setView({ destination: keep.pos, orientation: { direction: keep.dir, up: keep.up } });
-      scene.requestRender();
+    // soften the grown base: 1 at the base's edge, 0 at CUT.reach (three box blurs: nearly Gaussian)
+    const rad = Math.max(1, Math.round(CUT.reach / 2 * px / 3)), T = new Float32Array(N * N), k = 1 / (2 * rad + 1);
+    for (let n = 0; n < 3; n++) {
+      for (let y = 0; y < N; y++) { const o = y * N; let sum = 0;
+        for (let x = -rad; x <= rad; x++) sum += W[o + Math.min(N - 1, Math.max(0, x))];
+        for (let x = 0; x < N; x++) { T[o + x] = sum * k; sum += W[o + Math.min(N - 1, x + rad + 1)] - W[o + Math.max(0, x - rad)]; } }
+      for (let x = 0; x < N; x++) { let sum = 0;
+        for (let y = -rad; y <= rad; y++) sum += T[Math.min(N - 1, Math.max(0, y)) * N + x];
+        for (let y = 0; y < N; y++) { W[y * N + x] = sum * k; sum += T[Math.min(N - 1, y + rad + 1) * N + x] - T[Math.max(0, y - rad) * N + x]; } }
     }
-    const st = new Float32Array(flat.length), normals = new Float32Array(pos.length);
-    for (let i = 0; i < flat.length; i += 2) { st[i] = (flat[i] - cx) / W + 0.5; st[i + 1] = (flat[i + 1] - cy) / H + 0.5; }
-    for (let i = 0; i < pos.length; i += 3) { normals[i] = up.x; normals[i + 1] = up.y; normals[i + 2] = up.z; }
-    const values = new Float64Array(pos), attr = (type, size, v) => new Cesium.GeometryAttribute({ componentDatatype: type, componentsPerAttribute: size, values: v });
-    const geometry = new Cesium.Geometry({
-      attributes: { position: attr(Cesium.ComponentDatatype.DOUBLE, 3, values), normal: attr(Cesium.ComponentDatatype.FLOAT, 3, normals), st: attr(Cesium.ComponentDatatype.FLOAT, 2, st) },
-      indices: new Uint32Array(idx), primitiveType: Cesium.PrimitiveType.TRIANGLES, boundingSphere: Cesium.BoundingSphere.fromVertices(values) });
-    const next = new Cesium.Primitive({
-      geometryInstances: new Cesium.GeometryInstance({ geometry }), asynchronous: false, shadows: Cesium.ShadowMode.RECEIVE_ONLY,
-      appearance: new Cesium.MaterialAppearance({ flat: true, faceForward: true, translucent: false, closed: false,
-        materialSupport: Cesium.MaterialAppearance.MaterialSupport.TEXTURED,
-        material: new Cesium.Material({ fabric: { type: "Image", uniforms: { image: picture } } }) }) });
-    const old = skirt; skirt = scene.primitives.add(next); if (old) scene.primitives.remove(old);
-    const centre = world(M, cx, cy, 0);
-    skirtState = { centre, distance: C3.distance(keep.pos, centre), loaded: tileset.tilesLoaded };
-    scene.requestRender();
+    for (let i = 0; i < N * N; i++) data[i * 4] = near[i] ? Math.round(Math.min(1, W[i]) * 255) : 0;
+    return { data, N, x0, y0, size, h0, inv: Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4()),
+      up: Cesium.Cartesian3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3()), new Cesium.Cartesian3()) };
+  }
+  function applyClip() {
+    if (!tileset || !anchor() || adjustingNow) return;
+    const visible = cutSets().filter(n => models[n]?._elRings?.length), M = frame();
+    if (!visible.length) { cut = null; clipKey = ""; cutPause(cutPaused); return; }
+    const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,placementOf(n).rot,placementOf(n).t]),Array.from({length:16},(_,i)=>M[i])]);
+    if (key === clipKey && cut && tileset.customShader === mapShader) return cutPause(cutPaused);
+    cut = buildCutMask(visible, M); clipKey = key;
+    const sh = mapShaderFor(tileset);
+    sh.setUniform("u_mask", new Cesium.TextureUniform({ typedArray: cut.data, width: cut.N, height: cut.N,
+      minificationFilter: Cesium.TextureMinificationFilter.LINEAR, magnificationFilter: Cesium.TextureMagnificationFilter.LINEAR }));
+    sh.setUniform("u_rect", new Cesium.Cartesian4(cut.x0, cut.y0, cut.size, cut.h0));
+    sh.setUniform("u_texel", cut.N);
+    cutPause(cutPaused);
+  }
+  // The same reshaping for rays (walking, the camera's ground rule, picking): what the cut does to a map point.
+  // Returns null (untouched), {hidden: true, lift} inside a base, or {lift}: metres the surface moved up there.
+  function cutAt(p) {
+    if (!cut || cutPaused) return null;
+    const s = Cesium.Matrix4.multiplyByPoint(cut.inv, p, new Cesium.Cartesian3());
+    const u = (s.x - cut.x0) / cut.size * cut.N, v = (s.y - cut.y0) / cut.size * cut.N;
+    if (!(u >= 0 && v >= 0 && u < cut.N && v < cut.N)) return null;
+    const i = ((v | 0) * cut.N + (u | 0)) * 4, w = cut.data[i] / 255;
+    if (!w) return null;
+    const dz = cut.h0 + (cut.data[i + 2] * 256 + cut.data[i + 3]) * 0.01 - CUT.under - s.z;
+    if (cut.data[i + 1] > 250) return { hidden: true, lift: dz };
+    const t = Math.min(1, Math.max(0, (Math.abs(dz) - CUT.high) / CUT.fade));
+    return { lift: dz * w * (1 - t * t * (3 - 2 * t)) };
   }
 
   // ---------------------------------------------------------------- display style & section
@@ -1388,7 +1393,6 @@
     if (pass === "context") Object.values(models).forEach(m => m.show = false);
     if (pass === "model") {
       if (tileset) tileset.show = false;
-      if (skirt) skirt.show = false;
       scene.globe.show = false;
       ["skyBox", "skyAtmosphere", "sun", "moon"].forEach(k => scene[k] && (scene[k].show = false));
       scene.backgroundColor = Cesium.Color.TRANSPARENT;
@@ -1403,7 +1407,6 @@
     } finally {
       Object.entries(keep.models).forEach(([n, s]) => models[n] && (models[n].show = s));
       if (tileset) tileset.show = keep.tiles;
-      if (skirt) skirt.show = true;
       scene.globe.show = keep.globe;
       if (scene.skyBox) scene.skyBox.show = keep.sky;
       if (scene.skyAtmosphere) scene.skyAtmosphere.show = keep.atmo;
@@ -1598,8 +1601,14 @@
     for (const [start, tile] of hits) {
       if (best !== null && start > best) break;
       const p = tile.content.pick(ray, scene.frameState, new Cesium.Cartesian3());
-      const d = p && Cesium.Cartesian3.distance(p, ray.origin);
-      if (p && d <= max && (best === null || d < best) && !inCutout(p)) best = d;
+      let d = p && Cesium.Cartesian3.distance(p, ray.origin);
+      const c = p && cutAt(p);
+      if (c) {                                             // the map is reshaped there: the surface moved up or down
+        const down = -Cesium.Cartesian3.dot(ray.direction, cut.up);
+        if (Math.abs(down) > 0.3) d = Math.max(0, d - c.lift / down);
+        else if (c.hidden) continue;                        // a sideways ray through what is not drawn
+      }
+      if (p && d <= max && (best === null || d < best)) best = d;
     }
     return best;
   }
@@ -1644,19 +1653,6 @@
       }
     }
     return best;
-  }
-  function inCutout(p) {                                   // a map point hidden by "Hide map underneath"
-    for (const name of cutSets()) {
-      const m = models[name], rings = m?._elFootprints; if (!rings) continue;
-      const l = Cesium.Matrix4.multiplyByPoint(Cesium.Matrix4.inverseTransformation(m.modelMatrix, new Cesium.Matrix4()), p, new Cesium.Cartesian3());
-      for (const r of rings) {
-        let inside = false;
-        for (let i = 0, j = r.length - 1; i < r.length; j = i++)
-          if ((r[i][1] > l.y) !== (r[j][1] > l.y) && l.x < (r[j][0] - r[i][0]) * (l.y - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside;
-        if (inside) return true;
-      }
-    }
-    return false;
   }
   function surfaceHit(ray, max = 1e7, models_ = true) {    // nearest drawn surface along a world ray: distance or null
     let best = null;
@@ -1979,7 +1975,7 @@
     if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
-  window.EL = { viewer, models, place, placementOf, setPlacement, rotateSet, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get skirt() { return skirt; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, place, placementOf, setPlacement, rotateSet, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get cut() { return cut; }, cutAt, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {
