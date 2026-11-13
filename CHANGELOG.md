@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.0-beta.10 — preview, 2026-11-13
+Placing
+- A first SendToEarth with **PickOnMap** puts the bottom centre of what you sent on the spot you click, wherever the geometry is in the Rhino file. Before, the picked spot was Rhino's world origin, so a model drawn away from the origin landed away from the click. (It becomes the EarthAnchorPoint's model base point; one you set yourself is kept.)
+
+Hide map underneath
+- The map itself is reshaped as it is drawn: not drawn inside a set's base, and graded to the base's level within 3 m around it. The separate band is gone. That band was coloured by moving the real camera to a top-down view for an instant to photograph the ground: this was the jump when a model was first placed or the map was hidden, and the white patches were photographs taken before the map had loaded. Nothing moves the camera now, and switching the cut-out on costs about 50 ms.
+- The cut-out returns after a set is moved (it stayed off in one case), and walking follows the graded ground.
+
+Navigation
+- A gesture does one thing from start to finish. macOS reports a pinch when two scrolling fingers drift apart; that pinch zoomed the view in the middle of a rotation. It is ignored unless it takes over.
+- The point you rotate about stays the same from one rotation to the next, until you pan, zoom or fly. Before, it was chosen again on every gesture, so a tree passing through the centre of the view, or the model's depth against the ground behind it, made the scene swing differently each time.
+- The glide macOS adds after your fingers lift is faded out, so a flick does not keep turning the view.
+- Two-Point navigates like Perspective: tilting moves the camera around what you look at and shifts the lens, up to 65°. Before, tilt only shifted the lens, up to 80°, where the picture stretched into streaks.
+- Everything is 10 % less sensitive. Walking, sprinting and flying are 25 % faster (4.4, 11.9 and 13.6 m/s; 27 m/s sprint-flying).
+- Flying has no collision: it passes through buildings, trees, your model and the ground.
+- A device guessed wrong from its first event (a trackpad step that looks like a wheel notch on a zoomed page) is corrected by the next events.
+- **Record input for 10 s** (sidebar, Navigation > Controls) saves what your trackpad or mouse sends, to report a navigation problem.
+
+Views
+- Fixed: a view saved in the viewer never reached Rhino. Creating a Perspective named view failed inside Rhino (a wrong call), which also paused all syncing after five tries. Views saved, updated, renamed or deleted in either app now change in the other, in all three projections, without touching the viewport you are working in.
+- Named views are always shared; the switch (and EarthLinkSync's NamedViews option) is gone.
+
+Light, sky and materials
+- Time of day: the map turns warm with a low sun and dark blue at night, with stars and a dim moonlight on the model, which takes the same tint. Cast shadows fade out as the sun reaches the horizon; before, a sun under the horizon drew streaks and stipple over a daytime map.
+- No stars or dark sky by day when you look up.
+- Materials are lit like Rhino's Rendered mode, measured on the same colour swatches in both: a sunlit white is white (it was grey), colours are as vivid as in Rhino, and shadows are as light as Rhino's.
+- Glass, polycarbonate and any transparent material are see-through. Rhino writes them in a form real-time viewers ignore, so they showed as opaque blocks.
+- Textures keep the object's box, planar or other mapping (it was dropped, so a mapped texture came out at the wrong size). Polished metal shows its colour instead of turning dark. Resend a set to pick these up.
+
+Interface
+- Delete is the leftmost action on a set and on a view, then edit.
+- The Navigation pop-up is gone. Click the compass for north up, or drag it to turn and tilt; Sensitivity and the controls list are in the sidebar.
+
+Fixed on Windows
+- The very first settings save could fail with "Permission denied" when Rhino and the viewer saved at the same moment.
+
 ## 0.2.0-beta.9 — preview, 2026-11-13
 Navigation
 - Fixed the camera jumping by itself: Cesium's own camera collision was still running under EarthLink's navigation and lifted the camera (by 89 m in one measured case) with no input. It is off; only EarthLink moves the camera.
