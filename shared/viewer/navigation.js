@@ -508,17 +508,15 @@
       const tilt = 90 - Cesium.Math.toDegrees(Math.asin(clamp(C3.dot(C3.normalize(off, off), normal(p)), -1, 1)));
       return { heading, tilt };
     }
-    let sliderAt = 0;
-    const sliderPivot = () => { const now = performance.now(); if (now - sliderAt > 600) { begin(); pivot = turnPivot(); } sliderAt = now; };
     const turn = d => ((d % 360) + 540) % 360 - 180;
     const api = {
       RATE,
       headingTilt,
-      setHeading(h) { if (!hooks.allowed()) return; sliderPivot(); orbit(turn(h - headingTilt().heading), 0); scene.requestRender(); },
-      setTilt(t) {
+      // Turn (degrees clockwise) and tilt about the pivot, from a control such as the compass. start: a new gesture.
+      turn(dh, dt, start) {
         if (!hooks.allowed()) return;
-        sliderPivot(); orbit(0, t - headingTilt().tilt);
-        scene.requestRender();
+        if (start) { begin(); pivot = turnPivot(); ease.clear(); }
+        if (dh || dt) { orbit(dh, dt); scene.requestRender(); }
       },
       north() {
         if (!hooks.allowed()) return; begin(); pivot = turnPivot(); let left = -turn(headingTilt().heading), time = 0;

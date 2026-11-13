@@ -127,9 +127,7 @@
   #navDock button { width:38px;height:38px;background:transparent;border:0;border-radius:10px;display:grid;place-items:center;font-size:22px;color:var(--fg); }
   #navDock button.on {color:var(--accent);background:var(--fill);}
   #navDock .divider {height:22px;width:1px;background:var(--sep);margin:0 3px;}
-  #navCard {top:auto;right:14px;bottom:98px;width:285px;}
   .navLabel {display:flex;justify-content:space-between;margin:12px 0 7px;}
-  #navCard input[type=range] {width:100%;}
   #frame { position: absolute; border: 1.5px solid var(--accent); border-radius: 2px; box-shadow: 0 0 0 9999px rgba(0,0,0,.28); pointer-events: none; display: none; z-index: 3; }
   #toast { position: absolute; left: 50%; top: 14px; transform: translate(-50%, -8px); z-index: 30; border-radius: 999px; padding: 8px 16px; max-width: min(640px, calc(100% - 120px)); font-weight: 500; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; text-align: center; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -227,6 +225,15 @@
         <div class="item"><button class="link" id="resample" title="Measure the map's ground height at the site again">Re-sample ground</button></div>
       </div>
     </div>
+    <div class="group">
+      <div class="ghead">Navigation</div>
+      <div class="card">
+        <div class="item"><span class="grow">Sensitivity</span><span class="val" id="sensValue"></span></div>
+        <div class="item"><input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100" style="width:100%"></div>
+        <div class="item"><details id="navHelp" style="width:100%"><summary>Controls</summary><dl class="keys" id="navKeys"></dl>
+          <button class="link" id="recInput" title="Records what your trackpad or mouse sends for 10 seconds and saves it as a file, to report a navigation problem">Record input for 10 s</button></details></div>
+      </div>
+    </div>
   </div>
 </aside>
 
@@ -242,21 +249,10 @@
 <div id="peg" hidden aria-hidden="true"><svg class="i"><use href="#i-person"/></svg><span></span></div>
 <div id="navDock" class="glass">
   <button id="walkBtn" title="Walk: drag onto the map, or click" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
-  <button id="navBtn" title="Navigation" aria-label="Navigation"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
+  <button id="northBtn" title="North up · drag to turn and tilt" aria-label="North up"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
   <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-fit"/></svg></button>
   <span class="divider"></span>
   <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button><button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-</div>
-<div id="navCard" class="glass pop">
-  <h3>Navigation <button class="mini" data-close="navCard" aria-label="Close navigation"><svg class="i"><use href="#i-x"/></svg></button></h3>
-  <label class="navLabel"><span id="tiltTitle">Tilt</span><span class="val" id="tiltValue"></span></label>
-  <input id="navTilt" aria-label="Tilt" type="range" min="0" max="90" value="45" step="0.5">
-  <label class="navLabel">Heading <span class="val" id="headingValue"></span></label>
-  <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.5" value="0" step="0.5">
-  <label class="navLabel">Sensitivity <span class="val" id="sensValue"></span></label>
-  <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
-  <div class="row" style="margin-top:12px"><button id="northBtn" class="link">Reset to north</button></div>
-  <details id="navHelp" style="margin-top:6px"><summary>Controls</summary><dl class="keys" id="navKeys"></dl></details>
 </div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -1735,22 +1731,9 @@
     look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
   });
   const turn = d => ((d % 360) + 540) % 360 - 180;
-  function navLabels() {
-    const two = projection === "two_point";
-    const ht = walk?.body ? { heading: walk.heading, tilt: walk.pitch } : nav.headingTilt();
-    $("tiltTitle").textContent = walk?.body ? "Look" : "Tilt";
-    $("navTilt").min = walk?.body ? -80 : two ? 25 : 0; $("navTilt").max = walk?.body ? 80 : two ? 155 : 175;   // over 90: looking up
-    if (document.activeElement !== $("navTilt")) $("navTilt").value = ht.tilt;
-    if (document.activeElement !== $("navHeading")) $("navHeading").value = ht.heading;
-    $("tiltValue").textContent = `${Math.round(ht.tilt)}°`; $("headingValue").textContent = `${Math.round(ht.heading) % 360}°`;
-    $("sensValue").textContent = `${Math.round(sensitivity() * 100)} %`;
-  }
-  let labelsAt = 0;
-  scene.postRender.addEventListener(() => {   // compass follows the heading; open menu values stay current
+  scene.postRender.addEventListener(() => {   // the compass follows the heading
     const h = walk?.body ? walk.heading : Cesium.Math.toDegrees(viewer.camera.heading);
     $("navNeedle").style.transform = `rotate(${-h}deg)`;
-    const now = performance.now();
-    if ($("navCard").classList.contains("open") && now - labelsAt > 200) { labelsAt = now; navLabels(); }
   });
   $("navKeys").innerHTML = (MAC_NAV ? [
     ["Two fingers", "Rotate (pan in Parallel)"], ["Shift + two fingers", "Pan"], ["Pinch", "Zoom"],
@@ -1760,17 +1743,38 @@
     ["Right-drag", "Rotate (pan in Parallel)"], ["Shift + right-drag", "Pan"], ["Wheel, two-finger scroll, pinch", "Zoom"],
     ["Ctrl + right-drag", "Zoom"], ["Alt + right-drag", "Move in / out"], ["Arrow keys", "Rotate"], ["Page Up / Down", "Zoom"],
   ]).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
-  $("navBtn").onclick = () => { const on = !$("navCard").classList.contains("open"); closePops("navCard"); $("navCard").classList.toggle("open", on); if (on) navLabels(); };
-  $("northBtn").onclick = () => {
+  // The compass: click for north up; drag it to turn (sideways) and tilt (up and down).
+  const north = () => {
     if (!walk?.body) return nav.north();
     const from = walk.heading, d = -turn(from); let t = 0;
     const step = () => { t = Math.min(1, t + 1 / 20); walk.heading = (from + d * (1 - Math.pow(1 - t, 3)) + 360) % 360; if (t < 1 && walk?.body) requestAnimationFrame(step); };
     step();
   };
-  $("navHeading").oninput = () => { if (walk?.body) walk.heading = +$("navHeading").value; else nav.setHeading(+$("navHeading").value); };
-  $("navTilt").oninput = () => { if (walk?.body) walk.pitch = +$("navTilt").value; else nav.setTilt(+$("navTilt").value); };
-  $("sens").value = Math.round(sensitivity() * 100);
-  $("sens").oninput = () => { store.set("sensitivity", +$("sens").value); navLabels(); };
+  (() => {
+    const b = $("northBtn"); let drag = null;
+    b.addEventListener("pointerdown", e => { if (e.button) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }; b.setPointerCapture(e.pointerId); });
+    b.addEventListener("pointermove", e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      if (!drag.moved) { drag.moved = true; nav.turn(0, 0, true); }
+      drag.x = e.clientX; drag.y = e.clientY;
+      if (walk?.body) { walk.heading = (walk.heading + dx * 0.5 + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch - dy * 0.3)); }
+      else nav.turn(dx * 0.5, -dy * 0.3);
+    });
+    const end = e => { if (!drag || e.pointerId !== drag.id) return; const moved = drag.moved; drag = null; if (!moved && e.type === "pointerup") north(); };
+    b.addEventListener("pointerup", end); b.addEventListener("pointercancel", end);
+    b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); north(); } });
+  })();
+  const showSens = () => { $("sensValue").textContent = `${Math.round(sensitivity() * 100)} %`; };
+  $("sens").value = Math.round(sensitivity() * 100); showSens();
+  $("sens").oninput = () => { store.set("sensitivity", +$("sens").value); showSens(); };
+  $("recInput").onclick = async () => {
+    msg("Recording input for 10 seconds: navigate as usual.", 10000);
+    const data = await nav.record(10000), a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" })); a.download = "earthlink-input.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000); msg(`Saved earthlink-input.json (${data.events.length} events).`, 4000);
+  };
   for (const [id, sign] of [["zoomIn", -1], ["zoomOut", 1]]) {   // click: one smooth step; hold: continuous
     const b = $(id); let timer = 0, held = false;
     const up = () => { clearTimeout(timer); if (held) nav.release(); else if (timer) nav.zoomStep(sign); timer = 0; held = false; };
