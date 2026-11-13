@@ -36,7 +36,8 @@ test('easing releases exactly what was added, smoothly, and stops',()=>{
   e.add('px',NaN);assert.equal(e.take(1/60),null,'non-finite input is ignored');
 });
 test('one sensitivity scale: the same swipe turns the same angle at any distance',()=>{
-  assert.ok(N.RATE.orbit>0&&N.RATE.orbit<0.3);assert.ok(N.RATE.tilt<N.RATE.orbit);assert.ok(N.RATE.pan>=1);
+  assert.ok(N.RATE.orbit>0&&N.RATE.orbit<0.3);assert.ok(N.RATE.tilt<N.RATE.orbit);assert.ok(N.RATE.pan>0.95&&N.RATE.pan<=1);
+  assert.ok(Math.abs(N.RATE.orbit/0.144-0.9)<0.01&&Math.abs(N.RATE.orbitMouse/0.27-0.9)<0.01&&Math.abs(N.RATE.pinch/0.0135-0.9)<0.01&&Math.abs(N.RATE.wheel/0.0032-0.9)<0.02,'10% less than beta.9');
 });
 test('neutral light is a unit vector from behind the viewer',()=>{
   const d=N.neutralDirection([0,1,0],[0,0,1]);assert.ok(Math.abs(Math.hypot(...d)-1)<1e-12);assert.ok(d[2]<0&&d[1]>0);
@@ -50,15 +51,47 @@ test('a mouse wheel is told from a trackpad by its legacy delta (Chrome, Safari)
   assert.equal(N.isMouseWheel(ev(80,-240)),false);assert.equal(N.isMouseWheel(ev(3,-9)),false);
   assert.equal(N.isMouseWheel(ev(100,-120,2)),false,'sideways motion: a trackpad');
 });
-test('the pivot stays at what you look at, not the far ground behind it',()=>{
+test('the pivot is what is at the centre of the view; at the horizon, the model or a limit',()=>{
   const P=N.pivotDistance;
-  assert.equal(P(95,null,100),95,'the surface at the centre, near the model');
-  assert.equal(P(1700,null,100),100,'a shallow view past the model: the model depth');
-  assert.equal(P(null,null,100),100,'sky: the model depth');
-  assert.equal(P(12,null,100),12,'a detail closer than the model');
-  assert.equal(P(1700,150,null),150,'no model in view: the last focus');
-  assert.equal(P(400,150,null),400);assert.equal(P(5000,null,null,480),480,'nothing known: limited');
-  assert.equal(P(null,null,null),null);
+  assert.equal(P(95,100,400),95,'the surface at the centre');
+  assert.equal(P(250,100,400),250,'ground behind the model but near: still what you look at');
+  assert.equal(P(1700,100,400),100,'a shallow view past the model: the model depth');
+  assert.equal(P(null,100,400),100,'sky: the model depth');
+  assert.equal(P(12,100,400),12,'a detail closer than the model');
+  assert.equal(P(5000,null,480),480,'no model in view: limited');
+  assert.equal(P(null,null,400),null);
+});
+test('a pinch that sneaks into a two-finger rotation is ignored; a real pinch takes over',()=>{
+  const l=new N.WheelLatch();let t=0;
+  assert.equal(l.read(pad(0,6),'perspective',t).mode,'orbit');
+  for(let i=0;i<10;i++){t+=16;assert.equal(l.read(pad(1,5),'perspective',t).mode,'orbit');
+    t+=1;const z=l.read(pad(0,-2,{ctrlKey:true}),'perspective',t);assert.equal(z.skip,true,'stray pinch skipped');}
+  for(let i=0;i<5;i++){t+=16;l.read(pad(0,-3,{ctrlKey:true}),'perspective',t);}        // 80 ms of pinch only: still the rotation's tail
+  for(let i=0;i<5;i++){t+=16;l.read(pad(0,-3,{ctrlKey:true}),'perspective',t);}
+  const z=l.read(pad(0,-3,{ctrlKey:true}),'perspective',t+16);assert.equal(z.mode,'zoom');assert.ok(!z.skip,'the pinch took over');
+  const s=l.read(pad(3,0),'perspective',t+20);assert.equal(s.skip,true,'and a stray scroll during the pinch is skipped');
+});
+test('the device is corrected when the first event misleads, and remembered',()=>{
+  const ev=(deltaY,wheelDeltaY,deltaX=0)=>({deltaX,deltaY,deltaMode:0,wheelDeltaY,ctrlKey:false,shiftKey:false});
+  let l=new N.WheelLatch();                                // a zoomed page: a trackpad step of 40 looks like a wheel notch
+  assert.equal(l.read(ev(36.36,-120),'perspective',0).mode,'zoom');
+  const r=l.read(ev(30,-99),'perspective',16);assert.equal(r.mode,'orbit');assert.equal(r.start,true,'restarts as a rotation');
+  assert.equal(l.read(ev(20,-66),'perspective',32).mode,'orbit');
+  assert.equal(l.read(ev(40,-120),'perspective',1000).mode,'orbit','remembered: an ambiguous start is a trackpad');
+  l=new N.WheelLatch();                                    // a wheel whose first notch moved exactly 40
+  assert.equal(l.read(ev(40,-120),'perspective',0).mode,'orbit');
+  l.read(ev(52,-120),'perspective',30);assert.equal(l.read(ev(64,-240),'perspective',60).mode,'zoom','two sure wheel notches');
+  assert.equal(l.read(ev(40,-120),'perspective',2000).mode,'zoom','remembered');
+  l=new N.WheelLatch();assert.equal(l.read(ev(4,-120),'perspective',0,false).mode,'zoom');
+});
+test('the glide after the fingers lift fades; moving fingers never do',()=>{
+  let c=new N.Coast(),sum=0,raw=0;
+  for(const m of [4,9,14,20,26,30,31,33])assert.equal(c.gain(0,m),1);          // fingers speeding up
+  for(let m=32;m>=0.5;m*=0.93){const g=c.gain(0,m);sum+=m*g;raw+=m;}            // the glide
+  assert.ok(sum<0.55*raw&&sum>0.2*raw,'glide shortened: '+(sum/raw).toFixed(2));
+  assert.equal(c.gain(0,6),1,'a step that grows again is the fingers');
+  c=new N.Coast();for(let i=0;i<60;i++)assert.equal(c.gain(2,0),1,'a steady slow rotation is untouched');
+  c=new N.Coast();for(const m of [9,8,8,7,9,8,7,7,6,8,7,6,6,7])assert.equal(c.gain(m,0),1,'noisy fingers slowing down');
 });
 test('the ground rule never lifts the camera suddenly',()=>{
   let f=new N.Floor();f.h=50;

@@ -198,9 +198,7 @@
     </div>
     <div class="group">
       <div class="ghead">Views <button id="addView" class="link">Save View</button></div>
-      <div class="card"><div id="views"></div>
-        <div class="item rhinoOnly" style="border-top:.5px solid var(--sep)"><span class="grow"><div class="t">Sync with Rhino's named views</div></span><label class="switch"><input type="checkbox" id="syncViews" aria-label="Sync named views with Rhino"><span></span></label></div>
-      </div>
+      <div class="card"><div id="views"></div></div>
     </div>
     <div class="group">
       <div class="ghead">Display</div>
@@ -309,7 +307,7 @@
 
 <div id="siteCard" class="glass pop">
   <h3><span id="siteTitle">Site Location</span><button class="mini" data-close="siteCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <p class="hint">Search above or click the spot where the model's base point should sit.</p>
+  <p class="hint">Search above, or click where the model should stand.</p>
   <div class="lbl">Picked point</div>
   <div class="t" id="pickedLbl">Click on the map</div>
   <p class="hint">To turn a set on the map, use Edit on the set. Rhino's north is not changed.</p>
@@ -636,7 +634,7 @@
     if (projection !== "two_point" || isOrtho()) return;
     const c = viewer.camera, f = c.frustum;
     if (Math.abs(c.pitch) > 1e-6 || Math.abs(c.roll) > 1e-6) {
-      const lim = Cesium.Math.toRadians(80);
+      const lim = Cesium.Math.toRadians(65);              // as navigation.js: steeper stretches the picture badly
       f._elShift = Math.tan(Math.max(-lim, Math.min(lim, Math.atan(f._elShift || 0) + c.pitch)));
       c.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: 0, roll: 0 } });
     }
@@ -1036,16 +1034,16 @@
       el.className = "item" + (hid.has(n) ? " off" : "");
       el.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-cube"/></svg></span>` +
         `<span class="grow" style="cursor:pointer" title="Edit: rename, display, place"><div class="t">${esc(n)}${meta.sets[n].live ? ' <span class="val" title="Updates when it changes in Rhino">Live</span>' : ""}</div></span>` +
-        `<span class="acts"><button class="mini" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
-        (RHINO ? `<button class="mini" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") + `</span>` +
+        `<span class="acts">` + (RHINO ? `<button class="mini del" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") +
+        `<button class="mini edit" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button></span>` +
         `<button class="mini cut ${cut.has(n) ? "on" : ""}" title="Hide the map underneath this set" aria-pressed="${cut.has(n)}"><svg class="i" style="width:15px;height:15px"><use href="#i-cut"/></svg></button>` +
         `<button class="mini ${hid.has(n) ? "" : "on"}" title="Show / hide"><svg class="i" style="width:16px;height:16px"><use href="#${hid.has(n) ? "i-eyeoff" : "i-eye"}"/></svg></button>`;
       const btns = el.querySelectorAll("button"), eye = btns[btns.length - 1];
       eye.onclick = () => setHidden(n, !hidden().has(n));
       btns[btns.length - 2].onclick = () => { if (walk) walk.exit(); setClipped(n, !clipped().has(n)); };
-      btns[0].onclick = () => openSetCard(n);
+      el.querySelector(".edit").onclick = () => openSetCard(n);
       el.querySelector(".grow").onclick = () => openSetCard(n);
-      if (RHINO) btns[1].onclick = async () => {
+      if (RHINO) el.querySelector(".del").onclick = async () => {
         if (await ask({ title: `Remove “${n}”?`, text: "It disappears from EarthLink. The geometry in Rhino is not touched.", ok: "Remove", danger: true })) {
           await api("/api/sets", { op: "delete", name: n });
         }
@@ -1130,12 +1128,12 @@
       li.className = "item click";
       li.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#${v.source === "rhino" ? "i-rhino" : "i-view"}"/></svg></span>` +
         `<span class="grow"><div class="t">${esc(v.name)}</div></span>` +
-        (RHINO ? `<span class="acts"><button class="mini" title="Rename"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
+        (RHINO ? `<span class="acts"><button class="mini" title="Delete"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` +
         `<button class="mini" title="Replace with the current camera"><svg class="i" style="width:14px;height:14px"><use href="#i-redo"/></svg></button>` +
-        `<button class="mini" title="Delete"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></span>` : "");
+        `<button class="mini" title="Rename"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button></span>` : "");
       li.onclick = () => applyView(v);
       if (RHINO) {
-        const [ren, upd, del] = li.querySelectorAll("button");
+        const [del, upd, ren] = li.querySelectorAll("button");
         ren.onclick = async e => { e.stopPropagation();
           const nn = await ask({ title: "Rename View",  value: v.name, ok: "Rename" });
           if (!nn || nn === v.name) return;
@@ -1553,26 +1551,25 @@
   $("nudge").oninput = () => { const v = +$("nudge").value; if (!Number.isFinite(v) || Math.abs(v) > 1000) return; saveS({ nudge: Math.round(v * 100) / 100 }); placeModels(); };
   $("nudge").onblur = showSite;
   selProj = seg("projSeg", "perspective", v => setProjection(v));
-  $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
+  $("follow").checked = !!S.link_viewport; $("syncSun").checked = S.sync_sun !== false;
   // the three link switches can also be changed from Rhino (EarthLinkSync): pick that up without a reload
   let toggledAt = 0;
   async function syncToggles() {
     if (!RHINO || Date.now() - toggledAt < 3000) return;
     const s = await api("/api/settings").catch(() => null); if (!s || typeof s !== "object") return;
-    Object.assign(S, { link_viewport: !!s.link_viewport, sync_views: s.sync_views !== false, sync_sun: s.sync_sun !== false });
-    $("follow").checked = S.link_viewport; $("syncViews").checked = S.sync_views; $("syncSun").checked = S.sync_sun;
+    Object.assign(S, { link_viewport: !!s.link_viewport, sync_sun: s.sync_sun !== false });
+    $("follow").checked = S.link_viewport; $("syncSun").checked = S.sync_sun;
     if(S.sync_sun===false){clearTimeout(sunPost);sunPost=null;}
   }
   window.addEventListener("focus", syncToggles);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncToggles(); });
-  ["follow", "syncViews", "syncSun"].forEach(id => $(id).addEventListener("change", () => { toggledAt = Date.now(); }));
+  ["follow", "syncSun"].forEach(id => $(id).addEventListener("change", () => { toggledAt = Date.now(); }));
   $("follow").onchange = async () => {
     if(walk)walk.exit();
     saveS({ link_viewport: $("follow").checked });
 
     if ($("follow").checked && anchor()) { const c = await api("/api/camera"); if (c && c.pos) applyView(c, 0); }
   };
-  $("syncViews").onchange = () => saveS({ sync_views: $("syncViews").checked });
   $("syncSun").onchange = async () => { clearTimeout(sunPost);saveS({sync_sun:$("syncSun").checked});if($("syncSun").checked){const j=await api("/api/sun");if(j.source==="rhino")sunFromUtc(j.utc,j.enabled);} };
   restyle(); showSite(); showFov();
 
@@ -1706,8 +1703,8 @@
   function navLabels() {
     const two = projection === "two_point";
     const ht = walk?.body ? { heading: walk.heading, tilt: walk.pitch } : nav.headingTilt();
-    $("tiltTitle").textContent = walk?.body ? "Look" : two ? "Vertical framing" : "Tilt";
-    $("navTilt").min = walk?.body || two ? -80 : 0; $("navTilt").max = walk?.body || two ? 80 : 175;   // over 90: looking up
+    $("tiltTitle").textContent = walk?.body ? "Look" : "Tilt";
+    $("navTilt").min = walk?.body ? -80 : two ? 25 : 0; $("navTilt").max = walk?.body ? 80 : two ? 155 : 175;   // over 90: looking up
     if (document.activeElement !== $("navTilt")) $("navTilt").value = ht.tilt;
     if (document.activeElement !== $("navHeading")) $("navHeading").value = ht.heading;
     $("tiltValue").textContent = `${Math.round(ht.tilt)}°`; $("headingValue").textContent = `${Math.round(ht.heading) % 360}°`;
@@ -1784,11 +1781,9 @@
         const f = (k.has("KeyW") || k.has("ArrowUp")) - (k.has("KeyS") || k.has("ArrowDown"));
         const r = (k.has("KeyD") || k.has("ArrowRight")) - (k.has("KeyA") || k.has("ArrowLeft"));
         if (!f && !r) state.sprinting = false;                    // Minecraft: sprinting ends when you stop
-        const wasFlying = state.body.flying;
         state.body.step({ x: f * Math.sin(h) + r * Math.cos(h), y: f * Math.cos(h) - r * Math.sin(h),
           sprint: state.sprinting || (MAC_KEYS && (k.has("ControlLeft") || k.has("ControlRight"))),
           sneak: k.has("ShiftLeft") || k.has("ShiftRight"), jump: k.has("Space") }, dt);
-        if (wasFlying && !state.body.flying) msg("Landed", 1200);
       }
       drawWalk(dt);
       state.raf = requestAnimationFrame(tick);

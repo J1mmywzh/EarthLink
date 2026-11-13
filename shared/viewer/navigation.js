@@ -16,54 +16,99 @@
    momentum ends. Movement is eased per frame. Pan and zoom scale with distance, orbit is angular, so
    one Sensitivity value feels the same from orbit to a single room.
 
-   The pivot is Rhino's camera target: the surface at the centre of the view, held at the depth you last
-   focused on when that surface is far behind it or is sky (see pivotDistance). Nothing but this module
-   moves the camera: Cesium's own collision is off. The camera passes through trees and buildings; it only
-   comes to rest when it descends onto a surface from above, and follows gently rising ground (see Floor). */
+   The pivot is Rhino's camera target: what is at the centre of the view when you start turning. It stays the
+   same from one rotation to the next (a tree passing in front does not move it) until you pan, zoom or fly;
+   at the horizon or in the sky it is your model's depth, or a limited distance (see pivotDistance).
+   A gesture does one thing from start to finish: a stray pinch during a two-finger rotation is ignored.
+   Two-Point is the same camera drawn with a level axis and a shifted lens, so every gesture works the same.
+   Nothing but this module moves the camera: Cesium's own collision is off. The camera passes through trees
+   and buildings; it only comes to rest when it descends onto a surface from above, and follows gently rising
+   ground (see Floor). */
 (function (root, factory) { const api = factory(); if (typeof module === "object" && module.exports) module.exports = api; else root.EarthLinkNavigation = api; })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   // Per-feature rates at Sensitivity 100 %. Degrees per pixel unless noted.
   const RATE = {
-    orbit: 0.144, tilt: 0.13,          // two fingers
-    orbitMouse: 0.27, tiltMouse: 0.243, // right-drag
-    pan: 1.1,                          // x the distance under the fingers (1 = exact follow)
-    pinch: 0.0135, scroll: 0.0068,     // zoom: log-distance per wheel delta unit (trackpad)
-    wheel: 0.0032, dragZoom: 0.0054,   // mouse wheel, Ctrl + right-drag
-    hold: Math.LN2 / 0.61,             // +/- held: distance halves every 0.61 s
-    look: 0.08, lookMouse: 0.15,       // walking
+    orbit: 0.13, tilt: 0.117,          // two fingers
+    orbitMouse: 0.243, tiltMouse: 0.219, // right-drag
+    pan: 0.99,                         // x the distance under the fingers (1 = exact follow)
+    pinch: 0.01215, scroll: 0.0061,    // zoom: log-distance per wheel delta unit (trackpad)
+    wheel: 0.0029, dragZoom: 0.0049,   // mouse wheel, Ctrl + right-drag
+    hold: Math.LN2 / 0.68,             // +/- held: distance halves every 0.68 s
+    look: 0.072, lookMouse: 0.135,     // walking
   };
   const STEP = { degrees: 6, pan: 1 / 8 };   // arrow keys: Rhino's 60 steps per turn; pan an eighth of the view
   const GESTURE_GAP = 220;   // ms without wheel events that ends a gesture (momentum included)
+  const TAKEOVER = 120;      // ms of only the other kind of event (pinch <-> scroll) before it starts a new gesture
+  const TWO_POINT_MAX = 65 * Math.PI / 180;   // steeper than this a shifted lens stretches the picture badly
   const EASE = 0.045;        // s: time constant of the per-frame easing
 
-  /* Decide what a wheel event does. One decision per gesture: Shift released or pressed during the
-     momentum tail cannot switch pan to orbit. Pinch (ctrlKey) is always zoom. */
+  /* Decide what a wheel event does. One decision per gesture: Shift released or pressed during the momentum
+     tail cannot switch pan to orbit, and the other kind of event (a pinch during a two-finger scroll, or a scroll
+     during a pinch: macOS sends both when two fingers drift apart) is skipped unless it takes over for
+     TAKEOVER ms. The device is corrected if later events prove the first guess wrong, and remembered. */
   class WheelLatch {
-    constructor() { this.last = -Infinity; this.mode = null; this.device = null; }
+    constructor() { this.last = -Infinity; this.mode = null; this.device = null; this.prior = null; this.kind = null; this.kindAt = -Infinity; this.n = 0; this.sure = 0; this.coast = new Coast(); }
     read(e, projection, now, mac = true) {
-      const fresh = now - this.last > GESTURE_GAP; this.last = now;
-      if (e.ctrlKey) { this.mode = fresh ? "zoom" : this.mode || "zoom"; return { mode: "zoom", pinch: true, start: fresh }; }
-      if (fresh || !this.mode) {
-        this.device = isMouseWheel(e) ? "mouse" : "trackpad";
-        this.mode = this.device === "mouse" || !mac ? "zoom"   // Rhino for Windows: two-finger scrolling zooms
+      let fresh = now - this.last > GESTURE_GAP; this.last = now;
+      const kind = e.ctrlKey ? "pinch" : "scroll";
+      if (!fresh && this.kind && kind !== this.kind) {
+        if (now - this.kindAt <= TAKEOVER) return { mode: "none", skip: true, start: false };
+        fresh = true;
+      }
+      if (fresh) { this.kind = kind; this.n = 0; this.sure = 0; this.coast.reset(); }
+      this.kindAt = now; this.n++;
+      if (kind === "pinch") { this.mode = "zoom"; return { mode: "zoom", pinch: true, start: fresh, gain: 1 }; }
+      const ev = wheelEvidence(e), choose = device => {
+        this.device = device;
+        this.mode = device === "mouse" || !mac ? "zoom"      // Rhino for Windows: two-finger scrolling zooms
           : projection === "parallel" ? "pan"                // Rhino: Shift changes nothing in a parallel view
           : (e.shiftKey ? "pan" : "orbit");
-      }
-      return { mode: this.mode, device: this.device, start: fresh };
+      };
+      let start = fresh;
+      if (fresh || !this.mode) choose(ev.device || this.prior || "trackpad");
+      else if (ev.sure && ev.device !== this.device) {     // the first event misled: a trackpad shows at once, a wheel after two notches
+        this.sure = ev.device === "mouse" ? this.sure + 1 : 2;
+        if (this.sure >= 2 && (ev.device === "trackpad" || this.n <= 4)) { choose(ev.device); start = true; }
+      } else if (ev.sure) this.sure = 0;
+      if (ev.sure && ev.device === this.device) this.prior = ev.device;
+      const gain = this.device === "trackpad" && this.mode !== "zoom" ? this.coast.gain(e.deltaX, e.deltaY) : 1;
+      return { mode: this.mode, device: this.device, start, gain };
     }
   }
-  /* A mouse wheel, not a trackpad? Chrome and Safari report a trackpad's legacy wheelDeltaY as exactly -3 x deltaY,
-     and a notched wheel's as a multiple of 120 whatever deltaY is (on a Mac a slow notch is only about 4 px).
-     Where that field is missing, a notched wheel starts with one large, purely vertical step. A Magic Mouse
-     cannot be told from a trackpad by a web page. */
-  function isMouseWheel(e) {
-    if (e.deltaMode === 1 || e.deltaMode === 2) return true;
-    if (e.deltaX !== 0 || !e.deltaY) return false;
+  /* What a wheel event says about its device: {device: "mouse" | "trackpad" | null, sure}. Chrome and Safari
+     report a trackpad's legacy wheelDeltaY as -3 x deltaY (other than a multiple of 120 unless the step is exactly
+     40, 80, ...) and a notched wheel's as a multiple of 120 whatever deltaY is (on a Mac a slow notch is only about
+     4 px). Sideways motion is a trackpad. Where the legacy field is missing, a large vertical first step suggests
+     a wheel. A Magic Mouse cannot be told from a trackpad by a web page. */
+  function wheelEvidence(e) {
+    if (e.deltaMode === 1 || e.deltaMode === 2) return { device: "mouse", sure: true };
+    if (e.deltaX !== 0) return e.shiftKey && !e.deltaY ? { device: null, sure: false } : { device: "trackpad", sure: true };   // Shift + wheel scrolls sideways
+    if (!e.deltaY) return { device: null, sure: false };
     const wd = e.wheelDeltaY;
-    if (wd === undefined || wd === 0) return Math.abs(e.deltaY) >= 50;
-    return Math.abs(wd) % 120 === 0 && Math.abs(wd + 3 * e.deltaY) > 0.5;
+    if (wd === undefined || wd === 0) return Math.abs(e.deltaY) >= 50 ? { device: "mouse", sure: false } : { device: null, sure: false };
+    if (Math.abs(wd) % 120 !== 0) return { device: "trackpad", sure: true };
+    if (Math.abs(wd + 3 * e.deltaY) <= 0.5) return { device: null, sure: false };      // a trackpad step of exactly 40, or a wheel that moved as far
+    return { device: "mouse", sure: true };
+  }
+  const isMouseWheel = e => wheelEvidence(e).device === "mouse";
+  /* The glide after the fingers lift. macOS keeps sending a smoothly shrinking scroll for about a second; a long
+     glide turns the view much further than the fingers did. Once the steps have only shrunk for COAST_AFTER events
+     (and by a quarter in all), the rest counts less and less; any step that grows again is the fingers, at full
+     strength. */
+  const COAST_AFTER = 6, COAST_FADE = 0.85;
+  class Coast {
+    constructor() { this.reset(); }
+    reset() { this.prev = null; this.run = 0; this.from = 0; this.k = 1; }
+    gain(dx, dy) {
+      const m = Math.hypot(dx, dy);
+      if (this.prev != null && m <= this.prev && m > 0) { if (!this.run) this.from = this.prev; this.run++; }
+      else { this.run = 0; this.k = 1; }
+      this.prev = m;
+      if (this.run >= COAST_AFTER && m <= 0.75 * this.from) this.k *= COAST_FADE;
+      return this.k;
+    }
   }
   const wheelPx = e => (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
 
@@ -86,14 +131,12 @@
   }
 
   /* How far along the centre of the view the pivot is. pick: distance to the surface there (null: none).
-     target: the distance last focused on (null: unknown). focus: depth of the visible model when it is in view
-     (null: none). limit: farthest pivot accepted when nothing else is known. A surface far behind what you are
-     looking at (a shallow view, the horizon) is not what you are turning around; anything nearer is. */
-  function pivotDistance(pick, target, focus, limit = Infinity) {
-    const ref = focus ?? target;
-    if (pick != null && pick <= (ref != null ? 4 * ref : limit)) return pick;
-    if (ref != null) return ref;
-    return pick != null ? Math.min(pick, limit) : null;
+     focus: depth of the visible model when it is in view (null: none). limit: the farthest surface that still
+     counts as what you are looking at (a shallow view reaches the horizon). */
+  function pivotDistance(pick, focus, limit = Infinity) {
+    if (pick != null && pick <= limit) return pick;
+    if (focus != null) return focus;
+    return pick != null ? limit : null;
   }
 
   /* The ground rule, in heights above the ellipsoid. `top` is the map's upper surface at the camera's position and
@@ -141,7 +184,7 @@
     const E = Cesium.Ellipsoid.WGS84, latch = new WheelLatch(), ease = new Ease();
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
-    let target = null, mine = null, groundAt = null;     // focus distance; the pose this module set last; last ground check
+    let held = null, groundAt = null, rec = null;        // the pivot kept between rotations; last ground check; input recording
     const floor = new Floor();
     const ssc = scene.screenSpaceCameraController;
     ssc.enableInputs = false;                // one input path only
@@ -151,6 +194,14 @@
     const normal = p => E.geodeticSurfaceNormal(p, v3());
     const sens = () => clamp(+hooks.sensitivity() || 1, 0.2, 3);
     const ortho = () => cam.frustum instanceof Cesium.OrthographicFrustum;
+    const twoPoint = () => hooks.projection() === "two_point" && !ortho();
+    // The camera as the gestures see it. Two-Point draws it with a level axis and a shifted lens: the shift is the pitch.
+    function pose() {
+      const pos = cam.positionWC.clone(), k = twoPoint() ? cam.frustum._elShift || 0 : 0;
+      if (!k) return { pos, dir: cam.directionWC.clone(), up: cam.upWC.clone() };
+      const dir = C3.normalize(C3.add(cam.directionWC, C3.multiplyByScalar(cam.upWC, k, v3()), v3()), v3());
+      return { pos, dir, up: level(dir, cam.upWC) };
+    }
     const size = () => [Math.max(1, canvas.clientWidth), Math.max(1, canvas.clientHeight)];
 
     function pick(x, y) {                                // the drawn surface under a screen point
@@ -162,7 +213,7 @@
       const hit = Cesium.IntersectionTests.rayEllipsoid(ray, E);
       return hit ? Cesium.Ray.getPoint(ray, hit.start, v3()) : null;
     }
-    function centre(peek) {                              // the pivot: Rhino's camera target (peek: do not refocus)
+    function centre() {                                  // what is at the centre of the view
       const [w, h] = size(), ray = cam.getPickRay(new Cesium.Cartesian2(w / 2, h / 2));
       const p = pick(w / 2, h / 2), dp = p ? C3.dot(C3.subtract(p, ray.origin, v3()), ray.direction) : null;
       const f = hooks.focus && hooks.focus();
@@ -179,12 +230,14 @@
       if (ortho()) {                                       // distances start far behind the scene: compare depths
         const span = f ? 3 * Math.max(f.radius, cam.frustum.width) : Infinity;
         d = dp != null && (depth == null || Math.abs(dp - depth) <= span) ? dp : depth ?? dp;
-      } else {
-        d = pivotDistance(dp, target, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
-        if (d != null && !peek) target = d;
-      }
+      } else d = pivotDistance(dp, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
       if (d == null) d = Math.max(50, height() * 2);
       return Cesium.Ray.getPoint(ray, d, v3());
+    }
+    // The pivot of a rotation: the one the last rotation used while nothing else has moved the camera since.
+    function turnPivot() {
+      if (held && C3.distance(held.at, cam.positionWC) < 0.01 && held.proj === hooks.projection()) return held.pivot;
+      return centre();
     }
     const height = () => { const c = Cesium.Cartographic.fromCartesian(cam.positionWC); return c ? c.height : 1e7; };
 
@@ -206,11 +259,13 @@
       dir = C3.normalize(dir, v3());
       if (ortho()) { if (!pivot) pivot = centre(); pos = C3.subtract(pivot, C3.multiplyByScalar(dir, BACK, v3()), v3()); }
       else { const g = grounded(pos); pos = g.pos; if (g.rests && onGround) onGround(); }
-      if (hooks.projection() === "two_point") {             // the axis stays level; framing is the lens shift
-        const n = normal(pos); C3.subtract(dir, C3.multiplyByScalar(n, C3.dot(dir, n), v3()), dir); C3.normalize(dir, dir);
-      }
-      cam.setView({ destination: pos, orientation: { direction: dir, up: level(dir, up) } });
-      mine = cam.positionWC.clone();
+      if (twoPoint()) {                                     // the axis stays level; the pitch becomes the lens shift
+        const n = normal(pos), pitch = clamp(Math.asin(clamp(C3.dot(dir, n), -1, 1)), -TWO_POINT_MAX, TWO_POINT_MAX);
+        let flat = C3.subtract(dir, C3.multiplyByScalar(n, C3.dot(dir, n), v3()), v3());
+        if (C3.magnitude(flat) < 1e-6) flat = C3.subtract(cam.directionWC, C3.multiplyByScalar(n, C3.dot(cam.directionWC, n), v3()), v3());
+        cam.frustum._elShift = Math.tan(pitch);
+        cam.setView({ destination: pos, orientation: { direction: C3.normalize(flat, flat), up: n } });
+      } else cam.setView({ destination: pos, orientation: { direction: dir, up: level(dir, up) } });
     }
     // The ground rule (Floor): one ray down onto the map's upper surface where the camera is going.
     function grounded(pos) {
@@ -230,21 +285,19 @@
 
     // ---- motions (all in world space, about a pivot latched when the gesture began)
     function orbit(dh, dt) {
-      if (!pivot) pivot = centre();
-      let pos = cam.positionWC, dir = cam.directionWC, up = cam.upWC;
-      const n = normal(pivot);
+      if (!pivot) pivot = turnPivot();
+      let { pos, dir, up } = pose();
+      const n = normal(pivot), keep = () => { held = { pivot, at: cam.positionWC.clone(), proj: hooks.projection() }; };
       if (dh) {
         const q = Cesium.Quaternion.fromAxisAngle(n, -Cesium.Math.toRadians(dh));
         pos = C3.add(pivot, rotate(q, C3.subtract(pos, pivot, v3())), v3()); dir = rotate(q, dir); up = rotate(q, up);
       }
-      if (dt && hooks.projection() === "two_point") {
-        const f = cam.frustum, a = clamp(Math.atan(f._elShift || 0) - Cesium.Math.toRadians(dt), -1.4, 1.4);   // the frame follows the fingers
-        f._elShift = Math.tan(a);
-      } else if (dt) {
+      if (dt) {
         const off = C3.subtract(pos, pivot, v3()), d = C3.magnitude(off);
         const elev = Math.asin(clamp(C3.dot(off, n) / (d || 1), -1, 1));
         // from straight down to straight up: below the pivot is fine (looking up at a facade), as in Rhino
-        const next = clamp(elev - Cesium.Math.toRadians(dt), -Cesium.Math.toRadians(89.9), Cesium.Math.toRadians(89.9));
+        const lim = twoPoint() ? TWO_POINT_MAX : Cesium.Math.toRadians(89.9);
+        const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, -lim), Math.max(elev, lim));
         if (Math.abs(next - elev) > 1e-9) {
           const right = C3.normalize(C3.cross(dir, up, v3()), v3());
           const q = Cesium.Quaternion.fromAxisAngle(right, elev - next);
@@ -253,11 +306,11 @@
           if (next < elev) {                               // tilting down: stop at the ground, do not slide along it
             let rests = false; setPose(pos, dir, up, () => { rests = true; });
             if (rests) setPose(...flat);
-            return;
+            return keep();
           }
         }
       }
-      setPose(pos, dir, up);
+      setPose(pos, dir, up); keep();
     }
     function pan(fx, fy) {                                 // finger motion in CSS px; the scene follows it
       const [w, h] = size(), k = RATE.pan * sens();
@@ -272,23 +325,24 @@
       const m = 2 * dist * Math.tan((cam.frustum.fovy || 0.8) / 2) / h * k;
       const right = C3.subtract(cam.rightWC, C3.multiplyByScalar(n, C3.dot(cam.rightWC, n), v3()), v3()); C3.normalize(right, right);
       const fwd = C3.normalize(C3.cross(n, right, v3()), v3());
-      const down = clamp(-C3.dot(cam.directionWC, n), 0.25, 1);             // farther ground moves faster per pixel
+      const P = pose(), down = clamp(-C3.dot(P.dir, n), 0.25, 1);          // farther ground moves faster per pixel
       const D = C3.add(C3.multiplyByScalar(right, -fx * m, v3()), C3.multiplyByScalar(fwd, fy * m / down, v3()), v3());
       // move over the curved Earth: rotate camera and pivot about the Earth's centre
       const axis = C3.cross(pivot, D, v3()), ang = C3.magnitude(D) / C3.magnitude(pivot);
       if (!(ang > 0) || C3.magnitude(axis) === 0) return;
       const q = Cesium.Quaternion.fromAxisAngle(C3.normalize(axis, axis), ang);   // carries the camera along D
       pivot = rotate(q, pivot);
-      setPose(rotate(q, cam.positionWC), rotate(q, cam.directionWC), rotate(q, cam.upWC));
+      setPose(rotate(q, P.pos), rotate(q, P.dir), rotate(q, P.up));
     }
     function lookAround(dh, dt) {                          // turn the camera where it stands (Rhino: RotateCamera)
-      const n = normal(cam.positionWC);
-      let dir = rotate(Cesium.Quaternion.fromAxisAngle(n, -Cesium.Math.toRadians(dh)), cam.directionWC), up = cam.upWC;
-      const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), -1.55, 1.55);
+      const P = pose(), n = normal(P.pos);
+      let dir = rotate(Cesium.Quaternion.fromAxisAngle(n, -Cesium.Math.toRadians(dh)), P.dir);
+      const lim = twoPoint() ? TWO_POINT_MAX : 1.55;
+      const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), Math.min(pitch, -lim), Math.max(pitch, lim));
       const right = C3.normalize(C3.cross(dir, n, v3()), v3());
       dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
-      pivot = null; target = null;
-      setPose(cam.positionWC, dir, up);
+      pivot = null;
+      setPose(P.pos, dir, P.up);
     }
     function zoom(logFactor) {                             // > 0 zooms out
       const z = Math.exp(logFactor);
@@ -309,9 +363,7 @@
       let pos = C3.add(A, C3.multiplyByScalar(off, nd / (d || 1), v3()), v3());
       if (Cesium.Cartographic.fromCartesian(pos)?.height > 4e7) return;
       pos = grounded(pos).pos;
-      if (target != null) target = clamp(target * nd / (d || 1), 0.4, 4e7);   // the focus comes closer with the camera
       cam.setView({ destination: pos, orientation: { direction: cam.directionWC, up: cam.upWC } });   // no re-levelling: the image never turns
-      mine = cam.positionWC.clone();
     }
 
     // ---- frame loop: ease pending motion, continuous zoom, short animations
@@ -341,7 +393,6 @@
       hooks.moved(); cam.cancelFlight();
       floor.reset(); groundAt = null;                      // a new gesture never starts by lifting the camera
       const c0 = Cesium.Cartographic.fromCartesian(cam.positionWC); if (c0) floor.h = c0.height;
-      if (!mine || C3.distance(mine, cam.positionWC) > 0.01) target = null;   // something else moved the camera: focus anew
     }
 
     // ---- input
@@ -349,7 +400,9 @@
       e.preventDefault();
       if (!hooks.allowed() && !hooks.walking()) return;
       const g = latch.read(e, hooks.projection(), e.timeStamp || performance.now(), mac()), u = wheelPx(e), s = sens();   // event time: page stalls cannot split a gesture
-      const fx = -e.deltaX * u, fy = -e.deltaY * u;        // finger motion (natural scrolling)
+      if (rec) rec.push(["wheel", Math.round(e.timeStamp), e.deltaX, e.deltaY, e.deltaMode, e.wheelDeltaY ?? null, +e.ctrlKey, +e.shiftKey, g.mode, g.device || "", +(g.gain ?? 1).toFixed(3)]);
+      if (g.skip) return;
+      const fx = -e.deltaX * u * g.gain, fy = -e.deltaY * u * g.gain;   // finger motion (natural scrolling)
       if (hooks.walking()) { if (g.mode !== "zoom") { ease.add("heading", fx * RATE.look * s); ease.add("tilt", fy * RATE.look * s); kick(); } return; }
       if (g.start) { begin(); pivot = null; anchor = null; ease.clear(); }
       const proj = hooks.projection();
@@ -391,6 +444,7 @@
       const mode = dragMode(e);
       if (mode !== "look") { begin(); pivot = null; anchor = mode === "zoom" ? zoomAnchor(e) : null; ease.clear(); }
       pointer = { id: e.pointerId, x: e.clientX, y: e.clientY, mode, shift: e.shiftKey, sx: 0, sy: 0, lock: null };
+      if (rec) rec.push(["down", Math.round(e.timeStamp), e.button, mode, e.pointerType]);
     });
     canvas.addEventListener("pointermove", e => {
       if (!pointer || pointer.id !== e.pointerId) return;
@@ -400,6 +454,7 @@
       if (!e.shiftKey && !pointer.shift) pointer.lock = null;
       if (pointer.lock === "x") fy = 0; else if (pointer.lock === "y") fx = 0;
       const m = pointer.mode;
+      if (rec) rec.push(["move", Math.round(e.timeStamp), fx, fy]);
       if (m === "look") { ease.add("heading", fx * RATE.lookMouse * s); ease.add("tilt", fy * RATE.lookMouse * s); }
       else if (m === "zoom") ease.add("zoom", fy * RATE.dragZoom * s);
       else if (m === "dolly") { if (!anchor) anchor = { point: pivot || (pivot = centre()) }; ease.add("zoom", fy * RATE.dragZoom * s); }
@@ -432,17 +487,16 @@
 
     // ---- public API (navigation menu, +/- buttons)
     function headingTilt() {
-      const dir = cam.directionWC, n = normal(cam.positionWC), p = pivot || centre(true);
+      const dir = cam.directionWC, n = normal(cam.positionWC), p = pivot || turnPivot();
       const enu = Cesium.Transforms.eastNorthUpToFixedFrame(cam.positionWC), inv = Cesium.Matrix4.inverseTransformation(enu, new Cesium.Matrix4());
       const h = C3.dot(dir, n) < -0.999 ? cam.upWC : dir, l = Cesium.Matrix4.multiplyByPointAsVector(inv, h, v3());
       const heading = (Cesium.Math.toDegrees(Math.atan2(l.x, l.y)) + 360) % 360;
       const off = C3.subtract(cam.positionWC, p, v3());
-      const tilt = hooks.projection() === "two_point" ? Cesium.Math.toDegrees(Math.atan(cam.frustum._elShift || 0))
-        : 90 - Cesium.Math.toDegrees(Math.asin(clamp(C3.dot(C3.normalize(off, off), normal(p)), -1, 1)));
+      const tilt = 90 - Cesium.Math.toDegrees(Math.asin(clamp(C3.dot(C3.normalize(off, off), normal(p)), -1, 1)));
       return { heading, tilt };
     }
     let sliderAt = 0;
-    const sliderPivot = () => { const now = performance.now(); if (now - sliderAt > 600) { begin(); pivot = centre(); } sliderAt = now; };
+    const sliderPivot = () => { const now = performance.now(); if (now - sliderAt > 600) { begin(); pivot = turnPivot(); } sliderAt = now; };
     const turn = d => ((d % 360) + 540) % 360 - 180;
     const api = {
       RATE,
@@ -450,12 +504,11 @@
       setHeading(h) { if (!hooks.allowed()) return; sliderPivot(); orbit(turn(h - headingTilt().heading), 0); scene.requestRender(); },
       setTilt(t) {
         if (!hooks.allowed()) return;
-        if (hooks.projection() === "two_point") { begin(); cam.frustum._elShift = Math.tan(Cesium.Math.toRadians(clamp(t, -80, 80))); }
-        else { sliderPivot(); orbit(0, t - headingTilt().tilt); }
+        sliderPivot(); orbit(0, t - headingTilt().tilt);
         scene.requestRender();
       },
       north() {
-        if (!hooks.allowed()) return; begin(); pivot = centre(); let left = -turn(headingTilt().heading), time = 0;
+        if (!hooks.allowed()) return; begin(); pivot = turnPivot(); let left = -turn(headingTilt().heading), time = 0;
         const total = left, dur = 0.35;
         anim = dt => {
           time += dt; const k = clamp(time / dur, 0, 1), eased = 1 - Math.pow(1 - k, 3), step = total * eased - (total - left); left -= step; orbit(step, 0);
@@ -473,6 +526,8 @@
       stop() { ease.clear(); hold = 0; anim = null; pointer = null; },
       settleParallel() { if (!ortho()) return; pivot = centre(); setPose(cam.positionWC, cam.directionWC, cam.upWC); pivot = null; scene.requestRender(); },
       get pivot() { return pivot; },
+      // Record raw input for `ms` (trackpad, wheel and drags; no page content), to see what a device really sends.
+      record(ms = 10000) { rec = []; const out = rec; return new Promise(done => setTimeout(() => { if (rec === out) rec = null; done({ ua: navigator.userAgent, dpr: window.devicePixelRatio, mac: mac(), events: out }); }, ms)); },
     };
     return api;
   }
@@ -482,5 +537,5 @@
     const n = typeof navigator !== "undefined" ? navigator : {};
     return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
   }
-  return { RATE, STEP, WheelLatch, Ease, Floor, pivotDistance, isMouseWheel, isMac, neutralDirection, create };
+  return { RATE, STEP, WheelLatch, Coast, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, create };
 });

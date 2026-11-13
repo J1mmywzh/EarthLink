@@ -49,16 +49,34 @@ def anchor_info(doc):
             "north": round(north_angle(doc), 6), "base": [b.X, b.Y, b.Z]}
 
 
-def set_anchor(doc, lat=None, lon=None, rotate_deg=0.0, elev=None, zero=None):
+def base_point_for(doc, ids):
+    """Bottom centre of the objects' bounding box, in model coordinates (None: nothing to measure).
+    A first placement puts this point on the spot picked on the map."""
+    bbox = rg.BoundingBox.Empty
+    for i in ids or []:
+        try:
+            obj = doc.Objects.FindId(System.Guid(str(i)))
+        except Exception:
+            obj = None
+        if obj is not None and not obj.IsDeleted:
+            bbox.Union(obj.Geometry.GetBoundingBox(True))
+    if not bbox.IsValid:
+        return None
+    c = bbox.Center
+    return rg.Point3d(c.X, c.Y, bbox.Min.Z)
+
+
+def set_anchor(doc, lat=None, lon=None, rotate_deg=0.0, elev=None, zero=None, base=None):
     """Update the EarthAnchorPoint (the same thing the EarthAnchorPoint command edits).
-    rotate_deg turns the model clockwise on the map (north turns counter-clockwise in the model)."""
+    rotate_deg turns the model clockwise on the map (north turns counter-clockwise in the model).
+    base: a new model base point (the point of the model that sits on the site location)."""
     ep = doc.EarthAnchorPoint
     new = Rhino.DocObjects.EarthAnchorPoint()
     new.EarthBasepointLatitude = ep.EarthBasepointLatitude if lat is None else lat
     new.EarthBasepointLongitude = ep.EarthBasepointLongitude if lon is None else lon
     new.EarthBasepointElevation = ep.EarthBasepointElevation if elev is None else elev
     new.EarthBasepointElevationZero = ep.EarthBasepointElevationZero if zero is None else zero
-    new.ModelBasePoint = ep.ModelBasePoint
+    new.ModelBasePoint = ep.ModelBasePoint if base is None else base
     north, east = rg.Vector3d(ep.ModelNorth), rg.Vector3d(ep.ModelEast)
     if not ep.EarthLocationIsSet() and north.IsZero:
         north, east = rg.Vector3d(0, 1, 0), rg.Vector3d(1, 0, 0)
