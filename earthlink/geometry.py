@@ -252,6 +252,35 @@ def merge_glb(path):
 IDENTITY = [1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]
 
 
+# ----------------------------------------------------------------- materials a browser can show
+GLASS_ALPHA_MIN = 0.12
+
+
+def screen_materials(path):
+    """Rewrite a GLB's materials for a real-time viewer. Returns how many were changed.
+
+    Rhino writes glass, polycarbonate and any transparent material as "transmission" (light passing through a
+    solid), which real-time viewers such as Cesium ignore: the material shows as an opaque block. They become
+    see-through here: blended, as transparent as the Rhino material says, lit from both sides."""
+    js, binary = collada._read_glb(str(path))
+    changed = 0
+    for m in js.get("materials", []):
+        ext = m.get("extensions") or {}
+        t = (ext.get("KHR_materials_transmission") or {}).get("transmissionFactor", 0) or 0
+        if t <= 0 or m.get("alphaMode") == "BLEND":
+            continue
+        pbr = m.setdefault("pbrMetallicRoughness", {})
+        c = list(pbr.get("baseColorFactor", [1.0, 1.0, 1.0, 1.0]))[:4] + [1.0] * 4
+        pbr["baseColorFactor"] = c[:3] + [round(max(GLASS_ALPHA_MIN, c[3] * (1.0 - 0.88 * min(1.0, t))), 4)]
+        m["alphaMode"] = "BLEND"
+        m["doubleSided"] = True
+        ext.pop("KHR_materials_transmission", None)
+        changed += 1
+    if changed:
+        _write_glb(path, js, bytes(binary))
+    return changed
+
+
 def _normal_matrix(m):
     """Inverse-transpose of the upper 3x3 (column-major 4x4 result), or None when it is the identity."""
     if m == IDENTITY:

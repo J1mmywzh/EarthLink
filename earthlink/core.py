@@ -387,6 +387,10 @@ def send_set(doc, name, to_earthpro=False):
         geometry.merge_glb(os.path.join(vd, "model.glb"))
     except Exception:
         pass        # the unmerged file still displays, only slower
+    try:            # glass and other see-through materials: Rhino writes them in a form real-time viewers ignore
+        geometry.screen_materials(os.path.join(vd, "model.glb"))
+    except Exception:
+        pass
     scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
     entry = {"glb": vd_rel + "/model.glb", "version": version, "objects": len(objs),
              "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],

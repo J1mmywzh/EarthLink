@@ -558,6 +558,8 @@
     const sun=scene.context.uniformState.sunDirectionWC;
     const e=on&&sun&&C3.magnitude(sun)>0?Cesium.Math.toDegrees(Math.asin(Math.max(-1,Math.min(1,C3.dot(sun,up))))):90;
     const L=EarthLinkNavigation.daylight(e),cast=on&&S.shadows!==false&&L.shadow>0.02;
+    const ambient=on?1-0.8*L.night:1;                    // the sky's light on your model: a fifth at night
+    for(const m of Object.values(models)){const f=m.imageBasedLighting?.imageBasedLightingFactor;if(f&&Math.abs(f.x-ambient)>1e-3){m.imageBasedLighting.imageBasedLightingFactor=new Cesium.Cartesian2(ambient,ambient);dayKey="";}}
     const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2)].join();
     if(key===dayKey)return;dayKey=key;
     mapTint.x=L.tint[0];mapTint.y=L.tint[1];mapTint.z=L.tint[2];
@@ -567,8 +569,13 @@
     if(scene.moon)scene.moon.show=L.night>0.5;
     viewer.shadows=cast;viewer.shadowMap.darkness=0.35+0.65*(1-L.shadow);
     if(on){
-      if(L.night>0.5){C3.negate(up,moonLight.direction);moonLight.intensity=0.45*L.night;scene.light=moonLight;}
-      else{sunLight.intensity=2*Math.max(0.3,1-1.4*L.night);scene.light=sunLight;}
+      if(L.night>0.5){                                   // moonlight: from where the sun would be, mirrored above the horizon
+        const d=C3.subtract(sun,C3.multiplyByScalar(up,2*C3.dot(sun,up),new C3()),new C3());
+        C3.negate(C3.normalize(d,d),moonLight.direction);moonLight.intensity=0.3*L.night;scene.light=moonLight;
+      } else {
+        sunLight.intensity=2*Math.max(0.3,1-1.4*L.night);
+        sunLight.color=new Cesium.Color(1,1-0.2*L.warm,1-0.38*L.warm,1);scene.light=sunLight;
+      }
     }
     scene.requestRender();
   }
