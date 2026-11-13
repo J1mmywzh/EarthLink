@@ -573,7 +573,7 @@
     const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2)].join();
     if(key===dayKey)return;dayKey=key;
     mapTint.x=L.tint[0];mapTint.y=L.tint[1];mapTint.z=L.tint[2];
-    dayTint=new Cesium.Color(...L.tint,1);               // your model takes the same tint as the map around it
+    dayTint=new Cesium.Color(...L.tint.map(v=>Math.pow(v,1/2.2)),1);   // your model takes the same tint as the map (a model colour is given in display values)
     for(const n of Object.keys(models))styleModel(models[n],n);
     scene.backgroundColor=new Cesium.Color(...L.sky,1);
     if(scene.skyBox)scene.skyBox.show=L.night>0.5;
