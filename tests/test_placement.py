@@ -1,6 +1,6 @@
 """EarthLink placement: a transform layer on top of the Rhino geometry, composed from viewer moves."""
 import math
-from earthlink.geometry import compose_placement
+from earthlink.geometry import clean_placement, compose_placement, placed_location
 
 
 def apply(p, x, y):
@@ -33,3 +33,16 @@ def test_height_adds_and_undoing_a_move_clears_the_placement():
 def test_angles_stay_in_range():
     p = compose_placement(None, rot=170)
     assert compose_placement(p, rot=30)["rot"] == -160
+
+
+def test_stored_placement_is_normalised_and_empty_when_at_the_rhino_position():
+    assert clean_placement(190, [1, 2]) == {"rot": -170.0, "t": [1.0, 2.0, 0.0]}
+    assert clean_placement(0, [0, 0, 0]) is None and clean_placement(360, None) is None
+    assert clean_placement(None, [0, 0, 0.5]) == {"rot": 0.0, "t": [0.0, 0.0, 0.5]}
+
+
+def test_earth_pro_location_moves_by_the_placement():
+    lat, lon = placed_location(42.44, -76.5, [100.0, -50.0, 0.0])
+    assert abs((lat - 42.44) * 111_100 + 50) < 0.5                       # about 111.1 km per degree of latitude here
+    assert abs((lon + 76.5) * 111_320 * math.cos(math.radians(42.44)) - 100) < 0.5
+    assert placed_location(10.0, 20.0, [0, 0, 5]) == (10.0, 20.0)

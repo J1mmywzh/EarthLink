@@ -42,8 +42,8 @@ def make_live(home):
         make_glb(os.path.join(live, sd, "v%05d" % v, "model.glb"))
     meta = {"version": 2, "project": "p-test", "name": "TestModel", "sent_at": "2026-11-08 20:40:00",
             "anchor": {"lat": 42.4405, "lon": -76.5108, "elev": 0.0, "zero": "GroundLevel", "north": 90.0, "base": [0, 0, 0]},
-            "sets": {"Main": {"glb": "set_Main/v00001/model.glb", "version": 1, "objects": 2, "bbox_m": [[0, 0, 0], [30, 20, 30]], "sent_at": "x"},
-                     "Scheme B": {"glb": "set_Scheme_B/v00002/model.glb", "version": 2, "objects": 2, "bbox_m": [[0, 0, 0], [30, 20, 30]], "sent_at": "x"}}}
+            "sets": {"Main": {"glb": "set_Main/v00001/model.glb", "version": 1, "objects": 2, "bbox_m": [[0, 0, 0], [30, 20, 30]], "sent_at": "x", "unplaced": True},
+                     "Scheme B": {"glb": "set_Scheme_B/v00002/model.glb", "version": 2, "objects": 2, "bbox_m": [[0, 0, 0], [30, 20, 30]], "sent_at": "x", "unplaced": True}}}
     from earthlink.geometry import derive
     for entry in meta["sets"].values():
         entry["geometry"] = entry["glb"].replace("model.glb", "geometry.json")

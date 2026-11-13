@@ -47,3 +47,46 @@ test('drag the person onto the map to stand there; double-tap Space to fly',asyn
  const tap2=()=>p.evaluate(()=>{for(let i=0;i<2;i++)for(const n of['keydown','keyup'])document.dispatchEvent(new KeyboardEvent(n,{code:'Space',key:' ',bubbles:true,cancelable:true}));});   // two taps with no renderer delay between them
  await tap2();assert.equal(await p.evaluate(()=>EL.walk.body.flying),true,'flying');await p.waitForTimeout(500);
  await tap2();assert.equal(await p.evaluate(()=>EL.walk.body.flying),false,'double-tap again drops');});
+
+// ---- regressions measured on 2026-11-13 (camera jumps, placement glitches)
+const view=(p,eye,tgt)=>p.evaluate(([eye,tgt])=>{const C3=Cesium.Cartesian3,M=EL.models.Main.modelMatrix,W=a=>Cesium.Matrix4.multiplyByPoint(M,new C3(...a),new C3()),e=W(eye),t=W(tgt);
+  EL.nav.stop();EL.viewer.camera.setView({destination:e,orientation:{direction:C3.normalize(C3.subtract(t,e,new C3()),new C3()),up:C3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M,C3.UNIT_Z,new C3()),new C3())}});EL.viewer.render();},[eye,tgt]);
+const swipe=(p,dx,dy,n,o={})=>p.evaluate(async([dx,dy,n,o])=>{const c=EL.viewer.scene.canvas,r=c.getBoundingClientRect(),C3=Cesium.Cartesian3,cam=EL.viewer.camera;let prev=cam.positionWC.clone(),max=0;
+  const off=EL.viewer.scene.postRender.addEventListener(()=>{max=Math.max(max,C3.distance(prev,cam.positionWC));prev=cam.positionWC.clone();});
+  for(let i=0;i<n;i++){c.dispatchEvent(new WheelEvent('wheel',{deltaX:dx,deltaY:dy,deltaMode:0,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true,...o}));await new Promise(f=>requestAnimationFrame(f));}
+  const pivot=EL.nav.pivot&&C3.distance(EL.nav.pivot,cam.positionWC);for(let i=0;i<30;i++)await new Promise(f=>requestAnimationFrame(f));await new Promise(f=>setTimeout(f,260));off();return{maxStep:max,pivot};},[dx,dy,n,o]);
+const height=p=>p.evaluate(()=>Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC).height);
+const baseCentre=p=>p.evaluate(()=>{const b=EL.meta.sets.Main.bbox_m,w=Cesium.Matrix4.multiplyByPoint(EL.models.Main.modelMatrix,new Cesium.Cartesian3((b[0][0]+b[1][0])/2,(b[0][1]+b[1][1])/2,b[0][2]),new Cesium.Cartesian3());return[w.x,w.y,w.z];});
+test('nothing but EarthLink moves the camera, and looking up does not snap it',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
+ assert.equal(await p.evaluate(()=>EL.viewer.scene.screenSpaceCameraController.enableCollisionDetection),false);
+ await view(p,[15,-25,1.7],[15,2.5,9]);await p.waitForTimeout(400);const h0=await height(p);
+ const r=await swipe(p,0,-1,3);assert.ok(r.maxStep<0.5,'tilt of 3 px moved the camera '+r.maxStep.toFixed(2)+' m in one frame');assert.ok(Math.abs(await height(p)-h0)<0.6);
+ const down=await swipe(p,0,6,40);assert.ok(down.maxStep<3,'tilting on is smooth: '+down.maxStep);});
+test('the pivot stays at the model when the centre of the view runs to the horizon',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
+ await view(p,[15,-140,6],[60,400,8]);await p.waitForTimeout(400);const r=await swipe(p,-3,0,8);
+ assert.ok(r.pivot&&r.pivot<400,'pivot '+Math.round(r.pivot)+' m away');assert.ok(r.maxStep<3,'step '+r.maxStep);
+ await p.evaluate(()=>EL.setProjection('two_point'));await p.waitForTimeout(400);const two=await swipe(p,-3,0,8);
+ assert.ok(two.pivot&&two.pivot<400,'two-point pivot '+Math.round(two.pivot));assert.ok(two.maxStep<3,'two-point step '+two.maxStep);await p.evaluate(()=>EL.setProjection('perspective'));});
+test('placing a set is instant, exports nothing and is kept by the server',async t=>{const p=await pageFor(t);const meta0=await p.evaluate(()=>EL.meta.sets.Main);
+ const c0=await baseCentre(p);await p.evaluate(()=>EL.setPlacement('Main',0,[5,0,0]));const c1=await baseCentre(p);assert.ok(Math.abs(d3(c0,c1)-5)<1e-3,'moved 5 m at once');
+ await p.evaluate(()=>EL.rotateSet('Main',40));const c2=await baseCentre(p);assert.ok(d3(c1,c2)<1e-3,'turning keeps the base centre where it is');
+ await p.waitForFunction(()=>EL.meta.sets.Main.placement&&!EL.place.Main,null,{timeout:8000});
+ const m=await p.evaluate(()=>EL.meta.sets.Main);assert.equal(m.placement.rot,40);assert.equal(m.glb,meta0.glb,'no new export');assert.ok(d3(c2,await baseCentre(p))<1e-3,'no jump when the server answers');
+ await p.evaluate(()=>EL.setPlacement('Main',0,[0,0,0]));await p.waitForFunction(()=>!EL.meta.sets.Main.placement&&!EL.place.Main,null,{timeout:8000});assert.ok(d3(c0,await baseCentre(p))<1e-3);});
+test('dragging a set near the horizon cannot fling it away',async t=>{const p=await pageFor(t);await p.evaluate(()=>EL.setProjection('perspective'));
+ await view(p,[15,-90,3],[15,2.5,3]);await p.evaluate(()=>{EL.openSetCard('Main');const d=document.getElementById('dragOn');d.checked=true;d.dispatchEvent(new Event('change'));});
+ const box=await p.locator('canvas').first().boundingBox(),x=box.x+box.width/2,y=box.y+box.height*0.52;
+ await p.mouse.move(x,y);await p.mouse.down();await p.mouse.move(x+30,box.y+box.height*0.5,{steps:10});await p.mouse.move(x+30,box.y+box.height*0.3,{steps:10});await p.mouse.up();
+ const moved=await p.evaluate(()=>{const q=EL.placementOf('Main');return Math.hypot(q.t[0],q.t[1]);});assert.ok(moved<800,'moved '+Math.round(moved)+' m');
+ await p.evaluate(()=>EL.setPlacement('Main',0,[0,0,0]));await p.waitForTimeout(600);});
+test('Edit Set: typed offsets and rotation place the set; the Rhino switches are sent',async t=>{const p=await pageFor(t);
+ await p.evaluate(()=>EL.setPlacement('Main',0,[0,0,0]));await p.waitForFunction(()=>!EL.meta.sets.Main.placement&&!EL.place.Main,null,{timeout:8000});const c0=await baseCentre(p);   // whatever an earlier run left
+ await p.evaluate(()=>EL.openSetCard('Main'));await p.locator('#setE').fill('4');await p.locator('#setU').fill('1.5');
+ assert.ok(Math.abs(d3(c0,await baseCentre(p))-Math.hypot(4,1.5))<1e-3,'typed offset applied at once');
+ await p.locator('#setRotN').fill('90');const q=await p.evaluate(()=>EL.placementOf('Main'));assert.equal(q.rot,90);
+ assert.ok(Math.abs(d3(c0,await baseCentre(p))-Math.hypot(4,1.5))<1e-3,'the base centre stays put while turning');
+ assert.equal(+await p.locator('#setE').inputValue(),4);
+ await p.locator('#setLive').check({force:true});await p.waitForFunction(()=>EL.meta.sets.Main.live===true,null,{timeout:8000});
+ await p.waitForFunction(()=>document.querySelector('#sets .item .t')?.textContent.includes('Live'),null,{timeout:4000});
+ await p.locator('#setLive').uncheck({force:true});await p.waitForFunction(()=>EL.meta.sets.Main.live===false,null,{timeout:8000});
+ await p.locator('#setOriginal').click();await p.waitForFunction(()=>!EL.meta.sets.Main.placement&&!EL.place.Main,null,{timeout:8000});assert.ok(d3(c0,await baseCentre(p))<1e-3);});

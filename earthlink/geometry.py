@@ -102,6 +102,22 @@ def compose_placement(p, dx=0.0, dy=0.0, dz=0.0, rot=0.0, pivot=(0, 0, 0)):
     return None if not out["rot"] and not any(out["t"]) else out
 
 
+def clean_placement(rot=0.0, t=(0.0, 0.0, 0.0)):
+    """A placement {rot, t} in its stored form, or None when it is 'where the set is in Rhino'."""
+    t = [round(float(v or 0.0), 6) for v in (list(t or []) + [0.0, 0.0, 0.0])[:3]]
+    rot = round((float(rot or 0.0) + 180.0) % 360.0 - 180.0, 6)
+    return {"rot": rot, "t": t} if rot or any(t) else None
+
+
+def placed_location(lat, lon, t):
+    """Latitude and longitude of the point `t` metres east/north of (lat, lon), on WGS84 (Earth Pro export)."""
+    a, e2 = 6378137.0, 6.69437999014e-3
+    s = math.sin(math.radians(lat))
+    w = math.sqrt(1.0 - e2 * s * s)
+    north, east = a * (1.0 - e2) / w ** 3, a / w * math.cos(math.radians(lat))
+    return lat + math.degrees(t[1] / north), lon + math.degrees(t[0] / east)
+
+
 # ----------------------------------------------------------------- draw-call merge
 def merge_glb(path):
     """Rewrite a GLB so it holds one mesh piece per material instead of one per object face.

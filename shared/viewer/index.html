@@ -88,6 +88,10 @@
   input[type=number] { width: 72px; }
   .chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--fill); cursor: pointer; font-size: 12px; font-weight: 500; user-select: none; }
   .chip input { display: none; }
+  .num { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; font-size: 11.5px; color: var(--fg2); }
+  .num input { width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .keys { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; } .keys dt { color: var(--fg2); } .keys dd { margin: 0; }
+  details > summary { cursor: pointer; color: var(--accent); font-weight: 500; list-style: none; padding: 2px 4px; } details > summary::-webkit-details-marker { display: none; }
   .chip:has(input:checked) { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--fg2); font-size: 12px; }
@@ -194,7 +198,9 @@
     </div>
     <div class="group">
       <div class="ghead">Views <button id="addView" class="link">Save View</button></div>
-      <div class="card" id="views"></div>
+      <div class="card"><div id="views"></div>
+        <div class="item rhinoOnly" style="border-top:.5px solid var(--sep)"><span class="grow"><div class="t">Sync with Rhino's named views</div></span><label class="switch"><input type="checkbox" id="syncViews" aria-label="Sync named views with Rhino"><span></span></label></div>
+      </div>
     </div>
     <div class="group">
       <div class="ghead">Display</div>
@@ -211,8 +217,7 @@
         <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
         <div class="item" id="fovRow"><span class="grow">Lens</span><span class="val" id="fovLbl"></span></div>
         <div class="item" id="fovSlider"><input type="range" id="fov" min="15" max="100" step="1"></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
-        <div class="item rhinoOnly"><span class="grow"><div class="t">Sync views</div></span><label class="switch"><input type="checkbox" id="syncViews"><span></span></label></div>
+        <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino's viewport</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
         
       </div>
     </div>
@@ -220,9 +225,8 @@
       <div class="ghead">Site <button id="editSite" class="link rhinoOnly">Edit</button></div>
       <div class="card">
         <div class="item"><span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-pin"/></svg></span><span class="grow"><div class="t" id="siteLatLon">—</div></span></div>
-        <div class="item"><span class="grow">Height</span><span class="val" id="hval"></span></div>
-        <div class="item"><div class="row" style="gap:6px"><button class="pill" data-n="-1">−1 m</button><button class="pill" data-n="-0.1">−0.1</button><button class="pill" data-n="0.1">+0.1</button><button class="pill" data-n="1">+1 m</button></div></div>
-        <div class="item"><button class="link" id="resample">Re-sample</button></div>
+        <div class="item"><span class="grow">Height offset</span><input type="number" id="nudge" step="0.1" style="width:84px;text-align:right" aria-label="Height offset in metres"><span class="val">m</span></div>
+        <div class="item"><button class="link" id="resample" title="Measure the map's ground height at the site again">Re-sample ground</button></div>
       </div>
     </div>
   </div>
@@ -254,6 +258,7 @@
   <label class="navLabel">Sensitivity <span class="val" id="sensValue"></span></label>
   <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
   <div class="row" style="margin-top:12px"><button id="northBtn" class="link">Reset to north</button></div>
+  <details id="navHelp" style="margin-top:6px"><summary>Controls</summary><dl class="keys" id="navKeys"></dl></details>
 </div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -286,20 +291,19 @@
   <div class="lbl">Display</div>
   <div class="seg" id="setStyleSeg" style="width:100%"><button data-v="" style="flex:1">Default</button><button data-v="materials" style="flex:1">Materials</button><button data-v="clay" style="flex:1">Clay</button><button data-v="ghost" style="flex:1">Ghost</button></div>
   <div class="rhinoOnly">
-    <div class="lbl">Position <span class="val" id="moveLbl"></span></div>
-    <div class="row"><label class="chip"><input type="checkbox" id="dragOn">Drag on map</label></div>
-    <div class="row" style="margin-top:8px; gap:6px">
-      <span class="val" style="width:38px">East</span><button class="pill" data-mv="dx" data-d="-1">−1</button><button class="pill" data-mv="dx" data-d="-0.1">−0.1</button><button class="pill" data-mv="dx" data-d="0.1">+0.1</button><button class="pill" data-mv="dx" data-d="1">+1</button>
-    </div>
-    <div class="row" style="margin-top:6px; gap:6px">
-      <span class="val" style="width:38px">North</span><button class="pill" data-mv="dy" data-d="-1">−1</button><button class="pill" data-mv="dy" data-d="-0.1">−0.1</button><button class="pill" data-mv="dy" data-d="0.1">+0.1</button><button class="pill" data-mv="dy" data-d="1">+1</button>
-    </div>
-    <div class="row" style="margin-top:6px; gap:6px">
-      <span class="val" style="width:38px">Up</span><button class="pill" data-mv="dz" data-d="-1">−1</button><button class="pill" data-mv="dz" data-d="-0.1">−0.1</button><button class="pill" data-mv="dz" data-d="0.1">+0.1</button><button class="pill" data-mv="dz" data-d="1">+1</button>
-    </div>
-    <div class="lbl">Rotate <span class="val" id="setRotLbl"></span></div>
-    <input type="range" id="setRot" min="-180" max="180" step="0.5" value="0">
-    <div class="row" style="margin-top:14px; justify-content:space-between"><button class="link" id="setOriginal" title="Show this set where it is in Rhino">Original position</button><span class="row"><button class="pill" id="setReset">Reset</button><button class="primary" id="setApply" disabled title="Place the set here in EarthLink. Your Rhino geometry does not move.">Apply</button></span></div>
+  <div class="lbl">Position <span class="val">metres from its place in Rhino</span></div>
+  <div class="row" style="gap:8px;flex-wrap:nowrap">
+    <label class="num">East<input type="number" id="setE" step="0.1"></label>
+    <label class="num">North<input type="number" id="setN" step="0.1"></label>
+    <label class="num">Up<input type="number" id="setU" step="0.1"></label>
+  </div>
+  <div class="row" style="margin-top:8px"><label class="chip" title="Drag the set with the left mouse button. Navigation stays on the right button and the trackpad."><input type="checkbox" id="dragOn">Move on map</label></div>
+  <div class="lbl">Rotation <span class="val">about the centre of its base</span></div>
+  <div class="row" style="flex-wrap:nowrap"><input type="range" id="setRot" min="-180" max="180" step="0.5" value="0" aria-label="Rotation"><input type="number" id="setRotN" step="0.5" style="width:74px;text-align:right" aria-label="Rotation in degrees"><span class="val">°</span></div>
+  <div class="lbl">Rhino</div>
+  <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><span>Update when it changes in Rhino</span><label class="switch"><input type="checkbox" id="setLive" aria-label="Update when it changes in Rhino"><span></span></label></div>
+  <div class="row" style="margin-top:8px"><button class="pill" id="setResend" title="Send this set from Rhino again now">Update now</button></div>
+  <div class="row" style="margin-top:14px; justify-content:space-between"><button class="link" id="setOriginal" title="Show this set where it is in Rhino">Original position</button><span class="val" title="EarthLink keeps the position and rotation. Your Rhino geometry does not move.">Saved automatically</span></div>
   </div>
 </div>
 
@@ -308,8 +312,7 @@
   <p class="hint">Search above or click the spot where the model's base point should sit.</p>
   <div class="lbl">Picked point</div>
   <div class="t" id="pickedLbl">Click on the map</div>
-  <div class="lbl">Rotate model <span class="val" id="rotLbl"></span></div>
-  <input type="range" id="rot" min="-180" max="180" step="0.5" value="0">
+  <p class="hint">To turn a set on the map, use Edit on the set. Rhino's north is not changed.</p>
   <div class="row" style="margin-top:14px; justify-content:flex-end"><button class="pill" id="siteCancel">Cancel</button><button class="primary" id="siteApply" disabled>Apply to Rhino</button></div>
 </div>
 
@@ -443,6 +446,7 @@
   async function openMap() {
     const ts = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
     ts.shadows = Cesium.ShadowMode.ENABLED;
+    ts.enableCollision = false;                           // navigation.js alone moves the camera
     scene.primitives.add(ts);
     watchMap(ts);
     ts.allTilesLoaded.addEventListener(() => { try { refreshSkirt(); } catch { /* still starting up */ } });
@@ -651,7 +655,8 @@
   // ---------------------------------------------------------------- placement
   let meta = null;             // live/meta.json: { project, name, anchor, sets: {name: {glb, bbox_m, ...}} }
   const models = {};           // set name -> Cesium.Model
-  let preview = null;   // preview = { lat, lon, h, rot } while editing the site location
+  let preview = null;   // { lat, lon, h } while choosing a site location, and until Rhino confirms it
+  let sitePending = 0;
   const anchor = () => (meta && meta.anchor) || null;
   function baseHeight() {
     const a = anchor(); if (!a) return 0;
@@ -663,10 +668,7 @@
   }
   function frame() {
     const a = anchor();
-    if (preview) {
-      const M = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(preview.lon, preview.lat, preview.h));
-      return Cesium.Matrix4.multiply(M, Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(-preview.rot))), new Cesium.Matrix4());
-    }
+    if (preview) return Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(preview.lon, preview.lat, preview.h));
     return Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(a.lon, a.lat, baseHeight()));
   }
   const visibleSets = () => Object.keys(models).filter(n => models[n].show);
@@ -676,7 +678,7 @@
   }
   function showSite() {
     const a = anchor();
-    $("hval").textContent = (S.nudge >= 0 ? "+" : "") + (S.nudge || 0).toFixed(2) + " m";
+    if (document.activeElement !== $("nudge")) $("nudge").value = (S.nudge || 0).toFixed(2);
     if (!a) { $("siteLatLon").textContent = "No location"; return; }
     $("siteLatLon").textContent = `${a.lat.toFixed(6)}, ${a.lon.toFixed(6)}`;
 
@@ -702,12 +704,13 @@
       // the anchor plus a ring just outside every footprint; the median ignores a stray roof or tree
       const pts = [Cesium.Cartographic.fromDegrees(a.lon, a.lat)];
       const M = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(a.lon, a.lat, 0));
-      for (const s of Object.values(meta.sets || {})) {
+      for (const [name, s] of Object.entries(meta.sets || {})) {
         if (!s.bbox_m) continue;
+        const P = placementMatrix(name);
         const [mn, mx] = s.bbox_m, g = 3;
         for (let i = 0; i < 12; i++) {
           const t = i / 12, x = mn[0] - g + (mx[0] - mn[0] + 2 * g) * (i < 6 ? t * 2 : 1 - (t - 0.5) * 2), y = i < 6 ? mn[1] - g : mx[1] + g;
-          pts.push(Cesium.Cartographic.fromCartesian(Cesium.Matrix4.multiplyByPoint(M, new Cesium.Cartesian3(x, y, 0), new Cesium.Cartesian3())));
+          pts.push(Cesium.Cartographic.fromCartesian(Cesium.Matrix4.multiplyByPoint(M, Cesium.Matrix4.multiplyByPoint(P, new Cesium.Cartesian3(x, y, 0), new Cesium.Cartesian3()), new Cesium.Cartesian3())));
         }
       }
       const hs = (await scene.sampleHeightMostDetailed(pts, Object.values(models))).map(c => c && c.height).filter(Number.isFinite).sort((x, y) => x - y);
@@ -717,23 +720,59 @@
     if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = wasClip;
     placeModels(); showSite();
   }
-  // per-set move preview (metres east/north/up, clockwise degrees about the set's base centre) until Rhino applies it
-  const offsets = {};
-  function offsetMatrix(n) {
-    const o = offsets[n]; if (!o) return Cesium.Matrix4.IDENTITY;
-    const p = new Cesium.Cartesian3(...o.pivot);
-    const T = Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(o.dx, o.dy, o.dz));
-    const R = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(-o.rot)));
-    const Tp = Cesium.Matrix4.fromTranslation(p), Tn = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.negate(p, new Cesium.Cartesian3()));
-    return [T, Tp, R, Tn].reduce((a, b) => Cesium.Matrix4.multiply(a, b, new Cesium.Matrix4()));
+  /* EarthLink placement: where a set sits on the map, on top of its position in Rhino.
+     { rot: degrees clockwise on the map, t: [east, north, up] metres }. The exported geometry is always where it is
+     in Rhino; this viewer applies the placement, so moving or turning a set is instant and exports nothing. Rhino
+     keeps the numbers in the .3dm. `place` holds what is being edited here until Rhino's copy (meta) says the same. */
+  const NO_PLACE = { rot: 0, t: [0, 0, 0] };
+  const place = {}, savingPlace = {};
+  const metaPlace = n => { const e = meta?.sets?.[n]; return (e && e.unplaced && e.placement) || NO_PLACE; };   // exports before 0.2.0-beta.9 have it baked in
+  const placementOf = n => place[n] || metaPlace(n);
+  const samePlace = (a, b) => Math.abs(a.rot - b.rot) < 1e-4 && a.t.every((v, k) => Math.abs(v - b.t[k]) < 1e-4);
+  function placementMatrix(n) {
+    const p = placementOf(n);
+    if (samePlace(p, NO_PLACE)) return Cesium.Matrix4.IDENTITY;
+    return Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(-p.rot)), new Cesium.Cartesian3(...p.t));
   }
   function placeModels() {
-    if(walk)walk.exit();
     if (!anchor()) return;
-    const M = frame();
-    for (const [n, m] of Object.entries(models)) m.modelMatrix = Cesium.Matrix4.multiply(M, offsetMatrix(n), new Cesium.Matrix4());
+    const M = frame(); let changed = false;
+    for (const [n, m] of Object.entries(models)) {
+      const next = Cesium.Matrix4.multiply(M, placementMatrix(n), new Cesium.Matrix4());
+      if (!Cesium.Matrix4.equalsEpsilon(m.modelMatrix, next, 1e-9)) { m.modelMatrix = next; changed = true; }
+    }
+    if (changed && walk) walk.exit();                // the ground moved under the walker; otherwise keep walking
     applyClip(); applySection();
-    if (rhinoCam && $("follow").checked) applyView(rhinoCam, 0);   // the site frame moved: keep Rhino's view on the model
+    if (changed && rhinoCam && $("follow").checked) applyView(rhinoCam, 0);   // the site frame moved: keep Rhino's view on the model
+    scene.requestRender();
+  }
+  // While a set is being moved or turned, the map cut-out waits: rebuilding it on every mouse move stalls the page.
+  let adjustTimer = 0, adjustingNow = false;
+  function adjusting() {
+    if (!adjustingNow) { adjustingNow = true; if (tileset?.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); }
+    clearTimeout(adjustTimer);
+    adjustTimer = setTimeout(() => { adjustingNow = false; applyClip(); }, 350);
+  }
+  function setPlacement(n, rot, t) {
+    rot = Math.round((((rot + 180) % 360 + 360) % 360 - 180) * 1000) / 1000;
+    place[n] = { rot, t: t.map(v => Math.round(v * 1000) / 1000), at: Date.now() };
+    adjusting(); placeModels(); if (editing === n) showSetCard();
+    clearTimeout(savingPlace[n]);
+    savingPlace[n] = setTimeout(async () => {          // Rhino keeps it; nothing is exported
+      delete savingPlace[n];
+      const q = place[n]; if (!q || !RHINO || !meta?.sets?.[n]) return;
+      const r = await api("/api/sets", { op: "place", name: n, rot: q.rot, t: q.t });
+      if (r.error) msg(r.error);
+    }, 250);
+  }
+  const turned = (rot, x, y) => { const a = Cesium.Math.toRadians(-rot); return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]; };
+  function rotateSet(n, rot) {                         // about the centre of the set's base, which stays where it is
+    const p = placementOf(n), c = setPivot(n), a = turned(p.rot, c[0], c[1]), b = turned(rot, c[0], c[1]);
+    setPlacement(n, rot, [p.t[0] + a[0] - b[0], p.t[1] + a[1] - b[1], p.t[2]]);
+  }
+  function movedBy(n) {                                // how far the base centre is from its Rhino position
+    const p = placementOf(n), c = setPivot(n), a = turned(p.rot, c[0], c[1]);
+    return [a[0] + p.t[0] - c[0], a[1] + p.t[1] - c[1], p.t[2]];
   }
 
   let clipKey = "";
@@ -773,15 +812,15 @@
     else if (on && !meta?.sets?.[n]?.geometry) msg("Resend this set to hide the map underneath.");
   }
   function applyClip() {
-    if (!tileset || !anchor()) return;
+    if (!tileset || !anchor() || adjustingNow) return;
     const visible=cutSets(),M=frame();
     if (!visible.length) { if (tileset.clippingPolygons) tileset.clippingPolygons.enabled = false; dropSkirt(); return; }
-    const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,offsets[n]]),Array.from({length:16},(_,i)=>M[i])]);
+    const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,!!models[n]?._elFootprints,placementOf(n).rot,placementOf(n).t]),Array.from({length:16},(_,i)=>M[i])]);
     if(key===clipKey&&tileset.clippingPolygons){tileset.clippingPolygons.enabled=true;if(!skirt)scheduleSkirt();return;}
     const polygons=[];
     for(const name of visible){
       const model=models[name];if(!model?._elFootprints)continue;
-      const matrix=Cesium.Matrix4.multiply(M,offsetMatrix(name),new Cesium.Matrix4());
+      const matrix=Cesium.Matrix4.multiply(M,placementMatrix(name),new Cesium.Matrix4());
       for(const ring of model._elFootprints)polygons.push(new Cesium.ClippingPolygon({positions:ring.map(([x,y])=>Cesium.Matrix4.multiplyByPoint(matrix,new Cesium.Cartesian3(x,y,0),new Cesium.Cartesian3()))}));
     }
     if(polygons.length>4096){if(tileset.clippingPolygons)tileset.clippingPolygons.enabled=false;return msg("Cutout is too complex.");}
@@ -815,7 +854,7 @@
     const pos = [], flat = [], idx = [];                 // world positions; plan position (anchor frame) of each vertex's colour
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const name of sets) {
-      const model = models[name], z0 = model._elBase || 0, S2W = Cesium.Matrix4.multiply(M, offsetMatrix(name), new Cesium.Matrix4());
+      const model = models[name], z0 = model._elBase || 0, S2W = Cesium.Matrix4.multiply(M, placementMatrix(name), new Cesium.Matrix4());
       for (const ring of model._elRings) {
         const pts = [];                                  // the ring, with a point at least every SKIRT.step metres
         for (let i = 0; i < ring.length; i++) {
@@ -951,9 +990,19 @@
     if (!projectChanged) for (const n of Object.keys(models)) {     // renamed sets: same file, new name - keep the loaded model
       if (names.includes(n)) continue;
       const nn = names.find(k => !models[k] && m.sets[k].glb === (models[n]._elGlb || ""));
-      if (nn) { models[nn] = models[n]; delete models[n]; if (offsets[n]) { offsets[nn] = offsets[n]; delete offsets[n]; } if (editing === n) editing = nn; }
+      if (nn) {
+        models[nn] = models[n]; delete models[n]; if (editing === n) editing = nn;
+        for (const o of [place, savingPlace]) if (o[n]) { o[nn] = o[n]; delete o[n]; }
+      }
     }
-    for (const n of Object.keys(models)) if (!names.includes(n) || projectChanged) { scene.primitives.remove(models[n]); delete models[n]; delete offsets[n]; }
+    for (const n of Object.keys(models)) if (!names.includes(n) || projectChanged) { scene.primitives.remove(models[n]); delete models[n]; }
+    for (const n of Object.keys(place)) {              // Rhino has what was set here, or it changed in Rhino (Undo) while nothing was being edited
+      if (!names.includes(n) || projectChanged) { clearTimeout(savingPlace[n]); delete savingPlace[n]; delete place[n]; }
+      else if (!savingPlace[n] && !dragging && (samePlace(place[n], metaPlace(n)) || Date.now() - place[n].at > 3000)) delete place[n];
+    }
+    if (preview && !picking && m.anchor && Math.abs(m.anchor.lat - preview.lat) < 1e-7 && Math.abs(m.anchor.lon - preview.lon) < 1e-7) {
+      preview = null; clearTimeout(sitePending);       // Rhino confirmed the new site
+    }
     for (const n of names) {
       const s = m.sets[n];
       if (models[n] && models[n]._elVersion === s.version) continue;
@@ -968,7 +1017,6 @@
         if (models[n]) scene.primitives.remove(models[n]);
         models[n] = next;
         loadDerived(n,next,s);
-        if (offsets[n] && offsets[n].applied) delete offsets[n];   // the new export carries the placement; the preview is now real
       } catch (e) { if(generation!==modelGeneration)return;msg(`Could not load “${n}”: ${e.message}`); }
     }
     const hid = hidden();
@@ -987,7 +1035,7 @@
       const el = document.createElement("div");
       el.className = "item" + (hid.has(n) ? " off" : "");
       el.innerHTML = `<span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-cube"/></svg></span>` +
-        `<span class="grow"><div class="t">${esc(n)}</div></span>` +
+        `<span class="grow" style="cursor:pointer" title="Edit: rename, display, place"><div class="t">${esc(n)}${meta.sets[n].live ? ' <span class="val" title="Updates when it changes in Rhino">Live</span>' : ""}</div></span>` +
         `<span class="acts"><button class="mini" title="Edit: rename, display, move"><svg class="i" style="width:14px;height:14px"><use href="#i-edit"/></svg></button>` +
         (RHINO ? `<button class="mini" title="Remove from EarthLink"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button>` : "") + `</span>` +
         `<button class="mini cut ${cut.has(n) ? "on" : ""}" title="Hide the map underneath this set" aria-pressed="${cut.has(n)}"><svg class="i" style="width:15px;height:15px"><use href="#i-cut"/></svg></button>` +
@@ -996,7 +1044,7 @@
       eye.onclick = () => setHidden(n, !hidden().has(n));
       btns[btns.length - 2].onclick = () => { if (walk) walk.exit(); setClipped(n, !clipped().has(n)); };
       btns[0].onclick = () => openSetCard(n);
-      if (offsets[n]) el.title = "Move pending";
+      el.querySelector(".grow").onclick = () => openSetCard(n);
       if (RHINO) btns[1].onclick = async () => {
         if (await ask({ title: `Remove “${n}”?`, text: "It disappears from EarthLink. The geometry in Rhino is not touched.", ok: "Remove", danger: true })) {
           await api("/api/sets", { op: "delete", name: n });
@@ -1116,43 +1164,43 @@
   let picking = false, picked = null, marker = null;
   function openSite(first) {
     if(walk)walk.exit();
-    picking = true; picked = null; $("rot").value = 0; $("rotLbl").textContent = "0°";
+    picking = true; picked = null; clearTimeout(sitePending); preview = null;
     document.body.classList.add("picking");
     $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
     $("pickedLbl").textContent = first || !anchor() ? "Click on the map" : "Current location — click to move";
     $("siteApply").disabled = true;
     closePops("siteCard"); $("siteCard").classList.add("open");
   }
-  function closeSite() {
-    picking = false; picked = null; preview = null; document.body.classList.remove("picking");
+  function closeSite(keep) {                           // keep === true: show the new site until Rhino confirms it
+    picking = false; picked = null; document.body.classList.remove("picking");
     if (marker) { viewer.entities.remove(marker); marker = null; }
-    $("siteCard").classList.remove("open"); placeModels();
+    $("siteCard").classList.remove("open");
+    clearTimeout(sitePending);
+    if (keep === true && preview) sitePending = setTimeout(() => { preview = null; placeModels(); }, 10000);   // no answer from Rhino
+    else preview = null;
+    placeModels();
   }
   function setPicked(lat, lon, h) {
     picked = { lat, lon, h };
     $("pickedLbl").textContent = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
     if (marker) viewer.entities.remove(marker);
     marker = viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, h), point: { pixelSize: 11, color: Cesium.Color.fromCssColorString("#0a84ff"), outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY } });
-    updatePreview();
-  }
-  function updatePreview() {
-    const rot = +$("rot").value; $("rotLbl").textContent = `${rot.toFixed(1)}°`;
-    if (!picked && !anchor()) return;
-    const a = anchor();
-    preview = picked ? { lat: picked.lat, lon: picked.lon, h: picked.h, rot } : { lat: a.lat, lon: a.lon, h: baseHeight(), rot };
+    // the height the model will have once Rhino has the new site (see baseHeight): the preview must not jump
+    const a = anchor(), ground = !a || a.zero === "GroundLevel";
+    preview = { lat, lon, h: ground ? h + (a ? a.elev : 0) : baseHeight() - (S.nudge || 0) };
     placeModels();
-    $("siteApply").disabled = !(picked || rot);
+    $("siteApply").disabled = false;
   }
-  $("rot").oninput = updatePreview;
   $("editSite").onclick = () => openSite(false);
-  $("siteCancel").onclick = closeSite;
+  $("siteCancel").onclick = () => closeSite();
   $("siteApply").onclick = async () => {
-    const body = { rotate: +$("rot").value || 0 };
-    if (picked) Object.assign(body, { lat: picked.lat, lon: picked.lon, ground_h: picked.h });
-    const r = await api("/api/anchor", body);
+    if (!picked) return;
+    const a = anchor(), spot = picked;
+    const r = await api("/api/anchor", { lat: spot.lat, lon: spot.lon, ground_h: spot.h });
     if (r.error) return msg(r.error);
+    Object.assign(S, !a || a.zero === "GroundLevel" ? { ground_h: spot.h, nudge: 0 } : { nudge: 0 });   // what Rhino saves with the new site
     msg("Updating Rhino…", 6000);
-    closeSite();
+    closeSite(true);
   };
 
   // ---------------------------------------------------------------- edit a design set: rename, display, place (EarthLink only)
@@ -1166,20 +1214,21 @@
     const b = meta.sets[n] && meta.sets[n].bbox_m;
     return b ? [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, b[0][2]] : [0, 0, 0];
   }
-  const ensureOffset = n => offsets[n] || (offsets[n] = { dx: 0, dy: 0, dz: 0, rot: 0, pivot: setPivot(n) });
   function showSetCard() {
     if (!editing || !meta.sets[editing]) return closeSetCard();
-    $("setName").value = editing;
+    if (document.activeElement !== $("setName")) $("setName").value = editing;
     selSetStyle((S.set_styles || {})[editing] || "");
-    const o = offsets[editing] || { dx: 0, dy: 0, dz: 0, rot: 0 };
-    $("moveLbl").textContent = `E ${o.dx.toFixed(2)} · N ${o.dy.toFixed(2)} · Up ${o.dz.toFixed(2)} m`;
-    $("setRot").value = o.rot; $("setRotLbl").textContent = `${(+o.rot).toFixed(1)}°`;
-    $("setApply").disabled = !(o.dx || o.dy || o.dz || o.rot) || o.applied;
-    $("setOriginal").hidden = !meta.sets[editing].placement || !!offsets[editing];
+    const p = placementOf(editing), d = movedBy(editing), a = document.activeElement;
+    const shown = (v, n) => (Math.abs(v) < 0.5 / 10 ** n ? 0 : v).toFixed(n);   // never "-0.00"
+    ["setE", "setN", "setU"].forEach((id, k) => { if (a !== $(id)) $(id).value = shown(d[k], 2); });
+    if (a !== $("setRot")) $("setRot").value = p.rot;
+    if (a !== $("setRotN")) $("setRotN").value = shown(p.rot, 1);
+    $("setOriginal").disabled = samePlace(p, NO_PLACE);
+    $("setLive").checked = !!meta.sets[editing].live;
   }
   function openSetCard(n) { if(walk)walk.exit(); editing = n; closePops("setCard"); $("setCard").classList.add("open"); showSetCard(); }
   function closeSetCard() {
-    editing = null; setDrag(false);
+    editing = null; dragging = null; setDrag(false);
     $("setCard").classList.remove("open");
   }
   let renaming = false;
@@ -1196,38 +1245,43 @@
   }
   $("setNameForm").onsubmit = e => { e.preventDefault(); renameSet(); $("setName").blur(); };
   $("setName").onblur = renameSet;
-  const moved = () => { placeModels(); renderSets(); showSetCard(); };
-  document.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => {
-    const o = ensureOffset(editing); o.applied = false;
-    o[b.dataset.mv] = Math.round((o[b.dataset.mv] + +b.dataset.d) * 100) / 100; moved();
+  ["setE", "setN", "setU"].forEach((id, k) => {            // type where the base centre should be, from its Rhino position
+    $(id).oninput = () => {
+      const v = +$(id).value; if (!editing || $(id).value === "" || !Number.isFinite(v) || Math.abs(v) > 1e6) return;
+      const p = placementOf(editing), t = p.t.slice(); t[k] += v - movedBy(editing)[k];
+      setPlacement(editing, p.rot, t);
+    };
+    $(id).onblur = () => { if (editing) showSetCard(); };
   });
-  $("setRot").oninput = () => { const o = ensureOffset(editing); o.applied = false; o.rot = +$("setRot").value; moved(); };
-  $("setReset").onclick = () => { delete offsets[editing]; moved(); };
-  $("setApply").onclick = async () => {
-    const o = offsets[editing]; if (!o) return;
-    const r = await api("/api/sets", { op: "move", name: editing, dx: o.dx, dy: o.dy, dz: o.dz, rot: o.rot, pivot: o.pivot });
-    if (r.error) return msg(r.error);
-    o.applied = true; showSetCard();
-    msg("Placing…", 4000);
+  $("setRot").oninput = () => rotateSet(editing, +$("setRot").value);
+  $("setRotN").oninput = () => { const v = +$("setRotN").value; if (editing && $("setRotN").value !== "" && Number.isFinite(v) && Math.abs(v) <= 360) rotateSet(editing, v); };
+  $("setRotN").onblur = () => { if (editing) showSetCard(); };
+  $("setLive").onchange = async () => {                    // the same switch as SendToEarth's Live option
+    const on = $("setLive").checked, r = await api("/api/sets", { op: "live", name: editing, on });
+    if (r.error) { $("setLive").checked = !on; return msg(r.error); }
+    msg(on ? "Rhino will update this set when it changes." : "Automatic updates are off for this set.", 2500);
   };
-  $("setOriginal").onclick = async () => {   // drop the EarthLink placement: back to where the set is in Rhino
-    const r = await api("/api/sets", { op: "unplace", name: editing });
-    if (r.error) return msg(r.error);
-    msg("Placing…", 4000);
+  $("setResend").onclick = async () => {
+    const r = await api("/api/sets", { op: "resend", name: editing });
+    msg(r.error || "Updating from Rhino…", 3000);
   };
+  $("setOriginal").onclick = () => setPlacement(editing, 0, [0, 0, 0]);   // back to where the set is in Rhino
   const setDrag = on => {   // while on, dragging anywhere moves the set; map navigation pauses
     $("dragOn").checked = on;
     document.body.classList.toggle("picking", on);
   };
   $("dragOn").onchange = () => { setDrag($("dragOn").checked); if ($("dragOn").checked) msg("Drag enabled", 1800); };
-  function groundPoint(pos, z) {   // where the mouse ray meets the horizontal plane at local height z
-    const M = frame(), ray = viewer.camera.getPickRay(pos);
+  // Where the mouse ray meets the horizontal plane at local height z: { p (site frame), far (m from the camera) }.
+  // Near the horizon that point runs away to kilometres per pixel: no answer there, so a set cannot be flung off.
+  function groundPoint(pos, z) {
+    const M = frame(), ray = viewer.camera.getPickRay(pos); if (!ray) return null;
     const origin = Cesium.Matrix4.multiplyByPoint(M, new Cesium.Cartesian3(0, 0, z), new Cesium.Cartesian3());
-    const normal = Cesium.Matrix4.multiplyByPointAsVector(M, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3());
-    const hit = ray && Cesium.IntersectionTests.rayPlane(ray, Cesium.Plane.fromPointNormal(origin, Cesium.Cartesian3.normalize(normal, normal)));
+    const normal = Cesium.Cartesian3.normalize(Cesium.Matrix4.multiplyByPointAsVector(M, Cesium.Cartesian3.UNIT_Z, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+    if (Math.abs(Cesium.Cartesian3.dot(ray.direction, normal)) < 0.035) return null;   // within 2 degrees of the plane
+    const hit = Cesium.IntersectionTests.rayPlane(ray, Cesium.Plane.fromPointNormal(origin, normal));
     if (!hit) return null;
     const inv = Cesium.Matrix4.inverseTransformation(M, new Cesium.Matrix4());
-    return Cesium.Matrix4.multiplyByPoint(inv, hit, new Cesium.Cartesian3());
+    return { p: Cesium.Matrix4.multiplyByPoint(inv, hit, new Cesium.Cartesian3()), far: Cesium.Cartesian3.distance(hit, ray.origin) };
   }
 
   // ---------------------------------------------------------------- measure
@@ -1277,22 +1331,17 @@
   });
   handler.setInputAction(e => {
     if (!editing || !$("dragOn").checked) return;
-    const o = ensureOffset(editing), p = groundPoint(e.position, o.pivot[2] + o.dz);
-    if (!p) return;
-    dragging = { start: p, dx: o.dx, dy: o.dy };
+    const p = placementOf(editing), z = setPivot(editing)[2] + p.t[2], g = groundPoint(e.position, z);
+    if (!g) return msg("Look down at the site a little more to drag.", 2500);
+    dragging = { name: editing, z, start: g.p, far: g.far, rot: p.rot, t: p.t.slice() };
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
   handler.setInputAction(e => {
-    if (!dragging) return;
-    const o = offsets[editing], p = groundPoint(e.endPosition, o.pivot[2] + o.dz);
-    if (!p) return;
-    o.dx = Math.round((dragging.dx + p.x - dragging.start.x) * 100) / 100;
-    o.dy = Math.round((dragging.dy + p.y - dragging.start.y) * 100) / 100;
-    o.applied = false; placeModels(); showSetCard();
+    if (!dragging || dragging.name !== editing) return;
+    const g = groundPoint(e.endPosition, dragging.z);
+    if (!g || g.far > 6 * dragging.far + 50) return;     // towards the horizon: stay where the set is
+    setPlacement(editing, dragging.rot, [dragging.t[0] + g.p.x - dragging.start.x, dragging.t[1] + g.p.y - dragging.start.y, dragging.t[2]]);
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-  handler.setInputAction(() => {
-    if (!dragging) return;
-    dragging = null; renderSets();
-  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  handler.setInputAction(() => { dragging = null; }, Cesium.ScreenSpaceEventType.LEFT_UP);
   document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) {measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");} if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); } });
 
   // ---------------------------------------------------------------- capture
@@ -1501,7 +1550,8 @@
   setSide(!!store.get("sideHidden"));
   $("fly").onclick = () => flyTo();
   $("resample").onclick = () => { if (walk) walk.exit(); sampleGround(true); };
-  document.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { saveS({ nudge: Math.round(((S.nudge || 0) + +b.dataset.n) * 100) / 100 }); placeModels(); showSite(); });
+  $("nudge").oninput = () => { const v = +$("nudge").value; if (!Number.isFinite(v) || Math.abs(v) > 1000) return; saveS({ nudge: Math.round(v * 100) / 100 }); placeModels(); };
+  $("nudge").onblur = showSite;
   selProj = seg("projSeg", "perspective", v => setProjection(v));
   $("follow").checked = !!S.link_viewport; $("syncViews").checked = S.sync_views !== false; $("syncSun").checked = S.sync_sun !== false;
   // the three link switches can also be changed from Rhino (EarthLinkSync): pick that up without a reload
@@ -1637,15 +1687,17 @@
   };
   const modal = () => $("busy").offsetParent || $("ask").classList.contains("open") || $("keys").classList.contains("open");
   const sensitivity = () => (+store.get("sensitivity") || 100) / 100;
+  // ?controls=mac|windows overrides the detected platform (Rhino's Mac and Windows controls differ)
+  const MAC_NAV = (() => { const c = new URLSearchParams(location.search).get("controls"); return c ? c === "mac" : EarthLinkNavigation.isMac(); })();
   nav = EarthLinkNavigation.create(Cesium, viewer, {
     projection: () => projection,
     pick: ray => { const t = surfaceHit(ray); return t === null ? null : Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3()); },
     ground: ray => { const t = surfaceHit(ray, 5000, false); return t === null ? null : Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3()); },
     allowed: () => !walk && !modal(),
+    focus: () => modelsSphere(),
     sensitivity,
     moved: freeCamera,
-    // ?controls=mac|windows overrides the detected platform (Rhino's Mac and Windows controls differ)
-    mac: () => { const c = new URLSearchParams(location.search).get("controls"); return c ? c === "mac" : EarthLinkNavigation.isMac(); },
+    mac: () => MAC_NAV,
     lens: k => { if (!isOrtho()) setVfov(Math.max(Cesium.Math.toRadians(3), Math.min(Cesium.Math.toRadians(120), viewer.camera.frustum.fovy * k))); },
     walking: () => !!walk?.body,
     look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
@@ -1655,7 +1707,7 @@
     const two = projection === "two_point";
     const ht = walk?.body ? { heading: walk.heading, tilt: walk.pitch } : nav.headingTilt();
     $("tiltTitle").textContent = walk?.body ? "Look" : two ? "Vertical framing" : "Tilt";
-    $("navTilt").min = walk?.body || two ? -80 : 0; $("navTilt").max = walk?.body || two ? 80 : 90;
+    $("navTilt").min = walk?.body || two ? -80 : 0; $("navTilt").max = walk?.body || two ? 80 : 175;   // over 90: looking up
     if (document.activeElement !== $("navTilt")) $("navTilt").value = ht.tilt;
     if (document.activeElement !== $("navHeading")) $("navHeading").value = ht.heading;
     $("tiltValue").textContent = `${Math.round(ht.tilt)}°`; $("headingValue").textContent = `${Math.round(ht.heading) % 360}°`;
@@ -1668,6 +1720,14 @@
     const now = performance.now();
     if ($("navCard").classList.contains("open") && now - labelsAt > 200) { labelsAt = now; navLabels(); }
   });
+  $("navKeys").innerHTML = (MAC_NAV ? [
+    ["Two fingers", "Rotate (pan in Parallel)"], ["Shift + two fingers", "Pan"], ["Pinch", "Zoom"],
+    ["Right-drag", "Rotate"], ["Shift + right-drag", "Pan"], ["⌘ + right-drag, wheel", "Zoom"], ["Option + right-drag", "Move in / out"],
+    ["Arrow keys", "Rotate"], ["Page Up / Down", "Zoom"],
+  ] : [
+    ["Right-drag", "Rotate (pan in Parallel)"], ["Shift + right-drag", "Pan"], ["Wheel, two-finger scroll, pinch", "Zoom"],
+    ["Ctrl + right-drag", "Zoom"], ["Alt + right-drag", "Move in / out"], ["Arrow keys", "Rotate"], ["Page Up / Down", "Zoom"],
+  ]).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   $("navBtn").onclick = () => { const on = !$("navCard").classList.contains("open"); closePops("navCard"); $("navCard").classList.toggle("open", on); if (on) navLabels(); };
   $("northBtn").onclick = () => {
     if (!walk?.body) return nav.north();
@@ -1750,7 +1810,7 @@
     viewer.camera.setView(walkPose(state, state.eyeZ));
   }
   // Minecraft controls. Ctrl sprints on a Mac only: on Windows Ctrl+W would close the tab, so double-tap W there.
-  const MAC_KEYS = (() => { const c = new URLSearchParams(location.search).get("controls"); return c ? c === "mac" : EarthLinkNavigation.isMac(); })();
+  const MAC_KEYS = MAC_NAV;
   const WALK_HELP = `WASD move · Space jump · double-tap Space fly (Space up, Shift down) · ${MAC_KEYS ? "Control or " : ""}double-tap W sprint · Shift sneak · Esc exit`;
   const WALK_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight"];
   const DOUBLE_TAP = 300;   // ms
@@ -1924,7 +1984,7 @@
     if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
-  window.EL = { viewer, models, offsets, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get skirt() { return skirt; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, place, placementOf, setPlacement, rotateSet, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get skirt() { return skirt; }, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {

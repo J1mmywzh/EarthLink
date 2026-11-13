@@ -114,11 +114,39 @@ def test_rename_and_placement_are_queued_for_rhino(srv):
     s = call(srv, "/api/settings")
     assert s["hidden_sets"] == ["Tower"] and s["set_styles"] == {"Tower": "clay"}
     assert call(srv, "/api/sets", {"op": "rename", "name": "Tower", "new": "Tower"}).get("error")
-    assert call(srv, "/api/sets", {"op": "move", "name": "Tower", "dx": 2.5, "dy": -1, "rot": 15, "pivot": [15, 10, 0]})["ok"]
     reqs = _requests(srv)
-    assert [r["type"] for r in reqs][-2:] == ["rename_set", "place_set"]
-    assert (reqs[-1]["dx"], reqs[-1]["rot"], reqs[-1]["pivot"]) == (2.5, 15.0, [15.0, 10.0, 0.0])
-    assert all(r["project"] == "p-test" for r in reqs)
+    assert [r["type"] for r in reqs][-1:] == ["rename_set"] and all(r["project"] == "p-test" for r in reqs)
+
+
+def test_placement_is_numbers_the_viewer_applies(srv):
+    """Placing a set changes meta at once (no new export) and is queued for Rhino to keep in the .3dm."""
+    before = call(srv, "/api/meta")
+    name = sorted(before["sets"])[0]          # earlier tests rename and delete sets
+    glb = before["sets"][name]["glb"]
+    assert call(srv, "/api/sets", {"op": "place", "name": name, "rot": 195, "t": [2.5, -1, 0.25]})["ok"]
+    meta = call(srv, "/api/meta")
+    assert meta["sets"][name]["placement"] == {"rot": -165.0, "t": [2.5, -1.0, 0.25]}
+    assert meta["sets"][name]["glb"] == glb and meta["version"] > before["version"]
+    req = _requests(srv)[-1]
+    assert (req["type"], req["name"], req["rot"], req["move"], req["project"]) == ("placement", name, -165.0, [2.5, -1.0, 0.25], "p-test")
+    assert call(srv, "/api/sets", {"op": "place", "name": name, "rot": 0, "t": [0, 0, 0]})["ok"]
+    assert "placement" not in call(srv, "/api/meta")["sets"][name]
+    call(srv, "/api/sets", {"op": "place", "name": name, "rot": 10, "t": [1, 0, 0]})
+    assert call(srv, "/api/sets", {"op": "unplace", "name": name})["ok"]
+    assert "placement" not in call(srv, "/api/meta")["sets"][name]
+    assert (_requests(srv)[-1]["rot"], _requests(srv)[-1]["move"]) == (0.0, [0.0, 0.0, 0.0])
+    for bad in ({"rot": "x"}, {"t": [float("inf"), 0, 0]}, {"t": ["a"]}):
+        assert call(srv, "/api/sets", dict(bad, op="place", name=name)).get("error")
+    assert call(srv, "/api/sets", {"op": "place", "name": "Nope", "rot": 1}).get("error")
+
+
+def test_live_switch_and_update_now_are_queued_for_rhino(srv):
+    name = sorted(call(srv, "/api/meta")["sets"])[0]
+    assert call(srv, "/api/sets", {"op": "live", "name": name, "on": True})["ok"]
+    assert call(srv, "/api/meta")["sets"][name]["live"] is True
+    assert (_requests(srv)[-1]["type"], _requests(srv)[-1]["on"]) == ("set_live", True)
+    assert call(srv, "/api/sets", {"op": "resend", "name": name})["ok"]
+    assert (_requests(srv)[-1]["type"], _requests(srv)[-1]["name"]) == ("send_set", name)
 
 
 def test_rename_view(srv):

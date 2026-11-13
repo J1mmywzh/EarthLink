@@ -9,12 +9,12 @@ Rhino talks to it only through files in the EarthLink data folder:
 
 From Rhino use start()/stop()/running(); they launch or stop the process.
 """
-import os, sys, json, time, socket, subprocess, base64
+import os, sys, json, math, time, socket, subprocess, base64
 
 if __name__ == "__main__" and __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from earthlink import env  # noqa: E402
+from earthlink import env, geometry  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
@@ -179,14 +179,27 @@ def _sets_op(data):
         meta["sets"] = {(new if k == name else k): v for k, v in meta["sets"].items()}
         _rename_in_settings(name, new)
         _queue_for_rhino({"type": "rename_set", "project": meta.get("project"), "name": name, "new": new})
-    elif op == "move":          # EarthLink placement only; the Rhino geometry is not moved
-        mv = {k: float(data.get(k) or 0.0) for k in ("dx", "dy", "dz", "rot")}
-        mv["pivot"] = [float(v) for v in (data.get("pivot") or [0, 0, 0])][:3]
-        _queue_for_rhino(dict(mv, type="place_set", project=meta.get("project"), name=name))
+    elif op == "live":          # the same switch as SendToEarth's Live option
+        on = bool(data.get("on"))
+        _queue_for_rhino({"type": "set_live", "project": meta.get("project"), "name": name, "on": on})
+        meta["sets"][name]["live"] = on
+    elif op == "resend":        # "Update now": Rhino sends the set again
+        _queue_for_rhino({"type": "send_set", "project": meta.get("project"), "name": name})
         return {"ok": True}
-    elif op == "unplace":
-        _queue_for_rhino({"type": "unplace_set", "project": meta.get("project"), "name": name})
-        return {"ok": True}
+    elif op in ("place", "unplace"):   # EarthLink placement only: numbers the viewer applies. No geometry moves.
+        try:
+            p = None if op == "unplace" else geometry.clean_placement(data.get("rot"), data.get("t"))
+        except (TypeError, ValueError):
+            return {"error": "invalid placement"}
+        if p and not all(math.isfinite(v) and abs(v) < 1e7 for v in [p["rot"]] + p["t"]):
+            return {"error": "invalid placement"}
+        # Rhino keeps it in the .3dm (queued first, so Rhino never sees meta ahead of its own copy without a request)
+        q = p or {"rot": 0.0, "t": [0.0, 0.0, 0.0]}
+        _queue_for_rhino({"type": "placement", "project": meta.get("project"), "name": name, "rot": q["rot"], "move": q["t"]})   # "t" is the request's time
+        if p:
+            meta["sets"][name]["placement"] = p
+        else:
+            meta["sets"][name].pop("placement", None)
     else:
         return {"error": "unknown operation"}
     meta["version"] = int(meta.get("version", 0)) + 1

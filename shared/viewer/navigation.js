@@ -14,7 +14,12 @@
 
    Every gesture keeps the horizon level, picks its pivot when it starts and keeps one mode until its
    momentum ends. Movement is eased per frame. Pan and zoom scale with distance, orbit is angular, so
-   one Sensitivity value feels the same from orbit to a single room. */
+   one Sensitivity value feels the same from orbit to a single room.
+
+   The pivot is Rhino's camera target: the surface at the centre of the view, held at the depth you last
+   focused on when that surface is far behind it or is sky (see pivotDistance). Nothing but this module
+   moves the camera: Cesium's own collision is off. The camera passes through trees and buildings; it only
+   comes to rest when it descends onto a surface from above, and follows gently rising ground (see Floor). */
 (function (root, factory) { const api = factory(); if (typeof module === "object" && module.exports) module.exports = api; else root.EarthLinkNavigation = api; })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -49,12 +54,16 @@
       return { mode: this.mode, device: this.device, start: fresh };
     }
   }
-  // A notched mouse wheel starts a gesture with one large, purely vertical step; a trackpad starts small.
+  /* A mouse wheel, not a trackpad? Chrome and Safari report a trackpad's legacy wheelDeltaY as exactly -3 x deltaY,
+     and a notched wheel's as a multiple of 120 whatever deltaY is (on a Mac a slow notch is only about 4 px).
+     Where that field is missing, a notched wheel starts with one large, purely vertical step. A Magic Mouse
+     cannot be told from a trackpad by a web page. */
   function isMouseWheel(e) {
     if (e.deltaMode === 1 || e.deltaMode === 2) return true;
-    if (e.deltaX !== 0) return false;
-    const big = Math.abs(e.deltaY) >= 50, wd = e.wheelDeltaY;
-    return big && (wd === undefined || wd === 0 || Math.abs(wd) % 120 === 0);
+    if (e.deltaX !== 0 || !e.deltaY) return false;
+    const wd = e.wheelDeltaY;
+    if (wd === undefined || wd === 0) return Math.abs(e.deltaY) >= 50;
+    return Math.abs(wd) % 120 === 0 && Math.abs(wd + 3 * e.deltaY) > 0.5;
   }
   const wheelPx = e => (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
 
@@ -76,6 +85,43 @@
     get busy() { return Object.values(this.v).some(Boolean); }
   }
 
+  /* How far along the centre of the view the pivot is. pick: distance to the surface there (null: none).
+     target: the distance last focused on (null: unknown). focus: depth of the visible model when it is in view
+     (null: none). limit: farthest pivot accepted when nothing else is known. A surface far behind what you are
+     looking at (a shallow view, the horizon) is not what you are turning around; anything nearer is. */
+  function pivotDistance(pick, target, focus, limit = Infinity) {
+    const ref = focus ?? target;
+    if (pick != null && pick <= (ref != null ? 4 * ref : limit)) return pick;
+    if (ref != null) return ref;
+    return pick != null ? Math.min(pick, limit) : null;
+  }
+
+  /* The ground rule, in heights above the ellipsoid. `top` is the map's upper surface at the camera's position and
+     `below` the first surface under the camera (null: none), needed only when the camera is under `top`.
+     - A gesture never starts by lifting the camera, and a surface that appears beside it (a wall, a tree) is entered.
+     - The camera rests on a surface it descends onto, and rides up ground that rises no faster than it moves.
+     - Under a tree it rests on the ground beneath. Inside something solid (a building, a hillside) it can move
+       sideways and up, not further down: there is no way deep under the map. */
+  class Floor {
+    constructor(clear = 0.3) { this.clear = clear; this.reset(); }
+    reset() { this.known = false; this.inside = false; this.top = null; this.h = null; }
+    step(h, top, moved = 0, below = null) {
+      const was = this.h;
+      const out = v => (this.h = v);
+      if (top == null) { this.known = false; return out(h); }
+      const before = this.top, first = !this.known;
+      this.known = true; this.top = top;
+      if (h >= top + this.clear) { this.inside = false; return out(h); }
+      if (first) this.inside = true;
+      else if (!this.inside) {
+        if (top - before > Math.max(0.5, moved)) this.inside = true;
+        else return out(top + this.clear);
+      }
+      if (below != null) return out(Math.max(h, below + this.clear));
+      return out(was == null ? h : Math.max(h, was));
+    }
+  }
+
   // Sunlight when the sun is off: from behind the viewer, a little above.
   function neutralDirection(direction, up) {
     const vertical = direction.reduce((s, n, i) => s + n * up[i], 0), h = direction.map((n, i) => n - up[i] * vertical), length = Math.hypot(...h) || 1;
@@ -87,6 +133,7 @@
      ground(ray) nearest map surface (your model excluded) or null,
      allowed() navigation permitted now,
      sensitivity() multiplier, moved() user took the camera (cancel flights / Follow Rhino),
+     focus() bounding sphere {center, radius} of the visible models or null,
      walking() true while walking, look(dHeading, dPitch) turn the walker,
      lens(k) multiply the perspective field of view by k (optional), mac() Mac controls (default: detected). */
   function create(Cesium, viewer, hooks) {
@@ -94,7 +141,11 @@
     const E = Cesium.Ellipsoid.WGS84, latch = new WheelLatch(), ease = new Ease();
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
-    scene.screenSpaceCameraController.enableInputs = false;   // one input path only
+    let target = null, mine = null, groundAt = null;     // focus distance; the pose this module set last; last ground check
+    const floor = new Floor();
+    const ssc = scene.screenSpaceCameraController;
+    ssc.enableInputs = false;                // one input path only
+    ssc.enableCollisionDetection = false;    // and one thing that moves the camera: Cesium's collision lifts it by itself
     const mac = () => (hooks.mac ? !!hooks.mac() : isMac());
 
     const normal = p => E.geodeticSurfaceNormal(p, v3());
@@ -111,9 +162,29 @@
       const hit = Cesium.IntersectionTests.rayEllipsoid(ray, E);
       return hit ? Cesium.Ray.getPoint(ray, hit.start, v3()) : null;
     }
-    function centre() {
-      const [w, h] = size();
-      return pick(w / 2, h / 2) || C3.add(cam.positionWC, C3.multiplyByScalar(cam.directionWC, Math.max(50, height() * 2), v3()), v3());
+    function centre(peek) {                              // the pivot: Rhino's camera target (peek: do not refocus)
+      const [w, h] = size(), ray = cam.getPickRay(new Cesium.Cartesian2(w / 2, h / 2));
+      const p = pick(w / 2, h / 2), dp = p ? C3.dot(C3.subtract(p, ray.origin, v3()), ray.direction) : null;
+      const f = hooks.focus && hooks.focus();
+      let depth = null;                                    // the visible model's depth, when it is in view
+      if (f) {
+        const to = C3.subtract(f.center, ray.origin, v3()), d = C3.dot(to, ray.direction), far = C3.magnitude(to);
+        const side = Math.sqrt(Math.max(0, far * far - d * d));
+        if (ortho()) { if (side <= Math.max(f.radius, cam.frustum.width)) depth = d; }
+        // in view from outside: within the lens plus half the model's own angular size. Inside or beside the
+        // model its centre says nothing about what you are looking at.
+        else if (d > 0 && far > 1.5 * f.radius && Math.atan2(side, d) <= (cam.frustum.fovy || 0.8) / 2 + 0.5 * Math.asin(f.radius / far)) depth = d;
+      }
+      let d;
+      if (ortho()) {                                       // distances start far behind the scene: compare depths
+        const span = f ? 3 * Math.max(f.radius, cam.frustum.width) : Infinity;
+        d = dp != null && (depth == null || Math.abs(dp - depth) <= span) ? dp : depth ?? dp;
+      } else {
+        d = pivotDistance(dp, target, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
+        if (d != null && !peek) target = d;
+      }
+      if (d == null) d = Math.max(50, height() * 2);
+      return Cesium.Ray.getPoint(ray, d, v3());
     }
     const height = () => { const c = Cesium.Cartographic.fromCartesian(cam.positionWC); return c ? c.height : 1e7; };
 
@@ -131,25 +202,29 @@
     // Parallel: the image does not depend on how far back the camera is, but anything nearer than the camera is
     // cut away (black half, tile seams). Keep it far back along its axis, behind the point at the centre.
     const BACK = 20000;
-    function setPose(pos, dir, up) {
+    function setPose(pos, dir, up, onGround) {
       dir = C3.normalize(dir, v3());
       if (ortho()) { if (!pivot) pivot = centre(); pos = C3.subtract(pivot, C3.multiplyByScalar(dir, BACK, v3()), v3()); }
-      else pos = aboveGround(pos);
+      else { const g = grounded(pos); pos = g.pos; if (g.rests && onGround) onGround(); }
       if (hooks.projection() === "two_point") {             // the axis stays level; framing is the lens shift
         const n = normal(pos); C3.subtract(dir, C3.multiplyByScalar(n, C3.dot(dir, n), v3()), dir); C3.normalize(dir, dir);
       }
       cam.setView({ destination: pos, orientation: { direction: dir, up: level(dir, up) } });
+      mine = cam.positionWC.clone();
     }
-    // Keep the camera above the drawn surface: under Google's mesh the map shows from behind as a jumble.
-    function aboveGround(pos) {
-      if (!hooks.ground || hooks.walking() || height() > 3000) return pos;
-      const n = normal(pos), down = hooks.ground(new Cesium.Ray(pos, C3.negate(n, v3())));
-      if (down) {                                          // standing above the map: keep 1.5 m clearance
-        const above = C3.dot(C3.subtract(pos, down, v3()), n);
-        return above >= 1.5 ? pos : C3.add(pos, C3.multiplyByScalar(n, 1.5 - above, v3()), v3());
-      }
-      const lid = hooks.ground(new Cesium.Ray(C3.add(pos, C3.multiplyByScalar(n, 300, v3()), v3()), C3.negate(n, v3())));
-      return lid ? C3.add(lid, C3.multiplyByScalar(n, 1.5, v3()), v3()) : pos;   // nothing below: we are under the map
+    // The ground rule (Floor): one ray down onto the map's upper surface where the camera is going.
+    function grounded(pos) {
+      const c = hooks.ground && !hooks.walking() ? Cesium.Cartographic.fromCartesian(pos) : null;
+      if (!c || c.height > 3000) { floor.reset(); groundAt = null; return { pos, rests: false }; }
+      const n = normal(pos), hit = hooks.ground(new Cesium.Ray(C3.add(pos, C3.multiplyByScalar(n, 1000, v3()), v3()), C3.negate(n, v3())));
+      const top = hit ? Cesium.Cartographic.fromCartesian(hit)?.height ?? null : null;
+      let moved = 0;
+      if (groundAt) { const d = C3.subtract(pos, groundAt, v3()); moved = C3.magnitude(C3.subtract(d, C3.multiplyByScalar(n, C3.dot(d, n), v3()), d)); }
+      groundAt = C3.clone(pos);
+      let below = null;                                    // only matters under the upper surface
+      if (top != null && c.height < top + floor.clear) { const u = hooks.ground(new Cesium.Ray(pos, C3.negate(n, v3()))); below = u ? Cesium.Cartographic.fromCartesian(u)?.height ?? null : null; }
+      const h = floor.step(c.height, top, moved, below);
+      return h === c.height ? { pos, rests: false } : { pos: C3.add(pos, C3.multiplyByScalar(n, h - c.height, v3()), v3()), rests: true };
     }
     const rotate = (q, v) => Cesium.Matrix3.multiplyByVector(Cesium.Matrix3.fromQuaternion(q), v, v3());
 
@@ -168,11 +243,18 @@
       } else if (dt) {
         const off = C3.subtract(pos, pivot, v3()), d = C3.magnitude(off);
         const elev = Math.asin(clamp(C3.dot(off, n) / (d || 1), -1, 1));
-        const next = clamp(elev - Cesium.Math.toRadians(dt), Cesium.Math.toRadians(2), Cesium.Math.toRadians(89.9));
+        // from straight down to straight up: below the pivot is fine (looking up at a facade), as in Rhino
+        const next = clamp(elev - Cesium.Math.toRadians(dt), -Cesium.Math.toRadians(89.9), Cesium.Math.toRadians(89.9));
         if (Math.abs(next - elev) > 1e-9) {
           const right = C3.normalize(C3.cross(dir, up, v3()), v3());
           const q = Cesium.Quaternion.fromAxisAngle(right, elev - next);
+          const flat = [pos, dir, up];                     // the pose without the tilt
           pos = C3.add(pivot, rotate(q, off), v3()); dir = rotate(q, dir); up = rotate(q, up);
+          if (next < elev) {                               // tilting down: stop at the ground, do not slide along it
+            let rests = false; setPose(pos, dir, up, () => { rests = true; });
+            if (rests) setPose(...flat);
+            return;
+          }
         }
       }
       setPose(pos, dir, up);
@@ -205,7 +287,7 @@
       const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), -1.55, 1.55);
       const right = C3.normalize(C3.cross(dir, n, v3()), v3());
       dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
-      pivot = null;
+      pivot = null; target = null;
       setPose(cam.positionWC, dir, up);
     }
     function zoom(logFactor) {                             // > 0 zooms out
@@ -223,10 +305,13 @@
       }
       const A = anchor?.point || pivot || (pivot = centre());
       const off = C3.subtract(cam.positionWC, A, v3()), d = C3.magnitude(off);
-      let nd = clamp(d * z, 0.4, 4e7);
-      const pos = C3.add(A, C3.multiplyByScalar(off, nd / (d || 1), v3()), v3());
+      const nd = clamp(d * z, 0.4, 4e7);
+      let pos = C3.add(A, C3.multiplyByScalar(off, nd / (d || 1), v3()), v3());
       if (Cesium.Cartographic.fromCartesian(pos)?.height > 4e7) return;
+      pos = grounded(pos).pos;
+      if (target != null) target = clamp(target * nd / (d || 1), 0.4, 4e7);   // the focus comes closer with the camera
       cam.setView({ destination: pos, orientation: { direction: cam.directionWC, up: cam.upWC } });   // no re-levelling: the image never turns
+      mine = cam.positionWC.clone();
     }
 
     // ---- frame loop: ease pending motion, continuous zoom, short animations
@@ -252,7 +337,12 @@
       if (m || hold || anim || ease.busy) { scene.requestRender(); raf = requestAnimationFrame(frame); } else last = 0;
     }
     const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
-    function begin() { hooks.moved(); cam.cancelFlight(); }
+    function begin() {
+      hooks.moved(); cam.cancelFlight();
+      floor.reset(); groundAt = null;                      // a new gesture never starts by lifting the camera
+      const c0 = Cesium.Cartographic.fromCartesian(cam.positionWC); if (c0) floor.h = c0.height;
+      if (!mine || C3.distance(mine, cam.positionWC) > 0.01) target = null;   // something else moved the camera: focus anew
+    }
 
     // ---- input
     canvas.addEventListener("wheel", e => {
@@ -342,7 +432,7 @@
 
     // ---- public API (navigation menu, +/- buttons)
     function headingTilt() {
-      const dir = cam.directionWC, n = normal(cam.positionWC), p = pivot || centre();
+      const dir = cam.directionWC, n = normal(cam.positionWC), p = pivot || centre(true);
       const enu = Cesium.Transforms.eastNorthUpToFixedFrame(cam.positionWC), inv = Cesium.Matrix4.inverseTransformation(enu, new Cesium.Matrix4());
       const h = C3.dot(dir, n) < -0.999 ? cam.upWC : dir, l = Cesium.Matrix4.multiplyByPointAsVector(inv, h, v3());
       const heading = (Cesium.Math.toDegrees(Math.atan2(l.x, l.y)) + 360) % 360;
@@ -392,5 +482,5 @@
     const n = typeof navigator !== "undefined" ? navigator : {};
     return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
   }
-  return { RATE, STEP, WheelLatch, Ease, isMouseWheel, isMac, neutralDirection, create };
+  return { RATE, STEP, WheelLatch, Ease, Floor, pivotDistance, isMouseWheel, isMac, neutralDirection, create };
 });

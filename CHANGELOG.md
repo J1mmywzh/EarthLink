@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0-beta.9 — preview, 2026-11-13
+Navigation
+- Fixed the camera jumping by itself: Cesium's own camera collision was still running under EarthLink's navigation and lifted the camera (by 89 m in one measured case) with no input. It is off; only EarthLink moves the camera.
+- Fixed the snap when tilting while looking up at something (the camera jumped above the point it turns around; 7.6 m in one frame). Tilt now runs from straight down to straight up, as in Rhino.
+- Rotation turns about the centre of the view at the depth you are looking at, like Rhino's camera target. When the centre of the view runs past the model to far ground or sky (shallow and Two-Point views), the pivot stays at the model's depth or the last focus, not 1 to 2 km away, so the model no longer swings off-screen. Pan speed uses the same depth.
+- The camera passes through trees and buildings on the map. It rests only on a surface it descends onto from above, follows gently rising ground, and is never pushed up suddenly (the old rule popped the camera by metres and never let it back down).
+- A wheel mouse on a Mac is recognised from its first slow notch (it zooms, as in Rhino). A Magic Mouse cannot be told from the trackpad by a web page.
+
+Placing sets
+- Placement is a live layer: the viewer applies each set's position and rotation itself. Dragging, nudging and rotating show at once and are saved automatically; nothing is exported again and the Apply button is gone. Before, every move made Rhino export the whole set again, and a second adjustment made before that finished was applied twice.
+- The set card shows the total offset of the base centre and the total rotation. Rotation turns the set about the centre of its base.
+- Dragging a set no longer rebuilds the map cut-out on every mouse movement (frames of 0.4 s); the cut-out pauses and returns when you stop. A drag near the horizon can no longer fling the set kilometres away.
+- Site Location no longer rotates the model (that changed Rhino's north and sun); turn a set with Edit. The model stays at the new site while Rhino takes it over, at the right height, with no jump back.
+- Changing only the site location exports nothing. Sets sent by earlier versions are sent once more automatically.
+- Walking no longer ends when a ground-height sample arrives.
+
+Interface
+- Edit Set: type the East / North / Up offset and the rotation exactly (the twelve nudge buttons are gone); select a set's name to open it. New **Update when it changes in Rhino** switch (SendToEarth's Live option) and **Update now** button, so a set can be refreshed without Rhino's command line. Sets that update by themselves are marked Live in the list.
+- Each sync switch sits with what it syncs: named views under Views, the viewport under Camera, the sun in the Sun panel.
+- Site: one Height offset field replaces the four nudge buttons.
+- Navigation panel: a Controls list for your platform (Mac or Windows).
+
 ## 0.2.0-beta.8 — preview, 2026-11-09
 - **Hide map underneath** now has a clean edge and no black gap. The map is cut 0.4 m beyond a set's base, and a band redraws the map's ground from a top-down picture of it, from 3 m outside the base up to the base, then stretches its last pixels down or up to the base's own level. The cut's ragged edge is hidden, and where Google's ground is higher or lower than the model's the step is filled instead of showing black. The band follows the ground only (trees and buildings next to the cut are bridged), receives shadows, and is rebuilt when the cut changes or sharper map detail loads. It is a presentation fill, not survey data, and is left out of the model-only capture pass.
 

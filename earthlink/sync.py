@@ -98,7 +98,13 @@ def _apply_anchor_request(doc):
         os.remove(env.live_file("pick_request.json"))
     except OSError:
         pass
-    send_sets(doc, reason="new site location")   # anchor watcher sees no change after this
+    if req.get("rotate") or first or not env.current_meta().get("sets"):
+        send_sets(doc, reason="new site location")   # anchor watcher sees no change after this
+    else:                                            # only the location changed: nothing to export again
+        if pending:
+            send_sets(doc, pending, reason="new site location")
+        core.publish_anchor(doc)
+        _S["anchor"] = core.anchor_info(doc)
 
 
 def _watch_anchor(doc):
@@ -109,8 +115,12 @@ def _watch_anchor(doc):
         _S["anchor"] = a
         return
     if a != _S["anchor"]:
+        same_geometry = all(a.get(k) == _S["anchor"].get(k) for k in ("north", "base"))
         _S["anchor"] = a
-        if _shown(doc) or not env.current_meta():
+        if _shown(doc) and same_geometry:
+            core.publish_anchor(doc)                 # the site moved, the exported geometry is the same
+            log("site location updated (EarthAnchorPoint changed).")
+        elif _shown(doc) or not env.current_meta():
             send_sets(doc, reason="EarthAnchorPoint changed")
         _sun_location(doc, force=True)
 
@@ -135,6 +145,21 @@ def _watch_sets(doc):
                if not v.get("pending") and n not in meta_sets and core.set_objects(doc, n)]
     if missing:
         send_sets(doc, missing, reason="restoring")
+    # exports from before 0.2.0-beta.9 have the placement baked into the geometry: send those once more
+    tried = _S.setdefault("upgraded", set())
+    old = [n for n, v in meta_sets.items() if not v.get("unplaced") and n not in tried and n in core.get_sets(doc) and core.set_objects(doc, n)]
+    tried.update(old)
+    if old:
+        send_sets(doc, old, reason="updating to live placement")
+        for n in old:
+            mark_sent(doc, n)
+    # this file's placement differs from what the viewer shows (Undo in Rhino, a reopened file): publish it.
+    # A viewer edit not applied yet (its request is still queued) is not a difference.
+    d = env.live_file("requests")
+    if not (os.path.isdir(d) and os.listdir(d)):
+        for n, v in meta_sets.items():
+            if n in core.get_sets(doc) and (v.get("placement") or None) != (core.get_sets(doc)[n].get("placement") or None):
+                core.publish_placement(doc, n)
 
 
 def _apply_requests(doc):
@@ -143,6 +168,7 @@ def _apply_requests(doc):
     if not os.path.isdir(d):
         return
     pid = core.project_id(doc)
+    placed = set()
     for f in sorted(os.listdir(d)):
         path = os.path.join(d, f)
         req = env.read_json(path) or {}
@@ -160,16 +186,29 @@ def _apply_requests(doc):
                 if sc.sticky.get("earthlink_last_set") == name:
                     sc.sticky["earthlink_last_set"] = req["new"]
                 log("renamed set '%s' to '%s'." % (name, req["new"]))
-        elif req.get("type") in ("place_set", "move_set"):   # move_set: requests from older viewers
-            if core.place_set(doc, name, req.get("dx", 0), req.get("dy", 0), req.get("dz", 0), req.get("rot", 0), req.get("pivot", (0, 0, 0))) is not None:
-                log("placed '%s' in EarthLink; the Rhino geometry is unchanged." % name)
-                send_sets(doc, [name], reason="placed")
+        elif req.get("type") == "set_live":
+            if name in core.get_sets(doc):
+                core.put_set(doc, name, live=bool(req.get("on")))
                 mark_sent(doc, name)
+                log("'%s' %s." % (name, "updates when it changes" if req.get("on") else "no longer updates by itself"))
+        elif req.get("type") == "send_set":
+            if name in core.get_sets(doc) and core.set_objects(doc, name):
+                send_sets(doc, [name], reason="requested in the viewer")
+                mark_sent(doc, name)
+        elif req.get("type") == "placement":                 # where the viewer put the set: numbers only, no export
+            if core.set_placement(doc, name, req.get("rot", 0), req.get("move") or (0, 0, 0)):
+                core.publish_placement(doc, name)
+                placed.add(name)
+        elif req.get("type") in ("place_set", "move_set"):   # relative moves, from viewers before 0.2.0-beta.9
+            if core.place_set(doc, name, req.get("dx", 0), req.get("dy", 0), req.get("dz", 0), req.get("rot", 0), req.get("pivot", (0, 0, 0))) is not None:
+                core.publish_placement(doc, name)
+                placed.add(name)
         elif req.get("type") == "unplace_set":
             core.reset_placement(doc, name)
-            log("'%s' is back at its Rhino position in EarthLink." % name)
-            send_sets(doc, [name], reason="original position")
-            mark_sent(doc, name)
+            core.publish_placement(doc, name)
+            placed.add(name)
+    if placed:
+        log("placed %s in EarthLink; the Rhino geometry is unchanged." % ", ".join("'%s'" % n for n in sorted(placed)))
 
 
 # ------------------------------------------------------------------ live sets

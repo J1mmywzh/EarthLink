@@ -141,7 +141,8 @@ def rename_set_in_viewer(old, new):
 # ----------------------------------------------------------------- placement (EarthLink only; Rhino geometry never moves)
 def placement(doc, name):
     """A set's EarthLink placement: turned `rot` degrees clockwise on the map, then moved by `t`
-    (metres east/north/up). Applied on every export, so the Rhino model keeps its own grid."""
+    (metres east/north/up). The viewer applies it on top of the exported geometry (which stays where it is in
+    Rhino), so moving a set needs no new export and the Rhino model keeps its own grid."""
     p = get_sets(doc).get(name, {}).get("placement") or {}
     return {"rot": float(p.get("rot", 0.0)), "t": [float(v) for v in (p.get("t") or [0.0, 0.0, 0.0])][:3]}
 
@@ -155,16 +156,51 @@ def place_set(doc, name, dx=0.0, dy=0.0, dz=0.0, rot=0.0, pivot=(0, 0, 0)):
     return new or {}
 
 
+def set_placement(doc, name, rot=0.0, t=(0.0, 0.0, 0.0)):
+    """Store a set's placement as the viewer gave it (absolute). Returns False for an unknown set."""
+    if name not in get_sets(doc):
+        return False
+    put_set(doc, name, placement=geometry.clean_placement(rot, t))
+    return True
+
+
 def reset_placement(doc, name):
     if name in get_sets(doc):
         put_set(doc, name, placement=None)
 
 
-def placement_transform(doc, name):
-    """Placement as a Rhino transform in the ENU frame, model units."""
-    p, s = placement(doc, name), Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
-    return rg.Transform.Translation(rg.Vector3d(*(v / s for v in p["t"]))) * \
-        rg.Transform.Rotation(math.radians(-p["rot"]), rg.Vector3d.ZAxis, rg.Point3d.Origin)
+def publish_placement(doc, name):
+    """Make live/meta.json carry this file's placement for a set (after an edit, an Undo, a reopened file).
+    No geometry is exported. Returns True when meta changed."""
+    meta = load_meta()
+    entry = (meta.get("sets") or {}).get(name)
+    if entry is None or meta.get("project") != project_id(doc):
+        return False
+    want = get_sets(doc).get(name, {}).get("placement") or None
+    changed = (entry.get("placement") or None) != want
+    if changed:
+        if want:
+            entry["placement"] = placement(doc, name)
+        else:
+            entry.pop("placement", None)
+        meta["version"] = int(meta.get("version", 0)) + 1
+        env.write_json(os.path.join(env.live_dir(), "meta.json"), meta)
+    if any(s.get("dae") for s in meta["sets"].values()):
+        _write_earthpro(env.live_dir(), meta)
+    return changed
+
+
+def publish_anchor(doc):
+    """The site moved but the geometry did not (same base point and north): update meta only, export nothing."""
+    meta = load_meta()
+    if not meta.get("sets") or meta.get("project") != project_id(doc):
+        return False
+    meta["anchor"] = anchor_info(doc)
+    meta["version"] = int(meta.get("version", 0)) + 1
+    env.write_json(os.path.join(env.live_dir(), "meta.json"), meta)
+    if any(s.get("dae") for s in meta["sets"].values()):
+        _write_earthpro(env.live_dir(), meta)
+    return True
 
 
 def set_objects(doc, name):
@@ -206,9 +242,9 @@ def _display_color(doc, obj, parent_obj=None):
     return doc.Layers[a.LayerIndex].Color
 
 
-def _export_glb(doc, objs, path, place=None):
-    """Write `objs` (re-oriented to ENU, then placed) to a GLB. Returns their bounding box (model units, ENU)."""
-    xf = enu_transform(doc) if place is None else place * enu_transform(doc)
+def _export_glb(doc, objs, path):
+    """Write `objs`, re-oriented to east/north/up, to a GLB. Returns their bounding box (model units, ENU)."""
+    xf = enu_transform(doc)
     tmp = Rhino.RhinoDoc.CreateHeadless(None)
     bbox = rg.BoundingBox.Empty
     try:
@@ -276,12 +312,15 @@ def _write_earthpro(live, meta):
     for name, s in sorted(meta["sets"].items()):
         if not s.get("dae"):
             continue
+        p = (s.get("unplaced") and s.get("placement")) or {"rot": 0.0, "t": [0.0, 0.0, 0.0]}   # the EarthLink placement
+        lat, lon = geometry.placed_location(a["lat"], a["lon"], p["t"])
         marks.append("""<Placemark><name>{n}</name><description>v{v}, sent {t}</description>
 <Model><altitudeMode>{mode}</altitudeMode>
 <Location><longitude>{lon:.9f}</longitude><latitude>{lat:.9f}</latitude><altitude>{alt:.3f}</altitude></Location>
-<Orientation><heading>0</heading><tilt>0</tilt><roll>0</roll></Orientation><Scale><x>1</x><y>1</y><z>1</z></Scale>
+<Orientation><heading>{heading:.6f}</heading><tilt>0</tilt><roll>0</roll></Orientation><Scale><x>1</x><y>1</y><z>1</z></Scale>
 <Link><href>../{dae}</href></Link></Model></Placemark>""".format(
-            n=_xml(name), v=s["version"], t=s["sent_at"], mode=mode, lon=a["lon"], lat=a["lat"], alt=a["elev"], dae=s["dae"]))
+            n=_xml(name), v=s["version"], t=s["sent_at"], mode=mode, lon=lon, lat=lat, alt=a["elev"] + p["t"][2],
+            heading=p["rot"] % 360.0, dae=s["dae"]))
     with open(os.path.join(ep_dir, "model.kml"), "w", encoding="utf-8") as fh:
         fh.write('<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>%s</name>\n%s\n</Document></kml>'
                  % (_xml(meta["name"]), "\n".join(marks)))
@@ -325,7 +364,7 @@ def send_set(doc, name, to_earthpro=False):
     vd_rel = "%s/v%05d" % (sd, version)
     vd = os.path.join(live, sd, "v%05d" % version)
     os.makedirs(vd, exist_ok=True)
-    bbox = _export_glb(doc, objs, os.path.join(vd, "model.glb"), placement_transform(doc, name))
+    bbox = _export_glb(doc, objs, os.path.join(vd, "model.glb"))
     try:            # one piece per material: the browser draws tens, not tens of thousands, of pieces per frame
         geometry.merge_glb(os.path.join(vd, "model.glb"))
     except Exception:
@@ -335,7 +374,8 @@ def send_set(doc, name, to_earthpro=False):
              "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],
                         [bbox.Max.X * scale, bbox.Max.Y * scale, bbox.Max.Z * scale]] if bbox.IsValid else None,
              "sent_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-             "live": bool(get_sets(doc).get(name, {}).get("live"))}
+             "live": bool(get_sets(doc).get(name, {}).get("live")),
+             "unplaced": True}     # the geometry is where it is in Rhino; the viewer applies "placement"
     if get_sets(doc).get(name, {}).get("placement"):
         entry["placement"] = placement(doc, name)
     msgs, master = [], None

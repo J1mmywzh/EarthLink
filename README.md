@@ -2,7 +2,7 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Preview: 0.2.0-beta.8** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+**Preview: 0.2.0-beta.9** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
@@ -15,7 +15,7 @@ You need your own Cesium ion token or Google Maps Platform key with Map Tiles AP
 1. Check the Rhino file's units and EarthAnchorPoint.
 2. Select geometry and run **SendToEarth**.
 3. Choose a design set. Enable **Live** to update it as you edit.
-4. If the file has no location, choose **PickOnMap**, select the site, and apply it to Rhino.
+4. If the file has no location, choose **PickOnMap**, select the site, and apply it to Rhino. The site sets where Rhino's base point is; to turn a set on the map, use **Edit** on the set (Rhino's north is not changed).
 5. Inspect the model in the browser. Use **Fit** to frame it.
 
 Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Curves and annotations are not exported as surfaces.
@@ -43,6 +43,10 @@ Controls follow Rhino 8's defaults, including its small differences between Mac 
 Keys: the arrows rotate (pan in Parallel), Shift + arrows pan, and Page Up / Page Down zoom. Press Shift partway through a right-drag to lock it to one direction. In **Parallel**, right-drag and two fingers pan, as in Rhino. On a Mac, Option + middle-drag rotates; on Windows, Alt + middle-drag dollies. Rhino's view roll (Shift + Alt + right-drag) is not used, because the horizon always stays level.
 
 Each gesture keeps one mode until it ends, including its momentum, and movement is eased frame by frame. Pan and zoom scale with distance and orbit is angular, so one swipe feels the same from orbit to a single room.
+
+Rotation turns about the centre of the view, like Rhino's camera target: the surface there, or your model's depth when the centre of the view runs past it to far ground or sky. You can tilt below the horizon to look up at a facade. The camera passes through trees and buildings on the map, as in Rhino; it only comes to rest when it descends onto a surface from above, and it follows gently rising ground. Nothing lifts the camera by itself.
+
+On a Mac a web page cannot tell a Magic Mouse from the trackpad, so a Magic Mouse swipe rotates like two fingers on the trackpad (in Rhino it zooms). A wheel mouse zooms.
 
 The compass shows north; select it for **Tilt**, **Heading**, **Sensitivity** and **Reset to north**. **Fit** frames the visible design sets. Click **− / +** for a step, or hold them to zoom continuously.
 
@@ -77,7 +81,7 @@ Save named views in Rhino or the viewer. With view sync enabled, they appear in 
 
 - Send selections as separate named sets; show, hide, compare, or style them independently.
 - Materials, Clay, and Ghost control model display.
-- **Edit** a set to place it on the site: drag, nudge or rotate, then **Apply**. Placement is an EarthLink layer saved with the set in your Rhino file and applied on every update; your Rhino geometry never moves, so you can keep modelling on Rhino's grid at 0,0. **Original position** removes the placement.
+- **Edit** a set (select its name) to place it on the site: drag it on the map (**Move on map**), type its East / North / Up offset in metres, or rotate it about the centre of its base with the slider or an exact angle. The same card has **Update when it changes in Rhino** (SendToEarth's Live option) and **Update now**, so you do not need Rhino's command line to refresh a set. Changes show at once and are saved automatically; there is no Apply step and nothing is exported again. Placement is an EarthLink layer kept with the set in your Rhino file: your Rhino geometry never moves, so you can keep modelling on Rhino's own grid. **Original position** puts the set back where it is in Rhino. While you drag or rotate, **Hide map underneath** pauses and returns when you stop.
 - **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved, and the outline is never short of the base. Ground is removed as well as buildings and vegetation. The cut reaches 0.4 m past the base, and a band redrawn from the map's own pixels joins the map to the base, so the edge is clean and no black gap shows where Google's ground and your model's differ in height. That band is a presentation fill, not survey data.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
