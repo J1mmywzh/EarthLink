@@ -438,6 +438,17 @@
   { const T = Cesium.Cesium3DTilesetTraversal, can = T && T.canTraverse;
     if (can) T.canTraverse = tile => (tile.hasEmptyContent && tile.children.length > 0 && !tile.contentExpired) || can(tile); }
   let tileset = null, reconnectedAt = 0, retryMap = () => 0;   // declared before the map opens (watchMap sets retryMap)
+  // The map's own shader state (the cut-out and the colour of the time of day), declared before the map opens.
+  const CUT = { reach: 3, high: 4, fade: 4, under: 0.005, px: 20, max: 2048 };
+  let clipKey = "", cut = null, mapShader = null, cutPaused = false, adjustTimer = 0, adjustingNow = false;
+  const mapTint = new Cesium.Cartesian3(1, 1, 1);
+  // If a graphics driver cannot draw the map with that shader, reload once without it (no cut-out, no night tint).
+  const NO_MAP_SHADER = (() => { try { return sessionStorage.getItem("earthlink:noMapShader") === "1"; } catch { return false; } })();
+  scene.renderError.addEventListener(() => {
+    if (!mapShader || NO_MAP_SHADER) return;
+    try { sessionStorage.setItem("earthlink:noMapShader", "1"); } catch { return; }
+    location.reload();
+  });
   if (haveTiles) {
     try {
       tileset = await openMap();
@@ -448,6 +459,7 @@
     const ts = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
     ts.shadows = Cesium.ShadowMode.ENABLED;
     ts.enableCollision = false;                           // navigation.js alone moves the camera
+    mapShaderFor(ts);                                     // from the start: no pause when the cut-out is first used
     scene.primitives.add(ts);
     watchMap(ts);
     return ts;
@@ -513,10 +525,6 @@
   // Sunlight is one state; shadow casting is a subordinate display preference.
   const localISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   $("date").value=store.get("date")||localISO(new Date());$("hour").value=store.get("hour")??900;
-  // The map's own shader state (the cut-out and the colour of the time of day), declared before the first frame.
-  const CUT = { reach: 3, high: 4, fade: 4, under: 0.005, px: 20, max: 2048 };
-  let clipKey = "", cut = null, mapShader = null, cutPaused = false;
-  const mapTint = new Cesium.Cartesian3(1, 1, 1);
   let sunPost=null,dayKey="";
   const neutralLight=new Cesium.DirectionalLight({direction:viewer.camera.directionWC.clone(),intensity:0.8*LIGHT.sun});
   const sunLight=new Cesium.SunLight(),moonLight=new Cesium.DirectionalLight({direction:new Cesium.Cartesian3(0,0,-1),color:new Cesium.Color(.62,.72,1),intensity:.45});
@@ -566,7 +574,6 @@
     const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2)].join();
     if(key===dayKey)return;dayKey=key;
     mapTint.x=L.tint[0];mapTint.y=L.tint[1];mapTint.z=L.tint[2];
-    if(tileset&&(L.tint.some(v=>v<0.999)||mapShader))mapShaderFor(tileset);
     scene.backgroundColor=new Cesium.Color(...L.sky,1);
     if(scene.skyBox)scene.skyBox.show=L.night>0.5;
     if(scene.moon)scene.moon.show=L.night>0.5;
@@ -781,9 +788,8 @@
     scene.requestRender();
   }
   // While a set is being moved or turned, the map cut-out waits: rebuilding it on every mouse move stalls the page.
-  let adjustTimer = 0, adjustingNow = false;
   function adjusting() {
-    if (!adjustingNow) { adjustingNow = true; cutPause(true); }   // the map is whole while a set moves
+    if (!adjustingNow) { adjustingNow = true; cutShow(); }   // the map is whole while a set moves
     clearTimeout(adjustTimer);
     adjustTimer = setTimeout(() => { adjustingNow = false; applyClip(); }, 350);
   }
@@ -850,6 +856,7 @@
   }
   // The shader every map tile is drawn with: the cut (when a mask is set) and the colour of the time of day.
   function mapShaderFor(ts) {
+    if (NO_MAP_SHADER) return null;
     if (mapShader && ts.customShader === mapShader) return mapShader;
     const blank = () => new Cesium.TextureUniform({ typedArray: new Uint8Array(4), width: 1, height: 1 });
     const sh = new Cesium.CustomShader({
@@ -891,10 +898,10 @@
     ts.customShader = mapShader = sh;
     return sh;
   }
-  function cutPause(on) {                                 // draw (and measure) the map whole for a moment
-    cutPaused = on;
-    if (mapShader) { mapShader.uniforms.u_cut.value.x = cut && !on ? 1 : 0; scene.requestRender(); }
+  function cutShow() {                                    // the cut is drawn unless paused or a set is being moved
+    if (mapShader) { mapShader.uniforms.u_cut.value.x = cut && !cutPaused && !adjustingNow ? 1 : 0; scene.requestRender(); }
   }
+  function cutPause(on) { cutPaused = on; cutShow(); }    // draw (and measure) the map whole for a moment
   function buildCutMask(sets, M) {
     const shapes = [];                                   // per set: rings in the site frame, and the base's height there
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, hMin = Infinity;
@@ -950,21 +957,22 @@
   function applyClip() {
     if (!tileset || !anchor() || adjustingNow) return;
     const visible = cutSets().filter(n => models[n]?._elRings?.length), M = frame();
-    if (!visible.length) { cut = null; clipKey = ""; cutPause(cutPaused); return; }
+    if (!visible.length) { cut = null; clipKey = ""; cutShow(); return; }
     const key=JSON.stringify([visible.map(n=>[n,models[n]?._elVersion,placementOf(n).rot,placementOf(n).t]),Array.from({length:16},(_,i)=>M[i])]);
-    if (key === clipKey && cut && tileset.customShader === mapShader) return cutPause(cutPaused);
-    cut = buildCutMask(visible, M); clipKey = key;
+    if (key === clipKey && cut && tileset.customShader === mapShader) return cutShow();
     const sh = mapShaderFor(tileset);
+    if (!sh) { cut = null; return msg("Hide map underneath is unavailable with this graphics driver."); }
+    cut = buildCutMask(visible, M); clipKey = key;
     sh.setUniform("u_mask", new Cesium.TextureUniform({ typedArray: cut.data, width: cut.N, height: cut.N,
       minificationFilter: Cesium.TextureMinificationFilter.LINEAR, magnificationFilter: Cesium.TextureMagnificationFilter.LINEAR }));
     sh.setUniform("u_rect", new Cesium.Cartesian4(cut.x0, cut.y0, cut.size, cut.h0));
     sh.setUniform("u_texel", cut.N);
-    cutPause(cutPaused);
+    cutShow();
   }
   // The same reshaping for rays (walking, the camera's ground rule, picking): what the cut does to a map point.
   // Returns null (untouched), {hidden: true, lift} inside a base, or {lift}: metres the surface moved up there.
   function cutAt(p) {
-    if (!cut || cutPaused) return null;
+    if (!cut || cutPaused || adjustingNow) return null;
     const s = Cesium.Matrix4.multiplyByPoint(cut.inv, p, new Cesium.Cartesian3());
     const u = (s.x - cut.x0) / cut.size * cut.N, v = (s.y - cut.y0) / cut.size * cut.N;
     if (!(u >= 0 && v >= 0 && u < cut.N && v < cut.N)) return null;
