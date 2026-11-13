@@ -19,6 +19,7 @@ from earthlink import env, collada, geometry
 KEEP_VERSIONS = 3
 SECTION = "EarthLink"
 DEFAULT_SET = "Main"
+EXPORT_FORMAT = 2     # 2: see-through materials and texture mappings (0.2.0-beta.10); older exports are sent once more
 
 
 # ----------------------------------------------------------------- anchor / frames
@@ -413,7 +414,8 @@ def send_set(doc, name, to_earthpro=False):
                         [bbox.Max.X * scale, bbox.Max.Y * scale, bbox.Max.Z * scale]] if bbox.IsValid else None,
              "sent_at": time.strftime("%Y-%m-%d %H:%M:%S"),
              "live": bool(get_sets(doc).get(name, {}).get("live")),
-             "unplaced": True}     # the geometry is where it is in Rhino; the viewer applies "placement"
+             "unplaced": True,     # the geometry is where it is in Rhino; the viewer applies "placement"
+             "format": EXPORT_FORMAT}
     if get_sets(doc).get(name, {}).get("placement"):
         entry["placement"] = placement(doc, name)
     msgs, master = [], None

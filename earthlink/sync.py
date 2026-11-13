@@ -152,12 +152,14 @@ def _watch_sets(doc):
                if not v.get("pending") and n not in meta_sets and core.set_objects(doc, n)]
     if missing:
         send_sets(doc, missing, reason="restoring")
-    # exports from before 0.2.0-beta.9 have the placement baked into the geometry: send those once more
+    # Exports in an older form are sent once more: before 0.2.0-beta.9 the placement was baked into the geometry,
+    # before 0.2.0-beta.10 glass was opaque and texture mappings were dropped (core.EXPORT_FORMAT).
     tried = _S.setdefault("upgraded", set())
-    old = [n for n, v in meta_sets.items() if not v.get("unplaced") and n not in tried and n in core.get_sets(doc) and core.set_objects(doc, n)]
+    old = [n for n, v in meta_sets.items() if (not v.get("unplaced") or v.get("format", 1) < core.EXPORT_FORMAT)
+           and n not in tried and n in core.get_sets(doc) and core.set_objects(doc, n)]
     tried.update(old)
     if old:
-        send_sets(doc, old, reason="updating to live placement")
+        send_sets(doc, old, reason="updating to this version's export")
         for n in old:
             mark_sent(doc, n)
     # this file's placement differs from what the viewer shows (Undo in Rhino, a reopened file): publish it.

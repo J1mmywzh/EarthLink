@@ -27,7 +27,7 @@ Light, sky and materials
 - No stars or dark sky by day when you look up.
 - Materials are lit like Rhino's Rendered mode, measured on the same colour swatches in both: a sunlit white is white (it was grey), colours are as vivid as in Rhino, and shadows are as light as Rhino's.
 - Glass, polycarbonate and any transparent material are see-through. Rhino writes them in a form real-time viewers ignore, so they showed as opaque blocks.
-- Textures keep the object's box, planar or other mapping (it was dropped, so a mapped texture came out at the wrong size). Polished metal shows its colour instead of turning dark. Resend a set to pick these up.
+- Textures keep the object's box, planar or other mapping (it was dropped, so a mapped texture came out at the wrong size). Polished metal shows its colour instead of turning dark. Rhino sends each existing set once more by itself to pick these up.
 
 Interface
 - Delete is the leftmost action on a set and on a view, then edit.
