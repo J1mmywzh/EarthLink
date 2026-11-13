@@ -264,11 +264,12 @@ def _copy_texture_mappings(src, dst, xform):
     """Carry an object's texture mappings (box, planar, ...) to its copy, which was moved by `xform`.
     Without them a mapped texture falls back to the surface's own UVs: the wrong size and direction."""
     try:
+        import clr
         for ch in src.GetTextureChannels():
-            got = src.GetTextureMapping(ch, rg.Transform.Identity)
-            mapping, own = (got[0], got[1]) if isinstance(got, tuple) else (got, rg.Transform.Identity)
+            own = clr.Reference[rg.Transform]()
+            mapping = src.GetTextureMapping(ch, own)     # also returns how the object moved since it was mapped
             if mapping is not None:
-                dst.SetTextureMapping(ch, mapping, xform * own)
+                dst.SetTextureMapping(ch, mapping, xform * own.Value)
     except Exception:
         pass
 
