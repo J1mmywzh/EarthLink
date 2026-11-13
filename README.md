@@ -2,7 +2,7 @@
 
 EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
 
-**Preview: 0.2.0-beta.9** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+**Preview: 0.2.0-beta.10** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
 
 ## Install
 
@@ -15,7 +15,7 @@ You need your own Cesium ion token or Google Maps Platform key with Map Tiles AP
 1. Check the Rhino file's units and EarthAnchorPoint.
 2. Select geometry and run **SendToEarth**.
 3. Choose a design set. Enable **Live** to update it as you edit.
-4. If the file has no location, choose **PickOnMap**, select the site, and apply it to Rhino. The site sets where Rhino's base point is; to turn a set on the map, use **Edit** on the set (Rhino's north is not changed).
+4. If the file has no location, choose **PickOnMap**, click where the model should stand, and apply it to Rhino. The bottom centre of what you sent goes on that spot, wherever the geometry is in the Rhino file (it becomes the EarthAnchorPoint's model base point; a base point you set yourself is kept). To turn a set on the map, use **Edit** on the set (Rhino's north is not changed).
 5. Inspect the model in the browser. Use **Fit** to frame it.
 
 Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Curves and annotations are not exported as surfaces.
@@ -44,13 +44,13 @@ Keys: the arrows rotate (pan in Parallel), Shift + arrows pan, and Page Up / Pag
 
 Each gesture keeps one mode until it ends, including its momentum, and movement is eased frame by frame. Pan and zoom scale with distance and orbit is angular, so one swipe feels the same from orbit to a single room.
 
-Rotation turns about the centre of the view, like Rhino's camera target: the surface there, or your model's depth when the centre of the view runs past it to far ground or sky. You can tilt below the horizon to look up at a facade. The camera passes through trees and buildings on the map, as in Rhino; it only comes to rest when it descends onto a surface from above, and it follows gently rising ground. Nothing lifts the camera by itself.
+Rotation turns about what is at the centre of the view when you start, like Rhino's camera target, and keeps that point from one rotation to the next until you pan, zoom or fly (a tree passing in front does not move it). When the centre of the view runs to far ground or sky it is your model's depth. A gesture does one thing from start to finish: a pinch that slips into a two-finger rotation is ignored, and the glide after your fingers lift is shortened. You can tilt below the horizon to look up at a facade. The camera passes through trees and buildings on the map, as in Rhino; it only comes to rest when it descends onto a surface from above, and it follows gently rising ground. Nothing lifts the camera by itself.
 
 On a Mac a web page cannot tell a Magic Mouse from the trackpad, so a Magic Mouse swipe rotates like two fingers on the trackpad (in Rhino it zooms). A wheel mouse zooms.
 
-The compass shows north; select it for **Tilt**, **Heading**, **Sensitivity** and **Reset to north**. **Fit** frames the visible design sets. Click **− / +** for a step, or hold them to zoom continuously.
+The compass shows north: click it for north up, or drag it to turn (sideways) and tilt (up and down). **Fit** frames the visible design sets. Click **− / +** for a step, or hold them to zoom continuously. **Sensitivity** (one value for every movement) and the list of controls are under **Navigation** in the sidebar; **Record input for 10 s** there saves what your trackpad or mouse sends, to report a navigation problem.
 
-Two-Point keeps verticals vertical and offers **Vertical framing** instead of tilt. Using browser navigation turns off **Follow Rhino**.
+Two-Point keeps verticals vertical and navigates like Perspective: tilting moves the camera up or down around what you look at and shifts the lens, up to 65° (steeper stretches the picture). Using browser navigation turns off **Follow Rhino**.
 
 ## Walk and fly
 
@@ -58,31 +58,31 @@ Drag the person button onto the map and drop it where you want to stand, as in G
 
 | Control | Action |
 | --- | --- |
-| W A S D or arrow keys | Walk (3.5 m/s) |
-| Double-tap W (on a Mac, also Control) | Sprint (9.5 m/s) until you stop |
+| W A S D or arrow keys | Walk (4.4 m/s) |
+| Double-tap W (on a Mac, also Control) | Sprint (11.9 m/s) until you stop |
 | Shift | Sneak (1.3 m/s) |
 | Space | Jump |
 | Double-tap Space | Fly, as in Minecraft creative mode; double-tap again to drop |
-| While flying | Space rises, Shift sinks (7.5 m/s); W A S D fly at 10.9 m/s, sprinting at 21.6 m/s; touching the ground lands |
+| While flying | Space rises, Shift sinks (9.4 m/s); W A S D fly at 13.6 m/s, sprinting at 27 m/s; nothing is in the way |
 | Two fingers or right-drag | Look around |
 | Esc or the person button | Return to the previous view |
 
-You walk as a 1.80 m person with eyes at 1.65 m. Walls and ceilings stop you, including in flight, and you slide along them; steps up to 45 cm are climbed and stairs are followed down. Collisions use what is drawn: your exported model mesh and the loaded Google map. Where **Hide map underneath** removes the ground, include a floor or site surface in your model. Section cuts disable Walk. On Windows, Control does not sprint, because Ctrl + W closes the browser tab.
+You walk as a 1.80 m person with eyes at 1.65 m. On foot, walls and ceilings stop you and you slide along them. Flying has no collision: you pass through buildings, trees, your model and the ground, and dropping out of a flight under the map stands you on the surface above. Steps up to 45 cm are climbed and stairs are followed down. Collisions use what is drawn: your exported model mesh and the loaded Google map. Where **Hide map underneath** removes the map, you stand at the level of the set's base. Section cuts disable Walk. On Windows, Control does not sprint, because Ctrl + W closes the browser tab.
 
 ## Sun and views
 
 Open **Sun** to control sunlight, date, time, and dynamic shadows. Turning sunlight off uses neutral lighting and hides the time controls. Shadows photographed into Google's imagery remain part of the map texture.
 
-**Sync with Rhino** exchanges the sun's enabled state and time. Rhino's current sun is used when connecting or reconnecting synchronization. Time uses the browser computer's time zone, including the selected date's daylight-saving offset.
+With the sun low the map turns warm, and at night dark blue, with stars and a dim moonlight on your model; shadows fade out as the sun reaches the horizon. (The map is a daytime photograph: it is tinted, not relit.) **Sync with Rhino** exchanges the sun's enabled state and time. Rhino's current sun is used when connecting or reconnecting synchronization. Time uses the browser computer's time zone, including the selected date's daylight-saving offset.
 
-Save named views in Rhino or the viewer. With view sync enabled, they appear in both. Saved views retain the camera, projection, lens, and sun time; recalling a time does not switch sunlight on.
+Save named views in Rhino or the viewer: they are always the same in both. A view saved, updated, renamed or deleted in the viewer changes in Rhino's Named Views panel, and the other way round. Saved views retain the camera, projection, lens, and sun time; recalling a time does not switch sunlight on.
 
 ## Design sets and display
 
 - Send selections as separate named sets; show, hide, compare, or style them independently.
-- Materials, Clay, and Ghost control model display.
+- Materials, Clay, and Ghost control model display. Materials shows your Rhino render materials lit like Rhino's Rendered mode (measured on the same colour swatches): colours, image and procedural textures with their box or planar mapping, glass and other see-through materials, emission. It is a real-time picture: there are no ray-traced reflections or refraction, and polished metal shows mostly its own colour.
 - **Edit** a set (select its name) to place it on the site: drag it on the map (**Move on map**), type its East / North / Up offset in metres, or rotate it about the centre of its base with the slider or an exact angle. The same card has **Update when it changes in Rhino** (SendToEarth's Live option) and **Update now**, so you do not need Rhino's command line to refresh a set. Changes show at once and are saved automatically; there is no Apply step and nothing is exported again. Placement is an EarthLink layer kept with the set in your Rhino file: your Rhino geometry never moves, so you can keep modelling on Rhino's own grid. **Original position** puts the set back where it is in Rhino. While you drag or rotate, **Hide map underneath** pauses and returns when you stop.
-- **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved, and the outline is never short of the base. Ground is removed as well as buildings and vegetation. The cut reaches 0.4 m past the base, and a band redrawn from the map's own pixels joins the map to the base, so the edge is clean and no black gap shows where Google's ground and your model's differ in height. That band is a presentation fill, not survey data.
+- **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved. Ground is removed as well as buildings and vegetation. Around the base, within 3 m, the map's own ground is graded to the base's level, so the map meets the model with no gap and no separate patch; trees and buildings more than about 4 m above or below the base keep their height. The grading is a presentation fill, not survey data. Sets more than about 400 m apart share one cut-out and its edge gets coarser.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
 ## Capture and share

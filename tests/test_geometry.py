@@ -53,3 +53,23 @@ def test_merge_makes_one_piece_per_material_without_changing_the_shape(tmp_path)
     data=p.read_bytes();n=struct.unpack_from('<I',data,12)[0];j=json.loads(data[20:20+n])
     assert len(j['materials'])==2 and sorted(m['primitives'][0]['material'] for m in j['meshes'])==[0,1]
     assert all('min' in j['accessors'][m['primitives'][0]['attributes']['POSITION']] for m in j['meshes'])
+
+def test_glass_and_other_see_through_materials_become_transparent(tmp_path):
+    from earthlink import collada
+    p=tmp_path/'m.glb';make_glb(p);js,binary=collada._read_glb(str(p))
+    js['materials']=[
+        {'name':'glass','pbrMetallicRoughness':{'baseColorFactor':[1,1,1,1],'metallicFactor':0.0},'extensions':{'KHR_materials_transmission':{'transmissionFactor':1.0},'KHR_materials_ior':{'ior':1.52}}},
+        {'name':'polycarbonate','pbrMetallicRoughness':{'baseColorFactor':[.8,.9,.9,1],'metallicFactor':0.0},'extensions':{'KHR_materials_transmission':{'transmissionFactor':0.7}}},
+        {'name':'plaster','pbrMetallicRoughness':{'baseColorFactor':[.9,.9,.9,1],'metallicFactor':0.0},'extensions':{'KHR_materials_transmission':{}}},
+        {'name':'steel','pbrMetallicRoughness':{'baseColorFactor':[.6,.6,.62,1],'roughnessFactor':0.15}}]
+    geometry._write_glb(p,js,bytes(binary))
+    before=geometry.derive(p)
+    assert geometry.screen_materials(p)==3
+    glass,poly,plaster,steel=collada._read_glb(str(p))[0]['materials']
+    assert steel['pbrMetallicRoughness']['metallicFactor']==0.3 and steel['pbrMetallicRoughness']['roughnessFactor']==0.15,'metal keeps its sheen, shows its colour'
+    assert glass['alphaMode']=='BLEND' and glass['doubleSided'] and glass['pbrMetallicRoughness']['baseColorFactor'][3]==pytest.approx(0.12)
+    assert 'KHR_materials_transmission' not in glass['extensions'] and glass['extensions']['KHR_materials_ior']['ior']==1.52
+    assert poly['pbrMetallicRoughness']['baseColorFactor'][:3]==[.8,.9,.9] and poly['pbrMetallicRoughness']['baseColorFactor'][3]==pytest.approx(0.384)
+    assert 'alphaMode' not in plaster and plaster['pbrMetallicRoughness']['baseColorFactor'][3]==1,'opaque materials are untouched'
+    assert geometry.derive(p)==before,'the shape is unchanged'
+    assert geometry.screen_materials(p)==0,'running it again changes nothing'

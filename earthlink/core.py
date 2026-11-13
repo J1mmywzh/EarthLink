@@ -19,6 +19,7 @@ from earthlink import env, collada, geometry
 KEEP_VERSIONS = 3
 SECTION = "EarthLink"
 DEFAULT_SET = "Main"
+EXPORT_FORMAT = 2     # 2: see-through materials and texture mappings (0.2.0-beta.10); older exports are sent once more
 
 
 # ----------------------------------------------------------------- anchor / frames
@@ -49,16 +50,34 @@ def anchor_info(doc):
             "north": round(north_angle(doc), 6), "base": [b.X, b.Y, b.Z]}
 
 
-def set_anchor(doc, lat=None, lon=None, rotate_deg=0.0, elev=None, zero=None):
+def base_point_for(doc, ids):
+    """Bottom centre of the objects' bounding box, in model coordinates (None: nothing to measure).
+    A first placement puts this point on the spot picked on the map."""
+    bbox = rg.BoundingBox.Empty
+    for i in ids or []:
+        try:
+            obj = doc.Objects.FindId(System.Guid(str(i)))
+        except Exception:
+            obj = None
+        if obj is not None and not obj.IsDeleted:
+            bbox.Union(obj.Geometry.GetBoundingBox(True))
+    if not bbox.IsValid:
+        return None
+    c = bbox.Center
+    return rg.Point3d(c.X, c.Y, bbox.Min.Z)
+
+
+def set_anchor(doc, lat=None, lon=None, rotate_deg=0.0, elev=None, zero=None, base=None):
     """Update the EarthAnchorPoint (the same thing the EarthAnchorPoint command edits).
-    rotate_deg turns the model clockwise on the map (north turns counter-clockwise in the model)."""
+    rotate_deg turns the model clockwise on the map (north turns counter-clockwise in the model).
+    base: a new model base point (the point of the model that sits on the site location)."""
     ep = doc.EarthAnchorPoint
     new = Rhino.DocObjects.EarthAnchorPoint()
     new.EarthBasepointLatitude = ep.EarthBasepointLatitude if lat is None else lat
     new.EarthBasepointLongitude = ep.EarthBasepointLongitude if lon is None else lon
     new.EarthBasepointElevation = ep.EarthBasepointElevation if elev is None else elev
     new.EarthBasepointElevationZero = ep.EarthBasepointElevationZero if zero is None else zero
-    new.ModelBasePoint = ep.ModelBasePoint
+    new.ModelBasePoint = ep.ModelBasePoint if base is None else base
     north, east = rg.Vector3d(ep.ModelNorth), rg.Vector3d(ep.ModelEast)
     if not ep.EarthLocationIsSet() and north.IsZero:
         north, east = rg.Vector3d(0, 1, 0), rg.Vector3d(1, 0, 0)
@@ -242,6 +261,20 @@ def _display_color(doc, obj, parent_obj=None):
     return doc.Layers[a.LayerIndex].Color
 
 
+def _copy_texture_mappings(src, dst, xform):
+    """Carry an object's texture mappings (box, planar, ...) to its copy, which was moved by `xform`.
+    Without them a mapped texture falls back to the surface's own UVs: the wrong size and direction."""
+    try:
+        import clr
+        for ch in src.GetTextureChannels():
+            own = clr.Reference[rg.Transform]()
+            mapping = src.GetTextureMapping(ch, own)     # also returns how the object moved since it was mapped
+            if mapping is not None:
+                dst.SetTextureMapping(ch, mapping, xform * own.Value)
+    except Exception:
+        pass
+
+
 def _export_glb(doc, objs, path):
     """Write `objs`, re-oriented to east/north/up, to a GLB. Returns their bounding box (model units, ENU)."""
     xf = enu_transform(doc)
@@ -256,7 +289,7 @@ def _export_glb(doc, objs, path):
             pass
         mats = {}
 
-        def add(geo, src_obj, parent=None):
+        def add(geo, src_obj, parent=None, moved=None):
             if not isinstance(geo, _MESHABLE):
                 return
             g = geo.Duplicate()
@@ -273,8 +306,10 @@ def _export_glb(doc, objs, path):
             else:
                 attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
                 attrs.ObjectColor = _display_color(doc, src_obj, parent)
-            if tmp.Objects.Add(g, attrs) != System.Guid.Empty:
+            oid = tmp.Objects.Add(g, attrs)
+            if oid != System.Guid.Empty:
                 bbox.Union(g.GetBoundingBox(True))
+                _copy_texture_mappings(src_obj, tmp.Objects.FindId(oid), xf if moved is None else xf * moved)
 
         for o in objs:
             if isinstance(o, Rhino.DocObjects.InstanceObject):
@@ -283,7 +318,7 @@ def _export_glb(doc, objs, path):
                 for piece, t in zip(pieces, pxf):
                     g = piece.Geometry.Duplicate()
                     g.Transform(t)
-                    add(g, piece, o)
+                    add(g, piece, o, t)
             else:
                 add(o.Geometry, o)
 
@@ -369,13 +404,18 @@ def send_set(doc, name, to_earthpro=False):
         geometry.merge_glb(os.path.join(vd, "model.glb"))
     except Exception:
         pass        # the unmerged file still displays, only slower
+    try:            # glass and other see-through materials: Rhino writes them in a form real-time viewers ignore
+        geometry.screen_materials(os.path.join(vd, "model.glb"))
+    except Exception:
+        pass
     scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
     entry = {"glb": vd_rel + "/model.glb", "version": version, "objects": len(objs),
              "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],
                         [bbox.Max.X * scale, bbox.Max.Y * scale, bbox.Max.Z * scale]] if bbox.IsValid else None,
              "sent_at": time.strftime("%Y-%m-%d %H:%M:%S"),
              "live": bool(get_sets(doc).get(name, {}).get("live")),
-             "unplaced": True}     # the geometry is where it is in Rhino; the viewer applies "placement"
+             "unplaced": True,     # the geometry is where it is in Rhino; the viewer applies "placement"
+             "format": EXPORT_FORMAT}
     if get_sets(doc).get(name, {}).get("placement"):
         entry["placement"] = placement(doc, name)
     msgs, master = [], None

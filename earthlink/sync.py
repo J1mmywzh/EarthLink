@@ -6,7 +6,7 @@ Every tick (0.2 s), for the document being synced:
   * site location    - EarthAnchorPoint edits in Rhino re-send all sets; a location picked in the
                        viewer (live/anchor_request.json) is written into the EarthAnchorPoint
   * sun              - Rhino Sun date/time <-> viewer sun, and the Sun's location/north from the anchor [sync_sun]
-  * named views      - two-way, about once a second                                       [sync_views]
+  * named views      - two-way, about once a second, always
 """
 import os, time, math
 
@@ -78,11 +78,18 @@ def _apply_anchor_request(doc):
     except OSError:
         pass
     first = not core.anchor_ok(doc)
+    # A file placed for the first time stands on the picked spot: the bottom centre of what was sent becomes the
+    # model base point (unless EarthAnchorPoint already has one), wherever the geometry is in the Rhino file.
+    base = None
+    if first and doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9:
+        sets = core.get_sets(doc)
+        waiting = [v for v in sets.values() if v.get("pending")] or list(sets.values())
+        base = core.base_point_for(doc, [i for v in waiting for i in v.get("ids", [])])
     # A new file gets "ground level, 0 m". An existing anchor keeps its elevation and reference;
     # with a ground-level reference the picked spot's ground height is used directly.
     core.set_anchor(doc, lat=req.get("lat"), lon=req.get("lon"), rotate_deg=float(req.get("rotate") or 0.0),
                     elev=0.0 if first else None,
-                    zero=Rhino.DocObjects.BasepointZero.GroundLevel if first else None)
+                    zero=Rhino.DocObjects.BasepointZero.GroundLevel if first else None, base=base)
     if req.get("lat") is not None:
         patch = {"nudge": 0.0}
         if req.get("ground_h") is not None and str(doc.EarthAnchorPoint.EarthBasepointElevationZero) == "GroundLevel":
@@ -145,12 +152,14 @@ def _watch_sets(doc):
                if not v.get("pending") and n not in meta_sets and core.set_objects(doc, n)]
     if missing:
         send_sets(doc, missing, reason="restoring")
-    # exports from before 0.2.0-beta.9 have the placement baked into the geometry: send those once more
+    # Exports in an older form are sent once more: before 0.2.0-beta.9 the placement was baked into the geometry,
+    # before 0.2.0-beta.10 glass was opaque and texture mappings were dropped (core.EXPORT_FORMAT).
     tried = _S.setdefault("upgraded", set())
-    old = [n for n, v in meta_sets.items() if not v.get("unplaced") and n not in tried and n in core.get_sets(doc) and core.set_objects(doc, n)]
+    old = [n for n, v in meta_sets.items() if (not v.get("unplaced") or v.get("format", 1) < core.EXPORT_FORMAT)
+           and n not in tried and n in core.get_sets(doc) and core.set_objects(doc, n)]
     tried.update(old)
     if old:
-        send_sets(doc, old, reason="updating to live placement")
+        send_sets(doc, old, reason="updating to this version's export")
         for n in old:
             mark_sent(doc, n)
     # this file's placement differs from what the viewer shows (Undo in Rhino, a reopened file): publish it.
@@ -344,7 +353,7 @@ def _tick(sender, e):
                 _S["sun_linked"] = sun_linked
                 if sun_linked:
                     _sync_sun(doc)
-                if s.get("sync_views", True) and _shown(doc):
+                if _shown(doc):                          # named views are always the same in both apps
                     pid = core.project_id(doc)
                     if pid != _S["project"]:
                         _S["project"], _S["known"] = pid, {}

@@ -91,9 +91,10 @@ def run(doc):
         env.write_json(env.live_file("pick_request.json"),
                        {"project": core.project_id(doc), "name": core.project_name(doc), "set": set_name})
         if _open_viewer(doc, first_time_msg=True):
-            Rhino.RhinoApp.WriteLine("SendToEarth: in the viewer, find the site (search or lat, lon), click the spot where the "
-                                     "model's EarthAnchorPoint base point (%s) should sit, then Apply. It is sent right after."
-                                     % ("origin" if doc.EarthAnchorPoint.ModelBasePoint == Rhino.Geometry.Point3d.Origin else "base point"))
+            at_origin = doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9
+            Rhino.RhinoApp.WriteLine("SendToEarth: in the viewer, find the site (search or lat, lon), click where the model "
+                                     "should stand (%s goes there), then Apply. It is sent right after."
+                                     % ("the bottom centre of what you selected" if at_origin else "the EarthAnchorPoint base point"))
         return Rhino.Commands.Result.Success
 
     # ---- normal send

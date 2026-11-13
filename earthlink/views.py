@@ -63,7 +63,7 @@ def cam_to_vi(doc, vp, cam):
     elif proj == "two_point" and hasattr(vi, "ChangeToTwoPointPerspectiveProjection"):
         vi.ChangeToTwoPointPerspectiveProjection(60.0 / s, rg.Vector3d.ZAxis, 50.0)
     else:
-        vi.ChangeToPerspectiveProjection(True, 50.0)
+        vi.ChangeToPerspectiveProjection(60.0 / s, True, 50.0)   # ViewportInfo: target distance, symmetric, lens
     vi.SetCameraLocation(loc)
     vi.SetCameraDirection(d)
     vi.SetCameraUp(up)
