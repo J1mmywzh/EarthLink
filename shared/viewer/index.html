@@ -527,7 +527,8 @@
   $("date").value=store.get("date")||localISO(new Date());$("hour").value=store.get("hour")??900;
   let sunPost=null,dayKey="";
   const neutralLight=new Cesium.DirectionalLight({direction:viewer.camera.directionWC.clone(),intensity:0.8*LIGHT.sun});
-  const sunLight=new Cesium.SunLight(),moonLight=new Cesium.DirectionalLight({direction:new Cesium.Cartesian3(0,0,-1),color:new Cesium.Color(.62,.72,1),intensity:.45});
+  const sunLight=new Cesium.SunLight(),moonLight=new Cesium.DirectionalLight({direction:new Cesium.Cartesian3(0,0,-1),intensity:1});
+  let dayTint=Cesium.Color.WHITE;                        // what the time of day does to colours (see applyDaylight)
   function applyShadows(){
     const on=S.sun_enabled!==false;
     viewer.shadows=on&&S.shadows!==false;scene.globe.enableLighting=on;
@@ -569,11 +570,11 @@
     const sun=scene.context.uniformState.sunDirectionWC;
     const e=on&&sun&&C3.magnitude(sun)>0?Cesium.Math.toDegrees(Math.asin(Math.max(-1,Math.min(1,C3.dot(sun,up))))):90;
     const L=EarthLinkNavigation.daylight(e),cast=on&&S.shadows!==false&&L.shadow>0.02;
-    const ambient=on?1-0.8*L.night:1;                    // the sky's light on your model: a fifth at night
-    for(const m of Object.values(models)){const f=m.imageBasedLighting?.imageBasedLightingFactor;if(f&&Math.abs(f.x-ambient)>1e-3){m.imageBasedLighting.imageBasedLightingFactor=new Cesium.Cartesian2(ambient,ambient);dayKey="";}}
     const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2)].join();
     if(key===dayKey)return;dayKey=key;
     mapTint.x=L.tint[0];mapTint.y=L.tint[1];mapTint.z=L.tint[2];
+    dayTint=new Cesium.Color(...L.tint,1);               // your model takes the same tint as the map around it
+    for(const n of Object.keys(models))styleModel(models[n],n);
     scene.backgroundColor=new Cesium.Color(...L.sky,1);
     if(scene.skyBox)scene.skyBox.show=L.night>0.5;
     if(scene.moon)scene.moon.show=L.night>0.5;
@@ -581,7 +582,7 @@
     if(on){
       if(L.night>0.5){                                   // moonlight: from where the sun would be, mirrored above the horizon
         const d=C3.subtract(sun,C3.multiplyByScalar(up,2*C3.dot(sun,up),new C3()),new C3());
-        C3.negate(C3.normalize(d,d),moonLight.direction);moonLight.intensity=0.3*L.night;scene.light=moonLight;
+        C3.negate(C3.normalize(d,d),moonLight.direction);moonLight.intensity=0.5*LIGHT.sun;scene.light=moonLight;
       } else {
         sunLight.intensity=LIGHT.sun*Math.max(0.3,1-1.4*L.night);
         sunLight.color=new Cesium.Color(1,1-0.2*L.warm,1-0.38*L.warm,1);scene.light=sunLight;
@@ -589,7 +590,6 @@
     }
     scene.requestRender();
   }
-  scene.preRender.addEventListener(applyDaylight);
 
   // ---------------------------------------------------------------- lens & projection (perspective / two-point / parallel)
   // Two-point keeps the camera axis level and shifts the lens (like a shift lens), so verticals stay vertical.
@@ -697,6 +697,7 @@
   // ---------------------------------------------------------------- placement
   let meta = null;             // live/meta.json: { project, name, anchor, sets: {name: {glb, bbox_m, ...}} }
   const models = {};           // set name -> Cesium.Model
+  scene.preRender.addEventListener(applyDaylight);   // from here on: it styles the models
   let preview = null;   // { lat, lon, h } while choosing a site location, and until Rhino confirms it
   let sitePending = 0;
   const anchor = () => (meta && meta.anchor) || null;
@@ -987,10 +988,10 @@
   // ---------------------------------------------------------------- display style & section
   const hidden = () => new Set(S.hidden_sets || []);
   function styleModel(m, n) {
-    const st = (n && (S.set_styles || {})[n]) || S.style || "materials";
-    if (st === "clay") { m.color = Cesium.Color.fromCssColorString("#f2f1ec"); m.colorBlendMode = Cesium.ColorBlendMode.REPLACE; }
-    else if (st === "ghost") { m.color = Cesium.Color.WHITE.withAlpha(+(S.ghost ?? 0.45)); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
-    else { m.color = Cesium.Color.WHITE; m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
+    const st = (n && (S.set_styles || {})[n]) || S.style || "materials", t = dayTint;
+    if (st === "clay") { m.color = new Cesium.Color(0.949 * t.red, 0.945 * t.green, 0.925 * t.blue, 1); m.colorBlendMode = Cesium.ColorBlendMode.REPLACE; }
+    else if (st === "ghost") { m.color = t.withAlpha(+(S.ghost ?? 0.45)); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
+    else { m.color = t.clone(); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
   }
   const restyle = () => {
     Object.entries(models).forEach(([n, m]) => styleModel(m, n));
