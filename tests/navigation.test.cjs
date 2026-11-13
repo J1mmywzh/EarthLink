@@ -110,3 +110,12 @@ test('the ground rule never lifts the camera suddenly',()=>{
   assert.equal(f.step(62.5,61,1),62.5);assert.equal(f.inside,false);
   f=new N.Floor();f.step(70,60,0);assert.equal(f.step(40,null,1),40,'no map there: no rule');
 });
+test('time of day: the map is untouched by day, warm at sunset, dark blue at night; no shadows from a set sun',()=>{
+  const D=N.daylight,day=D(45),set=D(1),night=D(-12);
+  assert.deepEqual(day.tint,[1,1,1]);assert.equal(day.night,0);assert.equal(day.shadow,1);
+  assert.ok(set.tint[0]>set.tint[2]+0.2,'warm');assert.ok(set.shadow<0.05,'a sun on the horizon casts almost no shadow');
+  assert.equal(night.night,1);assert.ok(night.tint.every(v=>v<0.3)&&night.tint[2]>night.tint[0],'dark and blue');assert.equal(night.shadow,0);
+  assert.ok(night.sky.every(v=>v<0.05));
+  let last=D(20).tint[0]+D(20).tint[1]+D(20).tint[2];
+  for(let e=19;e>=-10;e--){const t=D(e).tint,sum=t[0]+t[1]+t[2];assert.ok(sum<=last+1e-9,'darkens steadily: '+e);last=sum;}
+});

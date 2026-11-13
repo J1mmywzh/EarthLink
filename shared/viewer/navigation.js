@@ -171,6 +171,19 @@
     const d = h.map((n, i) => .5 * n / length - up[i]), norm = Math.hypot(...d); return d.map(n => n / norm);
   }
 
+  /* The light at a sun height `e` (degrees above the horizon), for a scene whose map is a daytime photograph.
+     tint: what the map's colours are multiplied by (white by day, warm near sunset, dark blue at night);
+     night 0..1 (full 8 degrees under the horizon); shadow 0..1: how strong cast shadows are (a sun on or under
+     the horizon casts none); sky: the colour overhead. */
+  function daylight(e) {
+    const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+    const night = 1 - ss(-8, 0, e), warm = (1 - ss(1, 12, e)) * (1 - night);
+    return { night, warm, shadow: ss(0.5, 6, e),
+      tint: mix(mix([1, 1, 1], [1, 0.82, 0.66], warm), [0.1, 0.13, 0.23], night),
+      sky: mix(mix([0.22, 0.45, 0.82], [0.4, 0.44, 0.62], warm), [0.008, 0.012, 0.035], night) };
+  }
+
   /* The controller: binds input on the canvas and moves viewer.camera. `hooks`:
      projection() "perspective"|"two_point"|"parallel", pick(ray) nearest drawn surface or null,
      ground(ray) nearest map surface (your model excluded) or null,
@@ -537,5 +550,5 @@
     const n = typeof navigator !== "undefined" ? navigator : {};
     return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
   }
-  return { RATE, STEP, WheelLatch, Coast, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, create };
+  return { RATE, STEP, WheelLatch, Coast, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, daylight, create };
 });
