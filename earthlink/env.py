@@ -196,8 +196,8 @@ def _settings_lock():
     with open(os.path.join(data_dir(), ".settings.lock"), "a+b") as lock:
         if IS_WIN:
             import msvcrt
-            if os.fstat(lock.fileno()).st_size == 0:
-                lock.write(b"\0"); lock.flush()
+            # Windows locks a byte range, and may lock one beyond the end of the file: the file stays empty.
+            # (Writing a first byte here raced: a second writer hit the byte the first had just locked.)
             lock.seek(0)
             msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
         else:
