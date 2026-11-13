@@ -424,7 +424,14 @@
   const scene = viewer.scene;
   viewer.camera._adjustOrthographicFrustum = () => {};   // Parallel width is set by EarthLink only (Cesium 1.140 ties it to camera height)
   scene.globe.baseColor = Cesium.Color.fromCssColorString(dark() ? "#2c2d30" : "#dfe3e6");
-  Object.assign(viewer.shadowMap, { softShadows: true, size: 4096, darkness: 0.35, maximumDistance: 1500 });
+  /* Light on your model, measured against Rhino 8's Rendered mode on the same colour swatches (sun 52 degrees up):
+     a sunlit white is white, a face turned from the sun keeps about 0.87 of its colour, a cast shadow about 0.68.
+     sun: the sunlight's strength; sky: even light from all around (Rhino's skylight); shadow: how light a cast
+     shadow is (1 = none). The map is a photograph and is not lit, only shadowed. */
+  const LIGHT = { sun: 3.8, sky: 0.17, shadow: 0.65 };
+  const skyLight = () => new Cesium.ImageBasedLighting({ sphericalHarmonicCoefficients:
+    Array.from({ length: 9 }, (_, i) => (i ? new Cesium.Cartesian3(0, 0, 0) : new Cesium.Cartesian3(LIGHT.sky / 0.282095, LIGHT.sky / 0.282095, LIGHT.sky / 0.282095))) });
+  Object.assign(viewer.shadowMap, { softShadows: true, size: 4096, darkness: LIGHT.shadow, maximumDistance: 1500 });
   // stronger bias: no self-shadow stripes ("acne") on Google's mesh that shimmer while moving (Cesium 1.140 field)
   Object.assign(viewer.shadowMap._primitiveBias, { normalOffsetScale: 1.5, depthBias: 0.0004, polygonOffsetFactor: 2, polygonOffsetUnits: 8 });
   viewer.clock.shouldAnimate = false;
@@ -515,7 +522,7 @@
   let clipKey = "", cut = null, mapShader = null, cutPaused = false;
   const mapTint = new Cesium.Cartesian3(1, 1, 1);
   let sunPost=null,dayKey="";
-  const neutralLight=new Cesium.DirectionalLight({direction:viewer.camera.directionWC.clone(),intensity:2});
+  const neutralLight=new Cesium.DirectionalLight({direction:viewer.camera.directionWC.clone(),intensity:0.8*LIGHT.sun});
   const sunLight=new Cesium.SunLight(),moonLight=new Cesium.DirectionalLight({direction:new Cesium.Cartesian3(0,0,-1),color:new Cesium.Color(.62,.72,1),intensity:.45});
   function applyShadows(){
     const on=S.sun_enabled!==false;
@@ -567,13 +574,13 @@
     scene.backgroundColor=new Cesium.Color(...L.sky,1);
     if(scene.skyBox)scene.skyBox.show=L.night>0.5;
     if(scene.moon)scene.moon.show=L.night>0.5;
-    viewer.shadows=cast;viewer.shadowMap.darkness=0.35+0.65*(1-L.shadow);
+    viewer.shadows=cast;viewer.shadowMap.darkness=LIGHT.shadow+(1-LIGHT.shadow)*(1-L.shadow);
     if(on){
       if(L.night>0.5){                                   // moonlight: from where the sun would be, mirrored above the horizon
         const d=C3.subtract(sun,C3.multiplyByScalar(up,2*C3.dot(sun,up),new C3()),new C3());
         C3.negate(C3.normalize(d,d),moonLight.direction);moonLight.intensity=0.3*L.night;scene.light=moonLight;
       } else {
-        sunLight.intensity=2*Math.max(0.3,1-1.4*L.night);
+        sunLight.intensity=LIGHT.sun*Math.max(0.3,1-1.4*L.night);
         sunLight.color=new Cesium.Color(1,1-0.2*L.warm,1-0.38*L.warm,1);scene.light=sunLight;
       }
     }
@@ -1043,7 +1050,7 @@
       if (models[n] && models[n]._elVersion === s.version) continue;
       try {
         const next = await Cesium.Model.fromGltfAsync({ url: `${DATA}live/${s.glb}?v=${s.version}`, modelMatrix: frame(),
-          shadows: Cesium.ShadowMode.ENABLED, forwardAxis: Cesium.Axis.X });   // Rhino glTF is already east/north/up
+          shadows: Cesium.ShadowMode.ENABLED, forwardAxis: Cesium.Axis.X, imageBasedLighting: skyLight() });   // Rhino glTF is already east/north/up
         if(generation!==modelGeneration){next.destroy();return;}
         next._elVersion = s.version; next._elGlb = s.glb;
         scene.primitives.add(next);

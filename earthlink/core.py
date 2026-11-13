@@ -260,6 +260,19 @@ def _display_color(doc, obj, parent_obj=None):
     return doc.Layers[a.LayerIndex].Color
 
 
+def _copy_texture_mappings(src, dst, xform):
+    """Carry an object's texture mappings (box, planar, ...) to its copy, which was moved by `xform`.
+    Without them a mapped texture falls back to the surface's own UVs: the wrong size and direction."""
+    try:
+        for ch in src.GetTextureChannels():
+            got = src.GetTextureMapping(ch, rg.Transform.Identity)
+            mapping, own = (got[0], got[1]) if isinstance(got, tuple) else (got, rg.Transform.Identity)
+            if mapping is not None:
+                dst.SetTextureMapping(ch, mapping, xform * own)
+    except Exception:
+        pass
+
+
 def _export_glb(doc, objs, path):
     """Write `objs`, re-oriented to east/north/up, to a GLB. Returns their bounding box (model units, ENU)."""
     xf = enu_transform(doc)
@@ -274,7 +287,7 @@ def _export_glb(doc, objs, path):
             pass
         mats = {}
 
-        def add(geo, src_obj, parent=None):
+        def add(geo, src_obj, parent=None, moved=None):
             if not isinstance(geo, _MESHABLE):
                 return
             g = geo.Duplicate()
@@ -291,8 +304,10 @@ def _export_glb(doc, objs, path):
             else:
                 attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
                 attrs.ObjectColor = _display_color(doc, src_obj, parent)
-            if tmp.Objects.Add(g, attrs) != System.Guid.Empty:
+            oid = tmp.Objects.Add(g, attrs)
+            if oid != System.Guid.Empty:
                 bbox.Union(g.GetBoundingBox(True))
+                _copy_texture_mappings(src_obj, tmp.Objects.FindId(oid), xf if moved is None else xf * moved)
 
         for o in objs:
             if isinstance(o, Rhino.DocObjects.InstanceObject):
@@ -301,7 +316,7 @@ def _export_glb(doc, objs, path):
                 for piece, t in zip(pieces, pxf):
                     g = piece.Geometry.Duplicate()
                     g.Transform(t)
-                    add(g, piece, o)
+                    add(g, piece, o, t)
             else:
                 add(o.Geometry, o)
 
