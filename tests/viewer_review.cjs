@@ -117,20 +117,32 @@ test('Surroundings to Rhino: a dragged rectangle is sent as bounds, the import i
  const b=posted.bounds;assert.ok(b.west<b.east&&b.south<b.north,'west/south/east/north in order');
  const here=await p.evaluate(()=>EL.meta.anchor);assert.ok(Math.abs((b.south+b.north)/2-here.lat)<0.05&&Math.abs((b.west+b.east)/2-here.lon)<0.05,'the rectangle is at the site');
  assert.equal(await p.locator('#cxImport').isEnabled(),true,'ready for another import');
- assert.ok(posted.paths===true&&posted.railways===true&&posted.water===true&&posted.road_style==='lines'&&posted.assume_height===true,'paths, railways and water come too; roads as centerlines');
+ assert.ok(posted.paths===true&&posted.railways===true&&posted.water===true&&posted.parcels===false&&JSON.stringify(posted.road_styles)==='["lines"]','paths, railways and water come too, parcels only when asked; roads as centerlines: '+JSON.stringify(posted));
  assert.equal(await p.locator('#cxContourRow').isVisible(),false,'the contour interval shows only with Contours');
  await p.locator('label.chip:has(#cxContours)').click();assert.equal(await p.locator('#cxContourRow').isVisible(),true);
  assert.equal(await p.locator('#cxRoadRow').isVisible(),true,'paths are still in: the road geometry choice stays');
  await p.locator('label.chip:has(#cxPaths)').click();assert.equal(await p.locator('#cxRoadRow').isVisible(),false,'no roads, no paths: no road geometry to choose');
- await p.locator('label.chip:has(#cxRoads)').click();await p.getByRole('button',{name:'Outlines',exact:true}).click();
- await p.locator('#cxAssume').uncheck();assert.equal(await p.locator('#cxHeight').isDisabled(),true,'no assumed height: footprints only');
+ await p.locator('label.chip:has(#cxRoads)').click();await p.locator('label.chip:has(#cxOutlines)').click();await p.locator('label.chip:has(#cxSurfaces)').click();
+ await p.locator('label.chip:has(#cxLines)').click();await p.locator('label.chip:has(#cxOutlines)').click();await p.locator('label.chip:has(#cxSurfaces)').click();
+ assert.equal(await p.locator('#cxSurfaces').isChecked(),true,'the last road geometry cannot be unticked');await p.locator('label.chip:has(#cxOutlines)').click();
+ await p.locator('label.chip:has(#cxParcels)').click();await p.locator('#cxHeight').fill('9');await p.locator('#cxHeight').dispatchEvent('change');
  await p.locator('#cxInterval').fill('2');await p.locator('#cxInterval').dispatchEvent('change');
  polls=0;await p.locator('#cxImport').click();await p.waitForFunction(()=>/Rhino added terrain/.test(document.getElementById('cxStatus').textContent),null,{timeout:15000});
- assert.ok(posted.road_style==='outlines'&&posted.roads===true&&posted.paths===false&&posted.assume_height===false&&posted.contours===2,'the new choices are sent: '+JSON.stringify(posted));
+ assert.ok(JSON.stringify(posted.road_styles)==='["outlines","surfaces"]'&&posted.roads===true&&posted.paths===false&&posted.parcels===true&&posted.default_height===9&&posted.contours===2,'the new choices are sent: '+JSON.stringify(posted));
  const kept=await p.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>/contextOptions/.test(k)))||'null'));
- assert.ok(kept&&kept.style==='outlines'&&kept.assume===false&&kept.include.paths===false&&kept.include.contours===true,'and remembered: '+JSON.stringify(kept));
+ assert.ok(kept&&JSON.stringify(kept.styles)==='["outlines","surfaces"]'&&kept.height===9&&kept.include.paths===false&&kept.include.parcels===true&&kept.include.contours===true,'and remembered: '+JSON.stringify(kept));
  await p.keyboard.press('Escape');assert.equal(await p.locator('#contextCard').isVisible(),false);
  assert.equal(await p.evaluate(()=>document.body.classList.contains('cropping')),false);});
+test('Surroundings to Rhino: a slow import shows about how long is left',async t=>{
+ const t0=Date.now();
+ const p=await pageFor(t,async p=>{await p.route('**/api/context',route=>{if(route.request().method()==='POST')return route.fulfill({json:{state:'working',message:'Terrain'}});
+   const s=(Date.now()-t0)/1000;return route.fulfill({json:{state:'working',message:'Reading OpenStreetMap',progress:Math.min(0.8,0.02*s)}});});});
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(400);
+ await p.getByRole('button',{name:'Bring the surroundings into Rhino',exact:true}).click();
+ await p.mouse.click(420,330);await p.waitForTimeout(250);await p.mouse.click(700,560);await p.waitForTimeout(250);
+ await p.locator('#cxImport').click();
+ await p.waitForFunction(()=>/left/.test(document.getElementById('cxStatus').textContent),null,{timeout:15000});
+ const text=await p.locator('#cxStatus').innerText();assert.match(text,/^Reading OpenStreetMap · about \d+ (s|min) left$/,text);});
 test('Surroundings to Rhino: a rectangle over 3 km a side cannot be imported; an error from the server is shown',async t=>{
  const p=await pageFor(t,async p=>{await p.route('**/api/context',route=>route.fulfill({json:{state:'error',message:'OpenStreetMap could not be reached (timed out). Try again in a minute.'}}));});
  await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);

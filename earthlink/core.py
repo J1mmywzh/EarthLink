@@ -429,7 +429,7 @@ def add_context(doc, data):
     undo = doc.BeginUndoRecord("EarthLink context")
     ids = []
     counts = {"terrain": 0, "buildings": 0, "footprints": 0, "roads": 0, "paths": 0, "outlines": 0, "surfaces": 0,
-              "railways": 0, "water": 0, "contours": 0}
+              "railways": 0, "water": 0, "parcels": 0, "contours": 0}
     origin = inv * rg.Point3d(0, 0, 0)
     up = (inv * rg.Point3d(0, 0, 1)) - origin
     up.Unitize()
@@ -496,15 +496,16 @@ def add_context(doc, data):
             tags(at, b)
             ids.append(doc.Objects.AddBrep(solid, at))
             counts["buildings"] += 1
-        style = data.get("road_style") or "lines"
-        road_layer = lambda cls: _layer(doc, CONTEXT_LAYER + "::" + ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0],
-                                        C.FromArgb(*ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[1]))
-        for r in (data.get("roads") or []) if style == "lines" else []:
+        styles = data.get("road_styles") or [data.get("road_style") or "lines"]
+        GEOMETRY = {"lines": "Centerlines", "outlines": "Outlines", "surfaces": "Surfaces"}
+        road_layer = lambda cls, style: _layer(doc, CONTEXT_LAYER + "::" + ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0] + "::" + GEOMETRY[style],
+                                               C.FromArgb(*ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[1]))
+        for r in (data.get("roads") or []) if "lines" in styles else []:
             pts = [pt(p) for p in r["pts"]]
             if len(pts) < 2:
                 continue
             at = Rhino.DocObjects.ObjectAttributes()
-            at.LayerIndex, at.Name = road_layer(r.get("class")), r.get("name") or r.get("kind") or ""
+            at.LayerIndex, at.Name = road_layer(r.get("class"), "lines"), r.get("name") or r.get("kind") or ""
             note(at, "OpenStreetMap")
             if r.get("kind"):
                 at.SetUserString("highway", r["kind"])
@@ -513,7 +514,7 @@ def add_context(doc, data):
             tags(at, r)
             ids.append(doc.Objects.AddCurve(poly(pts), at))
             counts["paths" if r.get("class") == "path" else "roads"] += 1
-        for cls, m in sorted((data.get("road_meshes") or {}).items()) if style != "lines" else []:
+        for cls, m in sorted((data.get("road_meshes") or {}).items()):
             mesh = rg.Mesh()
             for v in m.get("v") or []:
                 mesh.Vertices.Add(pt(v))
@@ -525,14 +526,17 @@ def add_context(doc, data):
             if mesh.Faces.Count == 0:
                 continue
             mesh.Normals.ComputeNormals()
-            at = Rhino.DocObjects.ObjectAttributes()
-            at.LayerIndex = road_layer(cls)
-            note(at, "OpenStreetMap")
-            if style == "surfaces":
-                at.Name = ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0]
+            if "surfaces" in styles:
+                at = Rhino.DocObjects.ObjectAttributes()
+                at.LayerIndex, at.Name = road_layer(cls, "surfaces"), ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0]
+                note(at, "OpenStreetMap")
                 ids.append(doc.Objects.AddMesh(mesh, at))
                 counts["surfaces"] += 1
+            if "outlines" not in styles:
                 continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex = road_layer(cls, "outlines")
+            note(at, "OpenStreetMap")
             # Outlines: the roads' surfaces seen from above, merged where they meet (Rhino's mesh outline), then laid
             # back onto the surfaces, so each outline follows the ground as its road does.
             flat = mesh.DuplicateMesh()
@@ -573,6 +577,20 @@ def add_context(doc, data):
             tags(at, w)
             ids.append(doc.Objects.AddCurve(poly(pts, bool(w.get("closed"))), at))
             counts["water"] += 1
+        for lot in data.get("parcels") or []:             # lot lines, on the ground; their address and number as user text
+            pts = [pt(p) for p in lot["pts"]]
+            if len(pts) < 3:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Parcels", C.FromArgb(215, 120, 40)), lot.get("address") or lot.get("id") or ""
+            note(at, "parcels")
+            for k, v in (lot.get("tags") or {}).items():
+                try:
+                    at.SetUserString("parcel:" + str(k), str(v))
+                except Exception:
+                    pass
+            ids.append(doc.Objects.AddCurve(poly(pts, True), at))
+            counts["parcels"] += 1
         step = data.get("contour_interval") or 0
         for c in data.get("contours") or []:
             pts = [pt(p) for p in c["pts"]]
@@ -614,9 +632,12 @@ def add_context(doc, data):
         parts.append(many(counts["railways"], "railway line"))
     if counts["water"]:
         parts.append(many(counts["water"], "water outline"))
+    if counts["parcels"]:
+        parts.append(many(counts["parcels"], "parcel"))
     if counts["contours"]:
         parts.append(many(counts["contours"], "contour line"))
-    return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
+    text = ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
+    return text + ("; " + data["parcel_note"] if data.get("parcel_note") else "")
 
 
 # ----------------------------------------------------------------- lights

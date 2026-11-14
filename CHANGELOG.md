@@ -9,13 +9,15 @@
 - The map's credits stand on one line: logos and text are the same height.
 - **Surroundings to Rhino, as CADMapper offers it**:
   - Roads are sorted onto the layers Major roads, Minor roads and Paths, and railways and water get layers of their own.
-  - **Roads and paths as** chooses the road geometry:
+  - Under **Roads and paths**, tick one or more road geometries. Each goes on its own sublayer:
     - **Centerlines**.
     - **Outlines**: the road edges, joined where roads meet.
     - **Surfaces**: a mesh on the ground for each layer.
   - Outlines and surfaces use each road's width (OpenStreetMap's width or lanes, else the usual width for its kind). Bridges stay level.
   - Lines get a point every few metres so they follow the ground.
-  - The contour interval and the height for buildings without one are in the panel itself. That height can be turned off to bring in footprints only.
+  - The contour interval and the **Default building height** are in the panel itself, each shown only when its layer is on. The storey height setting is gone (3.2 m a storey).
+  - **Parcels**: lot lines from New York State's public tax parcels (38 counties and New York City), on the ground, named with their address. The parcel number and details are in user text; owners are not fetched. Off until you tick it.
+  - The progress bar says about how long is left.
   - A lake larger than the area is fetched whole and cut at the rectangle.
   - The panel remembers your choices.
 

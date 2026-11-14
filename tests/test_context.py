@@ -240,9 +240,9 @@ def test_roads_are_sorted_like_cadmapper_with_their_widths_and_rails_and_water_o
 def test_road_outlines_and_surfaces_are_meshes_cut_to_the_rectangle():
     fetch,_=lines_world(slope=0.05)
     lines=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False)
-    assert 'road_meshes' not in lines and lines['road_style']=='lines'
+    assert 'road_meshes' not in lines and lines['road_styles']==['lines']
     out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,road_style='surfaces')
-    assert out['road_style']=='surfaces' and set(out['road_meshes'])=={'major','minor','path'}
+    assert out['road_styles']==['surfaces'] and set(out['road_meshes'])=={'major','minor','path'}
     for cls,m in out['road_meshes'].items():
         v,f=m['v'],m['f'];assert v and f and all(len(x) in (3,4) and max(x)<len(v) for x in f)
         assert all(-123.5<=p[0]<=123.5 and -111.2<=p[1]<=111.2 for p in v),'nothing beyond the rectangle'
@@ -274,11 +274,48 @@ def test_the_panels_choices_reach_the_build(tmp_path,monkeypatch):
     seen=[]
     def build(b,a,s,progress,**want):
         seen.append(want);raise C.ContextError('stop here')
-    for n,ask in enumerate(({'road_style':'outlines','paths':False,'water':False,'assume_height':False},{'road_style':'zigzag'})):
+    for n,ask in enumerate(({'road_styles':['surfaces','outlines','zigzag'],'paths':False,'water':False,'assume_height':False,'parcels':True},{'road_style':'zigzag','parcels':'yes'})):
         server._CONTEXT.clear();server._context_start(dict(ask,bounds=BOUNDS),build=build)
         for _ in range(100):
             if len(seen)>n:break
             time.sleep(0.02)
     a,b=seen
-    assert a['road_style']=='outlines' and a['paths'] is False and a['water'] is False and a['assume_height'] is False and a['railways'] is True
-    assert b['road_style']=='lines' and b['paths'] and b['water'] and b['assume_height'],'anything else: centrelines, everything in'
+    assert a['road_style']==['outlines','surfaces'] and a['parcels'] is True and a['paths'] is False and a['water'] is False and a['assume_height'] is False and a['railways'] is True
+    assert b['road_style']==['lines'] and b['paths'] and b['water'] and b['assume_height'],'anything else: centrelines, everything in'
+    assert b['parcels'] is False,'parcels come from another server: only when asked for in so many words'
+
+
+def parcel_service(features, calls, error=None):
+    def fetch(url,data=None,timeout=0):
+        calls.append(url)
+        if error:raise C.ContextError(error)
+        return json.dumps({'type':'FeatureCollection','features':features}).encode()
+    return fetch
+
+def test_parcels_come_as_lot_lines_on_the_ground_with_their_address_and_never_their_owner():
+    sq=lambda la,lo,d:[[lo,la],[lo+d,la],[lo+d,la+d],[lo,la+d],[lo,la]]
+    feats=[{'type':'Feature','properties':{'PARCEL_ADDR':'100 Main St','SWIS_SBL_ID':'500700-1.-1-1','ACRES':0.3,'PRIMARY_OWNER':'Someone'},
+            'geometry':{'type':'Polygon','coordinates':[sq(LAT-0.0002,LON-0.0002,0.0004)]}},
+           {'type':'Feature','properties':{'PARCEL_ADDR':'Farm'},'geometry':{'type':'MultiPolygon','coordinates':[[sq(LAT-0.01,LON-0.01,0.02)]]}}]
+    calls=[];base=world(slope=0.1)
+    svc=parcel_service(feats,calls)
+    fetch=lambda url,data=None,timeout=0:svc(url) if 'nysgeohub' in url else base(url,data)
+    out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,roads=False,paths=False,railways=False,water=False,parcels=True)
+    assert len(calls)==1 and 'outFields=' in calls[0] and 'OWNER' not in calls[0] and 'MAIL' not in calls[0],'owners and mailing addresses are never asked for'
+    assert 'esriGeometryEnvelope' in calls[0] and 'outSR=4326' in calls[0]
+    lot,farm=out['parcels'];assert lot['address']=='100 Main St' and lot['id']=='500700-1.-1-1' and 'PRIMARY_OWNER' not in lot['tags']
+    assert len(lot['pts'])>=4 and all(p[2]==pytest.approx(0.1*p[1],abs=0.3) for p in lot['pts']),'on the ground'
+    xs=[p[0] for p in farm['pts']];assert min(xs)==pytest.approx(-123.4,abs=0.3) and max(xs)==pytest.approx(123.4,abs=0.3),'a big lot is cut at the rectangle'
+    assert out['counts']['parcels']==2 and 'Parcels:' in out['attribution'] and 'parcel_note' not in out
+    none=C.build(BOUNDS,ANCHOR,{},fetch=world(),terrain=False,buildings=False,roads=False,paths=False,railways=False,water=False)
+    assert none['parcels']==[],'not asked for: nothing is sent to the parcel service'
+    far=C.check_bounds({'west':2.29,'east':2.30,'south':48.85,'north':48.86})
+    calls2=[];assert C.fetch_parcels(far,parcel_service(feats,calls2))==[] and calls2==[],'outside New York State the service is not asked'
+    with pytest.raises(C.ContextError,match='parcel service could not be reached'):C.fetch_parcels(BOUNDS,parcel_service([],[],error='HTTP 500'))
+    empty=C.build(BOUNDS,ANCHOR,{},fetch=lambda u,d=None,t=0:parcel_service([],[])(u) if 'nysgeohub' in u else base(u,d),terrain=False,buildings=False,roads=False,paths=False,railways=False,water=False,parcels=True)
+    assert 'no parcels found' in empty['parcel_note']
+
+def test_several_road_geometries_at_once():
+    fetch,_=lines_world()
+    out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,road_style=['lines','surfaces','outlines'])
+    assert out['road_styles']==['lines','outlines','surfaces'] and out['roads'] and set(out['road_meshes'])=={'major','minor','path'}

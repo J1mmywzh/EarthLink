@@ -43,7 +43,16 @@ ROADS = {"motorway": ("major", 14.0), "trunk": ("major", 12.0), "primary": ("maj
 LANE = 3.3                                 # metres a lane
 RAILS = {"rail", "light_rail", "subway", "tram", "narrow_gauge", "monorail", "funicular", "preserved", "miniature"}
 WATERWAYS = {"river", "stream", "canal", "drain", "ditch", "brook", "tidal_channel"}
-STYLES = ("lines", "outlines", "surfaces")  # road geometry: centrelines, closed outlines, mesh surfaces
+STYLES = ("lines", "outlines", "surfaces")  # road geometry: centrelines, closed outlines, mesh surfaces (any of them)
+# Lot lines. New York State publishes the tax parcels of the counties that allow it (38 in 2026, Tompkins among them) as
+# a public ArcGIS service; it is asked for the parcels touching the rectangle, nothing else. Owners' names and mailing
+# addresses are in that service too and are deliberately not asked for.
+PARCELS = {"name": "New York State tax parcels (NYS ITS, public)",
+           "url": "https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcels_Public/FeatureServer/1/query",
+           "covers": (40.4, -79.9, 45.1, -71.7),    # south, west, north, east of the state
+           "fields": ("PARCEL_ADDR", "PRINT_KEY", "SBL", "SWIS_SBL_ID", "MUNI_NAME", "COUNTY_NAME", "LOC_ZIP",
+                      "PROP_CLASS", "ACRES", "CALC_ACRES", "FRONT", "DEPTH", "YR_BLT")}
+PARCEL_PAGE, PARCEL_PAGES = 2000, 10
 LIFT = {"major": 0.12, "minor": 0.08, "path": 0.04}   # road surfaces sit this much above the ground, the bigger road on top
 
 
@@ -622,6 +631,46 @@ def fetch_osm(b, buildings, roads, fetch=http_get, railways=False, water=False):
     raise ContextError("OpenStreetMap could not be reached (%s). Try again in a minute." % (last,))
 
 
+def parcels_cover(b):
+    s_, w_, n_, e_ = PARCELS["covers"]
+    return b["south"] < n_ and b["north"] > s_ and b["west"] < e_ and b["east"] > w_
+
+
+def fetch_parcels(b, fetch=http_get):
+    """Parcels touching the rectangle, as [{rings: [[(lat, lon)...]...], tags}], from the public parcel service.
+    Raises ContextError when it cannot be reached; [] where it has no parcels (outside the counties it covers)."""
+    if not parcels_cover(b):
+        return []
+    out = []
+    for page in range(PARCEL_PAGES):
+        q = urllib.parse.urlencode({
+            "where": "1=1", "geometry": "%.7f,%.7f,%.7f,%.7f" % (b["west"], b["south"], b["east"], b["north"]),
+            "geometryType": "esriGeometryEnvelope", "inSR": 4326, "spatialRel": "esriSpatialRelIntersects",
+            "outFields": ",".join(PARCELS["fields"]), "returnGeometry": "true", "outSR": 4326, "f": "geojson",
+            "resultOffset": page * PARCEL_PAGE, "resultRecordCount": PARCEL_PAGE})
+        try:
+            data = json.loads(fetch(PARCELS["url"] + "?" + q).decode("utf-8"))
+        except ContextError as e:
+            raise ContextError("The parcel service could not be reached (%s)." % (e,))
+        except Exception as e:
+            raise ContextError("The parcel service could not be reached (%s)." % (e,))
+        if isinstance(data, dict) and data.get("error"):
+            raise ContextError("The parcel service answered: %s" % ((data["error"] or {}).get("message") or "an error"))
+        feats = (data or {}).get("features") or []
+        for f in feats:
+            g = f.get("geometry") or {}
+            polys = [g.get("coordinates") or []] if g.get("type") == "Polygon" else g.get("coordinates") or [] if g.get("type") == "MultiPolygon" else []
+            rings = [[(p[1], p[0]) for p in ring if len(p) >= 2] for poly in polys for ring in poly]
+            rings = [r[:-1] if len(r) > 1 and r[0] == r[-1] else r for r in rings]
+            rings = [r for r in rings if len(r) >= 3]
+            if rings:
+                props = f.get("properties") or {}
+                out.append({"rings": rings, "tags": {k: props[k] for k in PARCELS["fields"] if props.get(k) not in (None, "")}})
+        if len(feats) < PARCEL_PAGE and not (data.get("properties") or {}).get("exceededTransferLimit") and not data.get("exceededTransferLimit"):
+            break
+    return out
+
+
 def fetch_relations(ids, fetch=http_get):
     """Whole relations (all their ways' points) from the Overpass servers, or {"elements": []} when none answers."""
     ids = [int(i) for i in ids if i is not None][:20]
@@ -638,11 +687,12 @@ def fetch_relations(ids, fetch=http_get):
 
 def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text, part=None: None,
           contours=0.0, default_height=DEFAULT_HEIGHT, level_height=LEVEL, paths=True, railways=True, water=True,
-          road_style="lines", assume_height=True):
+          road_style="lines", assume_height=True, parcels=False):
     """The context inside `bounds`, in metres east/north/up of the model base point.
 
     anchor: the published EarthAnchorPoint (lat, lon, elev, zero). settings: ground_h, nudge, geoid_offset.
-    road_style: "lines" (centrelines), "outlines" or "surfaces" for roads and paths; railways and rivers are lines.
+    road_style: any of "lines" (centrelines), "outlines" and "surfaces" (a name or a list) for roads and paths;
+    railways and rivers are lines. parcels: lot lines from the public parcel service (PARCELS), draped on the ground.
     assume_height: a building OpenStreetMap gives no height for gets default_height; otherwise only its footprint."""
     b = check_bounds(bounds)
     if not anchor or anchor.get("lat") is None:
@@ -673,9 +723,9 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
     default_height = min(300.0, max(1.0, float(default_height or DEFAULT_HEIGHT)))
     level_height = min(10.0, max(2.0, float(level_height or LEVEL)))
     contours = float(contours or 0.0)
-    road_style = road_style if road_style in STYLES else "lines"
+    styles = [v for v in STYLES if v in ([road_style] if isinstance(road_style, str) else list(road_style or []))] or ["lines"]
     out = {"bounds": b, "size": [round(w, 1), round(h, 1)], "attribution": ATTRIBUTION, "terrain": None, "buildings": [], "roads": [],
-           "railways": [], "water": [], "contours": [], "road_style": road_style}
+           "railways": [], "water": [], "parcels": [], "contours": [], "road_styles": styles}
     if terrain or contours > 0:
         nx, ny = max(2, int(round(w / cell)) + 1), max(2, int(round(h / cell)) + 1)
         pts = []
@@ -731,7 +781,9 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
         def ground(x, y):                                  # the ground's height at a point east/north of the base point
             la, lo = lat0 + y / per_lat, lon0 + x / per_lon
             return enu(la, lo, rel(la, lo), lat0, lon0)[2]
-        for r in ways:
+        for n, r in enumerate(ways):
+            if n % 50 == 0:
+                progress("Roads", 0.8 + 0.05 * n / max(1, len(ways)))
             tags = r["tags"]
             kind = road_kind(tags)
             if kind:
@@ -758,7 +810,7 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
                         "name": tags.get("name", ""), "tags": keep(tags)}
                 if into is out["roads"]:
                     item.update({"class": cls, "width": width})
-                    if road_style != "lines":
+                    if "outlines" in styles or "surfaces" in styles:
                         if cls not in meshes:
                             meshes[cls] = Mesh(inside)
                         meshes[cls].strip(pts, width, LIFT[cls], None if straight else ground)
@@ -777,8 +829,27 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
                 inner = clip_ring(i, b)
                 if inner:
                     out["water"].append({"pts": ring(inner), "closed": True, "island": True, "kind": kind, "name": name, "tags": keep(a["tags"])})
+    if parcels:
+        progress("Parcels", 0.85)
+        lots = fetch_parcels(b, fetch)
+        step = min(max(cell, 2.0), 10.0)
+        for lot in lots:
+            for ring in lot["rings"]:
+                inside_ = clip_ring(ring, b)
+                if not inside_:
+                    continue
+                pts = densify(inside_ + [inside_[0]], step)[:-1]    # along every side, the last one too
+                t = {str(a)[:60]: str(v)[:200] for a, v in lot["tags"].items()}
+                out["parcels"].append({"pts": [[round(v, 3) for v in enu(la, lo, rel(la, lo), lat0, lon0)] for la, lo in pts],
+                                       "address": t.get("PARCEL_ADDR", ""), "id": t.get("SWIS_SBL_ID") or t.get("PRINT_KEY", ""), "tags": t})
+        if lots:
+            out["attribution"] += " Parcels: %s." % PARCELS["name"]
+        else:
+            out["parcel_note"] = ("no parcels: public parcel data is available only in New York State" if not parcels_cover(b)
+                                  else "no parcels found here in New York State's public parcels (38 counties share theirs)")
     out["counts"] = {"terrain": (out["terrain"]["nx"] - 1) * (out["terrain"]["ny"] - 1) if out["terrain"] else 0,
                      "buildings": len(out["buildings"]), "assumed": sum(1 for x in out["buildings"] if x["assumed"]),
                      "roads": sum(1 for r in out["roads"] if r["class"] != "path"), "paths": sum(1 for r in out["roads"] if r["class"] == "path"),
-                     "railways": len(out["railways"]), "water": len(out["water"]), "contours": len(out["contours"]), "road_style": road_style}
+                     "railways": len(out["railways"]), "water": len(out["water"]), "contours": len(out["contours"]),
+                     "parcels": len(out["parcels"]), "road_styles": styles}
     return out

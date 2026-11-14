@@ -197,7 +197,9 @@ def _context_start(data, build=None):
         fresh = {"state": "working", "message": "Starting", "job": job, "progress": 0.02}
         _CONTEXT.clear(); _CONTEXT.update(fresh)
     want = {k: data.get(k, True) is not False for k in ("terrain", "buildings", "roads", "paths", "railways", "water", "assume_height")}
-    want["road_style"] = data.get("road_style") if data.get("road_style") in context.STYLES else "lines"
+    want["parcels"] = data.get("parcels") is True                   # sent to another server: only when asked for
+    asked = data.get("road_styles") if isinstance(data.get("road_styles"), list) else [data.get("road_style")]
+    want["road_style"] = [v for v in context.STYLES if v in asked] or ["lines"]
     for k, lo, hi in (("contours", 0.0, 100.0), ("default_height", 1.0, 300.0), ("level_height", 2.0, 10.0)):   # options of the panel
         try:
             if data.get(k) is not None:
