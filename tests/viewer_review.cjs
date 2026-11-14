@@ -199,3 +199,9 @@ test('Safari: a trackpad pinch (gesture events) zooms the map, not the page',asy
  const b=await cam(p);assert.equal(prevented,true,'the page itself does not zoom');
  const dist=q=>p.evaluate(pos=>Cesium.Cartesian3.distance(new Cesium.Cartesian3(...pos),EL.models.Main.boundingSphere.center),q.pos);
  const da=await dist(a),db=await dist(b);assert.ok(db<da*0.85,'spreading the fingers by half moves in: '+(db/da).toFixed(2));});
+test('Mac: "Scroll zooms" makes two-finger scrolling (or a smooth-scrolling mouse) zoom instead of rotate',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
+ const run=async()=>{const a=await cam(p);await swipe(p,0,-5,12);const b=await cam(p);return{turned:d3(a.dir,b.dir)>0.02,moved:d3(a.pos,b.pos)};};
+ const rot=await run();assert.equal(rot.turned,true,'by default it rotates');
+ await p.getByRole('button',{name:'Compass',exact:true}).click();await p.locator('#scrollSeg button[data-v=zoom]').click();await p.waitForTimeout(400);
+ const zoom=await run();assert.equal(zoom.turned,false,'no rotation');assert.ok(zoom.moved>0.5,'it zooms');
+ await p.evaluate(()=>localStorage.removeItem('earthlink:scroll'));});

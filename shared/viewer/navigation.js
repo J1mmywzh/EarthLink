@@ -441,7 +441,8 @@
     canvas.addEventListener("wheel", e => {
       e.preventDefault();
       if (!hooks.allowed() && !hooks.walking()) return;
-      const g = latch.read(e, hooks.projection(), e.timeStamp || performance.now(), mac()), u = wheelPx(e), s = sens();   // event time: page stalls cannot split a gesture
+      // scrollZooms: the person's choice that scrolling zooms (a smooth-scrolling mouse or a Magic Mouse looks like a trackpad to a web page)
+      const g = latch.read(e, hooks.projection(), e.timeStamp || performance.now(), mac() && !(hooks.scrollZooms && hooks.scrollZooms())), u = wheelPx(e), s = sens();   // event time: page stalls cannot split a gesture
       if (rec) rec.push(["wheel", Math.round(e.timeStamp), e.deltaX, e.deltaY, e.deltaMode, e.wheelDeltaY ?? null, +e.ctrlKey, +e.shiftKey, g.mode, g.device || "", +(g.gain ?? 1).toFixed(3)]);
       if (g.skip) return;
       const fx = -e.deltaX * u * g.gain, fy = -e.deltaY * u * g.gain;   // finger motion (natural scrolling)

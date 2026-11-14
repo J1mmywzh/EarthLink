@@ -280,6 +280,7 @@
   <input id="navTilt" aria-label="Tilt" type="range" min="0" max="175" value="45" step="0.5">
   <div class="item"><span class="grow">Sensitivity</span><input type="number" id="sensN" class="typed" min="25" max="200" step="5" aria-label="Sensitivity in percent"><span class="val">%</span></div>
   <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
+  <div class="item" id="scrollRow"><span class="grow">Scroll</span><div class="seg" id="scrollSeg"><button data-v="rotate">Rotates</button><button data-v="zoom">Zooms</button></div></div>
 </div>
 <div id="feedbackCard" class="glass pop">
   <h3>Feedback <button class="mini" data-close="feedbackCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -2151,6 +2152,7 @@
     sensitivity,
     moved: freeCamera,
     mac: () => MAC_NAV,
+    scrollZooms: () => store.get("scroll") === "zoom",
     lens: k => { if (!isOrtho()) setVfov(Math.max(Cesium.Math.toRadians(3), Math.min(Cesium.Math.toRadians(120), viewer.camera.frustum.fovy * k))); },
     walking: () => !!walk?.body,
     look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
@@ -2185,6 +2187,8 @@
   const setSens = v => { if (!(v >= 25 && v <= 200)) return; store.set("sensitivity", Math.round(v)); };
   $("sens").oninput = () => { setSens(+$("sens").value); navLabels(); }; $("sensN").onchange = () => { setSens(+$("sensN").value); navLabels(); };
   $("northUp").onclick = north;
+  $("scrollRow").classList.toggle("hide", !MAC_NAV);      // Windows: scrolling zooms, as in Rhino for Windows
+  seg("scrollSeg", store.get("scroll") === "zoom" ? "zoom" : "rotate", v => store.set("scroll", v));
   for (const id of ["lensMm", "headingN", "tiltN", "sensN", "hourT"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); });   // Enter finishes typing: the field follows the slider again
   let labelsAt = 0;
   scene.postRender.addEventListener(() => { const now = performance.now(); if ($("navCard").classList.contains("open") && now - labelsAt > 150) { labelsAt = now; navLabels(); } });
