@@ -287,9 +287,27 @@ def set_objects(doc, name):
 
 
 def signature(objs):
-    """Changes whenever a set's geometry or look changes (Rhino gives edited objects a new serial)."""
-    return tuple((o.RuntimeSerialNumber, o.Attributes.MaterialIndex, str(o.Attributes.ObjectColor.ToArgb()),
-                  str(o.RenderMaterial.Id) if o.RenderMaterial else "") for o in objs)
+    """Changes whenever a set's geometry or look changes: Rhino gives edited objects a new serial; the rest covers what
+    leaves the object as it is - another layer, a layer's colour or material, a material edited in place."""
+    looks = {}
+
+    def look(o):
+        a = o.Attributes
+        key = (int(a.MaterialSource), a.MaterialIndex, int(a.ColorSource), a.LayerIndex)
+        if key not in looks:
+            try:
+                m = o.GetRenderMaterial(True)
+                mat = (str(m.Id), int(m.RenderHash)) if m else ""
+            except Exception:
+                mat = str(o.RenderMaterial.Id) if o.RenderMaterial else ""
+            try:
+                layer = o.Document.Layers[a.LayerIndex].Color.ToArgb()
+            except Exception:
+                layer = 0
+            looks[key] = (key, mat, layer)
+        return looks[key]
+
+    return tuple((o.RuntimeSerialNumber, o.Attributes.ObjectColor.ToArgb(), look(o)) for o in objs)
 
 
 # ----------------------------------------------------------------- export (headless document)
