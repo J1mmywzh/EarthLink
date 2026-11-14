@@ -93,3 +93,51 @@ test('Edit Set: typed offsets and rotation place the set; the Rhino switches are
 test('set actions: delete is leftmost, then edit; the Navigation pop-up is gone and the compass resets north',async t=>{const p=await pageFor(t);const row=p.locator('#sets .item').first();await row.hover();const titles=await row.locator('.acts button').evaluateAll(b=>b.map(x=>x.title));assert.deepEqual(titles.map(s=>s.split(':')[0]),['Remove from EarthLink','Edit']);assert.equal(await p.locator('#navCard').count(),0);assert.equal(await p.locator('#syncViews').count(),0,'named views are always shared');await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);EL.nav.turn(0,0,true);EL.nav.turn(70,0);});await p.waitForTimeout(300);assert.ok(Math.abs(await p.evaluate(()=>Cesium.Math.toDegrees(EL.viewer.camera.heading))%360)>20);await p.getByRole('button',{name:'North up',exact:true}).click();await p.waitForFunction(()=>{const h=Cesium.Math.toDegrees(EL.viewer.camera.heading);return Math.min(h,360-h)<0.5;},null,{timeout:20000});});
 test('Two-Point is the same camera with a level axis: rotating moves it, the picture never rolls, the shift is limited',async t=>{const p=await pageFor(t);await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);await p.getByRole('button',{name:'Two-Point',exact:true}).click();await p.waitForTimeout(500);const st=()=>p.evaluate(()=>{const c=EL.viewer.camera;return{pitch:Cesium.Math.toDegrees(c.pitch),roll:Cesium.Math.toDegrees(c.roll),shift:c.frustum._elShift||0,h:Cesium.Cartographic.fromCartesian(c.positionWC).height,pos:[c.positionWC.x,c.positionWC.y,c.positionWC.z]};});const a=await st();await p.evaluate(()=>{EL.nav.turn(0,0,true);EL.nav.turn(0,-12);});await p.waitForTimeout(300);const b=await st();assert.ok(Math.abs(b.pitch)<1e-6&&Math.abs(((b.roll+180)%360)-180)<1e-6,'axis level, no roll');assert.ok(Math.abs(b.h-a.h)>1,'tilting moves the camera up or down: '+(b.h-a.h));assert.ok(Math.abs(b.shift-a.shift)>0.05,'and the lens shift follows');await p.evaluate(()=>{EL.nav.turn(40,0);});await p.waitForTimeout(300);const c=await st();assert.ok(Math.abs(c.shift-b.shift)<1e-6&&Math.abs(c.pitch)<1e-6,'turning keeps the framing');assert.ok(Math.hypot(...c.pos.map((v,i)=>v-b.pos[i]))>1,'and moves the camera around the pivot');await p.evaluate(()=>{for(let i=0;i<40;i++)EL.nav.turn(0,6);});await p.waitForTimeout(300);const d=await st();assert.ok(Math.abs(d.shift)<=Math.tan(65*Math.PI/180)+1e-6,'shift limited: '+d.shift);});
 test('time of day: at night the model is tinted dark blue and shadows are off; by day it is untouched',async t=>{const p=await pageFor(t);const at=async m=>{await p.evaluate(m=>{const d=document.getElementById('date'),h=document.getElementById('hour');d.value='2026-06-21';h.value=m;h.dispatchEvent(new Event('input'));},m);await p.waitForTimeout(700);return p.evaluate(()=>{const c=EL.models.Main.color;return{c:[c.red,c.green,c.blue],shadows:EL.viewer.shadows,stars:EL.viewer.scene.skyBox.show,light:EL.viewer.scene.light.intensity};});};if(!(await p.evaluate(()=>document.getElementById('sunOn').checked)))await p.evaluate(()=>document.getElementById('sunOn').click());const day=await at(720),night=await at(60);assert.deepEqual(day.c,[1,1,1]);assert.equal(day.shadows,true);assert.equal(day.stars,false,'no stars by day');assert.ok(night.c.every(v=>v<0.6)&&night.c[2]>night.c[0],'tinted: '+night.c);assert.equal(night.shadows,false);assert.equal(night.stars,true);});
+
+// ---- beta.10: surroundings to Rhino (open data inside a rectangle), feedback
+test('Surroundings to Rhino: a dragged rectangle is sent as bounds, the import is followed to the end, Escape puts the tool away',async t=>{
+ let posted=null,polls=0;
+ const p=await pageFor(t,async p=>{await p.route('**/api/context',async route=>{const r=route.request();
+   if(r.method()==='POST'){posted=JSON.parse(r.postData());return route.fulfill({json:{state:'working',message:'Reading the terrain'}});}
+   polls++;return route.fulfill({json:polls<2?{state:'working',message:'Reading OpenStreetMap'}:polls<3?{state:'sent',counts:{terrain:100,buildings:12,roads:5}}:{state:'done',message:"added terrain (100 faces), 12 buildings, 5 road lines on layer 'EarthLink Context'"}});});});
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
+ const before=await cam(p);
+ await p.getByRole('button',{name:'Bring the surroundings into Rhino',exact:true}).click();
+ assert.equal(await p.locator('#contextCard').isVisible(),true);assert.equal(await p.locator('#cxImport').isDisabled(),true,'nothing to import before a rectangle is drawn');
+ await p.mouse.move(420,330);await p.mouse.down();await p.mouse.move(700,560,{steps:10});await p.mouse.up();await p.waitForTimeout(300);
+ const after=await cam(p);assert.ok(d3(before.pos,after.pos)<1e-6&&d3(before.dir,after.dir)<1e-9,'dragging the rectangle does not move the camera');
+ assert.match(await p.locator('#cxSize').innerText(),/\d+ × \d+ m/);
+ const size=await p.evaluate(()=>document.getElementById('cxSize').textContent.match(/([\d,]+) × ([\d,]+) m/).slice(1).map(v=>+v.replace(/,/g,'')));
+ assert.ok(size[0]>20&&size[1]>20&&size[0]<3000&&size[1]<3000,'a sensible size: '+size);
+ await p.locator('label.chip:has(#cxRoads)').click();await p.locator('#cxImport').click();
+ await p.waitForFunction(()=>/Rhino added terrain/.test(document.getElementById('cxStatus').textContent),null,{timeout:15000});
+ assert.ok(posted&&posted.terrain===true&&posted.buildings===true&&posted.roads===false,'the choices are sent');
+ const b=posted.bounds;assert.ok(b.west<b.east&&b.south<b.north,'west/south/east/north in order');
+ const here=await p.evaluate(()=>EL.meta.anchor);assert.ok(Math.abs((b.south+b.north)/2-here.lat)<0.05&&Math.abs((b.west+b.east)/2-here.lon)<0.05,'the rectangle is at the site');
+ assert.equal(await p.locator('#cxImport').isEnabled(),true,'ready for another import');
+ await p.keyboard.press('Escape');assert.equal(await p.locator('#contextCard').isVisible(),false);
+ assert.equal(await p.evaluate(()=>document.body.classList.contains('cropping')),false);});
+test('Surroundings to Rhino: a rectangle over 3 km a side cannot be imported; an error from the server is shown',async t=>{
+ const p=await pageFor(t,async p=>{await p.route('**/api/context',route=>route.fulfill({json:{state:'error',message:'OpenStreetMap could not be reached (timed out). Try again in a minute.'}}));});
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
+ await p.getByRole('button',{name:'Bring the surroundings into Rhino',exact:true}).click();
+ await p.mouse.move(420,330);await p.mouse.down();await p.mouse.move(700,560,{steps:6});await p.mouse.up();await p.waitForTimeout(200);
+ await p.locator('#cxImport').click();await p.waitForFunction(()=>/could not be reached/.test(document.getElementById('cxStatus').textContent),null,{timeout:8000});
+ assert.equal(await p.evaluate(()=>document.getElementById('cxStatus').classList.contains('bad')),true);
+ await p.evaluate(()=>{const c=EL.viewer.camera,up=Cesium.Cartesian3.normalize(c.positionWC,new Cesium.Cartesian3());c.setView({destination:Cesium.Cartesian3.add(c.positionWC,Cesium.Cartesian3.multiplyByScalar(up,9000,new Cesium.Cartesian3()),new Cesium.Cartesian3()),orientation:{heading:0,pitch:-Math.PI/2,roll:0}});});await p.waitForTimeout(500);
+ await p.mouse.move(350,340);await p.mouse.down();await p.mouse.move(880,770,{steps:6});await p.mouse.up();await p.waitForTimeout(200);
+ assert.match(await p.locator('#cxHint').innerText(),/Too large/);assert.equal(await p.locator('#cxImport').isDisabled(),true);});
+test('Feedback: the comment, screenshot note and system details go to a filled-in GitHub issue or an email; no location is included',async t=>{
+ const p=await pageFor(t);await p.evaluate(()=>{window.__opened=[];window.open=(u)=>{window.__opened.push(u);return null;};});
+ await p.getByRole('button',{name:'Send feedback',exact:true}).click();
+ assert.equal(await p.locator('#fbGithub').isDisabled(),true,'nothing to send without words');
+ await p.locator('#fbText').fill('Zooming jumps when I pinch\nsecond line');
+ await p.waitForFunction(()=>document.getElementById('fbThumb').classList.contains('on'),null,{timeout:15000});
+ const info=await p.locator('#fbInfo').innerText(),site=await p.evaluate(()=>EL.meta.anchor);
+ assert.match(info,/EarthLink 0\.2\.0/);assert.ok(!info.includes(String(site.lat).slice(0,6))&&!info.includes(String(site.lon).slice(0,6)),'no coordinates in the details');
+ const dl=p.waitForEvent('download');await p.locator('#fbGithub').click();assert.equal((await dl).suggestedFilename(),'earthlink-feedback.png');
+ const url=await p.evaluate(()=>window.__opened[0]),q=new URL(url);
+ assert.equal(q.origin+q.pathname,'https://github.com/J1mmywzh/EarthLink/issues/new');assert.equal(q.searchParams.get('title'),'Zooming jumps when I pinch');
+ assert.match(q.searchParams.get('body'),/second line[\s\S]*Screenshot[\s\S]*EarthLink 0\.2\.0/);
+ assert.equal(await p.locator('#feedbackCard').isVisible(),false);
+ assert.equal(await p.locator('#fbEmail').evaluate(b=>b.hidden),false,'email is offered');});

@@ -117,6 +117,9 @@
   #feedbackCard textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; padding: 8px 10px; border-radius: 9px; border: .5px solid var(--sep); background: var(--field, rgba(120,120,128,.12)); color: inherit; }
   #fbThumb { display: none; width: 100%; margin-top: 8px; border-radius: 8px; border: .5px solid var(--sep); }
   #fbThumb.on { display: block; }
+  .cxSize { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+  .cxSize .s { display: block; font-size: 12px; font-weight: 400; color: var(--fg2); }
+  #cxStatus.bad { color: var(--red); }
   .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
@@ -149,7 +152,7 @@
   .cesium-viewer-bottom { left: auto !important; right: 12px !important; bottom: 6px !important; }
   .cesium-widget-credits { left: auto !important; right: 12px !important; bottom: 6px !important; }
   body.picking .cesium-widget canvas { cursor: crosshair; }
-  body.measuring .cesium-widget canvas { cursor: crosshair; }
+  body.measuring .cesium-widget canvas, body.cropping .cesium-widget canvas { cursor: crosshair; }
   @media (max-width: 760px) { #sidebar, #searchBar { width: calc(100% - 76px); } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
 </style>
 </head>
@@ -177,6 +180,7 @@
   <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M16 8l-2.5 5.5L8 16l2.5-5.5z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8 8.2 8.2 0 00-6 2.6"/><path d="M4 4v4h4M12 8v4.5l3 2"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="M12 8v8M8.5 12.5L12 16l3.5-3.5"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
 </svg>
@@ -248,6 +252,7 @@
     <button id="measureBtn" title="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
   </div>
   <div class="stack glass"><button id="captureBtn" title="Capture"><svg class="i"><use href="#i-cam"/></svg></button></div>
+  <div class="stack glass rhinoOnly"><button id="contextBtn" title="Bring the surroundings into Rhino" aria-label="Bring the surroundings into Rhino"><svg class="i"><use href="#i-import"/></svg></button></div>
   <div class="stack glass"><button id="feedbackBtn" title="Send feedback" aria-label="Send feedback"><svg class="i"><use href="#i-chat"/></svg></button></div>
 </div>
 
@@ -268,6 +273,19 @@
   <p class="hint" id="fbInfo"></p>
   <p class="hint">Nothing is sent until you choose below. The screenshot shows your site and model; system details hold no location.</p>
   <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="pill" id="fbEmail" title="Opens your mail app with the message filled in">Email</button><button class="primary" id="fbGithub" title="Opens a filled-in issue on GitHub; you need a GitHub account">Open on GitHub</button></div>
+</div>
+<div id="contextCard" class="glass pop">
+  <h3>Surroundings to Rhino <button class="mini" data-close="contextCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
+  <p class="hint" id="cxHint">Drag a rectangle on the map around the area you want in Rhino.</p>
+  <div class="cxSize" id="cxSize" hidden></div>
+  <div class="row" style="margin-top:8px">
+    <label class="chip"><input type="checkbox" id="cxTerrain" checked>Terrain</label>
+    <label class="chip"><input type="checkbox" id="cxBuildings" checked>Buildings</label>
+    <label class="chip"><input type="checkbox" id="cxRoads" checked>Roads</label>
+  </div>
+  <p class="hint" style="margin-top:10px">Rhino receives open data, not Google's map, which may not be exported: buildings and roads from OpenStreetMap, terrain from Terrain Tiles on AWS. Pressing Import sends the rectangle's coordinates to those two services. Where OpenStreetMap has no height for a building, 7 m is assumed and it goes on its own layer.</p>
+  <p class="hint" id="cxStatus" role="status"></p>
+  <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="primary" id="cxImport" disabled>Import to Rhino</button></div>
 </div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -1405,7 +1423,7 @@
     setPlacement(editing, dragging.rot, [dragging.t[0] + g.p.x - dragging.start.x, dragging.t[1] + g.p.y - dragging.start.y, dragging.t[2]]);
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   handler.setInputAction(() => { dragging = null; }, Cesium.ScreenSpaceEventType.LEFT_UP);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) {measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");} if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { if (measuring) {measuring=false;clearMeasure();$("measureBtn").classList.remove("on");document.body.classList.remove("measuring");} if (picking) closeSite(); if (editing && !$("ask").classList.contains("open")) closeSetCard(); if ($("contextCard").classList.contains("open")) toggleContext(false); } });
 
   // ---------------------------------------------------------------- capture
   let detail = store.get("detail") ?? 8;
@@ -1602,7 +1620,8 @@
   showSaveUi();
 
   // ---------------------------------------------------------------- panels, toggles
-  const closePops = except => document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); });
+  const cx = { a: null, b: null, ent: null, drag: false, timer: 0, busy: false };   // the rectangle of "Surroundings to Rhino"
+  const closePops = except => { document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); }); if (except !== "contextCard") cxLeave(); };
   const toggleCapture = open => { closePops("captureCard"); $("captureCard").classList.toggle("open", open); $("captureBtn").classList.toggle("on", open); if (!open) { $("showFrame").checked = false; drawFrame(); } };
   $("captureBtn").onclick = () => toggleCapture(!$("captureCard").classList.contains("open"));
 
@@ -1670,7 +1689,95 @@
   }
   $("fbGithub").onclick = () => fbHandOver("github");
   $("fbEmail").onclick = () => fbHandOver("email");
-  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.dataset.close === "siteCard" ? closeSite() : b.dataset.close === "setCard" ? closeSetCard() : b.dataset.close === "captureCard" ? toggleCapture(false) : b.dataset.close === "feedbackCard" ? toggleFeedback(false) : $(b.dataset.close).classList.remove("open"));
+  /* Surroundings to Rhino: drag a rectangle on the map; the local server fetches open data for it (OpenStreetMap
+     buildings and roads, open elevation tiles) and Rhino adds it as terrain, massing and road lines, in place.
+     Google's map itself is never exported: its terms forbid it. Nothing is fetched until Import is pressed. */
+  const CX = { max: 3000, min: 20 };                         // metres a side: the server's limits
+  const cxOpen = () => $("contextCard").classList.contains("open");
+  function cxPoint(pos) {                                     // the map point under the mouse (the site's ground plane without a map)
+    let p = scene.pickPositionSupported && tileset ? scene.pickPosition(pos) : undefined;
+    if (!p && anchor()) { const g = groundPoint(pos, 0); if (g && g.far < 30000) p = Cesium.Matrix4.multiplyByPoint(frame(), g.p, new Cesium.Cartesian3()); }
+    return p ? Cesium.Cartographic.fromCartesian(p) : null;
+  }
+  function cxBounds() {
+    if (!cx.a || !cx.b) return null;
+    const d = Cesium.Math.toDegrees, lon = [d(cx.a.longitude), d(cx.b.longitude)], lat = [d(cx.a.latitude), d(cx.b.latitude)];
+    return { west: Math.min(...lon), south: Math.min(...lat), east: Math.max(...lon), north: Math.max(...lat) };
+  }
+  function cxSize(b) {                                        // metres across and up the rectangle
+    const at = (lon, lat) => Cesium.Cartesian3.fromDegrees(lon, lat), mid = (b.south + b.north) / 2;
+    return [Cesium.Cartesian3.distance(at(b.west, mid), at(b.east, mid)), Cesium.Cartesian3.distance(at(b.west, b.south), at(b.west, b.north))];
+  }
+  function cxOutline() {
+    const b = cxBounds(); if (!b) return [];
+    const h = Math.max(cx.a.height, cx.b.height) + 1, out = [], n = 16;       // straight on the map: follow the parallels
+    const side = (x0, y0, x1, y1) => { for (let i = 0; i < n; i++) out.push(Cesium.Cartesian3.fromDegrees(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, h)); };
+    side(b.west, b.south, b.east, b.south); side(b.east, b.south, b.east, b.north); side(b.east, b.north, b.west, b.north); side(b.west, b.north, b.west, b.south);
+    out.push(out[0]); return out;
+  }
+  function cxSync(status, bad) {
+    const b = cxBounds(), size = b && cxSize(b), ft = m => Math.round(m / 0.3048).toLocaleString();
+    const big = size && Math.max(...size) > CX.max, small = size && Math.min(...size) < CX.min;
+    $("cxSize").hidden = !size;
+    if (size) $("cxSize").innerHTML = `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
+    $("cxHint").textContent = !size ? "Drag a rectangle on the map around the area you want in Rhino."
+      : big ? `Too large: the limit is ${CX.max / 1000} km a side. Drag a smaller rectangle.` : small ? `Too small: at least ${CX.min} m a side.` : "Drag again to change the rectangle.";
+    const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked;
+    $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
+    if (status !== undefined) { $("cxStatus").textContent = status; $("cxStatus").classList.toggle("bad", !!bad); }
+  }
+  function cxLeave() {                                        // the tool is put away; a running import carries on in Rhino
+    document.body.classList.remove("cropping"); $("contextBtn").classList.remove("on");
+    cx.drag = false; cx.a = cx.b = null;
+    if (cx.ent) { viewer.entities.remove(cx.ent); cx.ent = null; scene.requestRender(); }
+  }
+  function toggleContext(open) {
+    if (open) {
+      if (walk) walk.exit(); if (picking) closeSite(); if (editing) closeSetCard();
+      measuring = false; clearMeasure(); $("measureBtn").classList.remove("on"); document.body.classList.remove("measuring");
+    }
+    closePops("contextCard"); $("contextCard").classList.toggle("open", open);
+    if (!open) return cxLeave();
+    $("contextBtn").classList.add("on"); document.body.classList.add("cropping");
+    cxSync(cx.busy ? undefined : "");
+  }
+  $("contextBtn").onclick = () => toggleContext(!cxOpen());
+  $("cxTerrain").onchange = $("cxBuildings").onchange = $("cxRoads").onchange = () => cxSync();
+  const cxHandler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+  cxHandler.setInputAction(e => {
+    if (!cxOpen() || cx.busy || modal()) return;
+    const p = cxPoint(e.position); if (!p) return msg("Start the rectangle on the map.", 2500);
+    cx.a = p; cx.b = null; cx.drag = true;
+    if (!cx.ent) cx.ent = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(cxOutline, false), width: 3,
+      material: Cesium.Color.fromCssColorString("#0a84ff"), depthFailMaterial: Cesium.Color.fromCssColorString("#0a84ff").withAlpha(0.55) } });
+    cxSync("");
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  cxHandler.setInputAction(e => {
+    if (!cx.drag) return;
+    const p = cxPoint(e.endPosition); if (p) { cx.b = p; cxSync(); scene.requestRender(); }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  cxHandler.setInputAction(() => { if (cx.drag) { cx.drag = false; cxSync(); } }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  const cxWords = c => c ? [c.terrain && "terrain", c.buildings && `${c.buildings} building${c.buildings === 1 ? "" : "s"}`, c.roads && `${c.roads} road line${c.roads === 1 ? "" : "s"}`].filter(Boolean).join(", ") : "";
+  async function cxWatch() {                                  // follow the import: the server fetches, then Rhino adds
+    clearTimeout(cx.timer);
+    let r; try { r = await api("/api/context"); } catch { r = { state: "error", message: "Rhino is not answering." }; }
+    if (r.state === "working" || r.state === "sent") {
+      cxSync(r.state === "sent" ? `Rhino is adding ${cxWords(r.counts) || "it"}…` : (r.message || "Working") + "…");
+      cx.timer = setTimeout(cxWatch, 700); return;
+    }
+    cx.busy = false;
+    const text = r.state === "done" ? "Rhino " + (r.message || "added it") + "." : r.message || "The import did not finish.";
+    cxSync(text, r.state !== "done");
+    if (!cxOpen()) msg(text, 7000);
+  }
+  $("cxImport").onclick = async () => {
+    const b = cxBounds(); if (!b || cx.busy) return;
+    cx.busy = true; cxSync("Starting…");
+    let r; try { r = await api("/api/context", { bounds: b, terrain: $("cxTerrain").checked, buildings: $("cxBuildings").checked, roads: $("cxRoads").checked }); } catch { r = { state: "error", message: "Rhino is not answering." }; }
+    if (r.state === "error") { cx.busy = false; return cxSync(r.message || "The import could not start.", true); }
+    cxWatch();
+  };
+  document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => b.dataset.close === "siteCard" ? closeSite() : b.dataset.close === "setCard" ? closeSetCard() : b.dataset.close === "captureCard" ? toggleCapture(false) : b.dataset.close === "feedbackCard" ? toggleFeedback(false) : b.dataset.close === "contextCard" ? toggleContext(false) : $(b.dataset.close).classList.remove("open"));
   const setSide = h => { $("sidebar").classList.toggle("hidden", h); $("toggleSide").classList.toggle("on", !h); store.set("sideHidden", h); };
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
