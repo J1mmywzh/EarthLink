@@ -2,7 +2,7 @@
 
 ## 0.2.0-beta.10 — preview, 2026-11-13
 New
-- **Lights from Rhino.** The model's point, spot, directional, rectangular and linear lights light the model and the map, as Rhino's Rendered mode draws them (measured there): colour x intensity x the angle to the surface, Rhino's fall-off, a spotlight's cone and hot spot, rectangular and linear lights as a point at their centre. Changing a light in Rhino updates the viewer within a second without a resend; a light follows its design set's placement and visibility. **Lights** in the Sun panel switches them off. They cast no shadows yet (Rhino's point, spot and directional lights do), and on the map a light without fall-off fades out one to two set-sizes away.
+- **Lights from Rhino.** The model's point, spot, directional, rectangular and linear lights light the model and the map, as Rhino's Rendered mode draws them (measured there): colour x intensity x the angle to the surface, Rhino's fall-off, a spotlight's cone and hot spot (its edge softened, and strong light levelling off instead of clipping, so a lamp does not read as a white disc), rectangular and linear lights as a point at their centre. Changing a light in Rhino updates the viewer within a second without a resend; a light follows its design set's placement and visibility. **Lights** in the Sun panel switches them off. They cast no shadows yet (Rhino's point, spot and directional lights do), and on the map a light without fall-off fades out one to two set-sizes away.
 - **Surroundings to Rhino.** Drag a rectangle on the map (up to 3 km a side) and Rhino receives terrain, building solids and road centre lines for it on layer **EarthLink Context**, in place, as one Undo step. The data is open: OpenStreetMap and Terrain Tiles on AWS. Google's map cannot be exported under its terms and is not. Buildings without a height in OpenStreetMap are 7 m, on their own layer.
 - **Send feedback.** A card with your comment, an optional screenshot and system details (no location) opens a filled-in GitHub issue or an email to rhinoearthlink@gmail.com. Nothing is sent until you submit or send it.
 
@@ -14,6 +14,9 @@ Hide map underneath
 - The cut-out returns after a set is moved (it stayed off in one case), and walking follows the graded ground.
 
 Navigation
+- Fixed the model rushing towards you and away while tilting or turning around it: when the exact centre of the view passed the model (through a gap, over a roof) the view turned about ground up to 300 m behind it. While the model reaches the middle of the view, the turning point now stays within the model. (beta.9 had a rule for this that an earlier beta.10 build dropped.)
+- A pinch has to be meant: the small pinches a trackpad sends while two fingers scroll or rest, and the burst when they lift, no longer zoom.
+- The compass opens a panel again: Heading, Tilt and Sensitivity, each dragged or typed, and North up. The Navigation section and the controls list are gone from the sidebar (the controls are in the README).
 - A gesture does one thing from start to finish. macOS reports a pinch when two scrolling fingers drift apart; that pinch zoomed the view in the middle of a rotation. It is ignored unless it takes over.
 - The point you rotate about stays the same from one rotation to the next, until you pan, zoom or fly. Before, it was chosen again on every gesture, so a tree passing through the centre of the view, or the model's depth against the ground behind it, made the scene swing differently each time.
 - The glide macOS adds after your fingers lift is faded out, so a flick does not keep turning the view.
@@ -21,7 +24,6 @@ Navigation
 - Rotating, tilting, panning and zooming are 19 % less sensitive than in beta.9 (two steps of 10 %). Walking, sprinting and flying are 25 % faster (4.4, 11.9 and 13.6 m/s; 27 m/s sprint-flying).
 - Flying has no collision: it passes through buildings, trees, your model and the ground.
 - A device guessed wrong from its first event (a trackpad step that looks like a wheel notch on a zoomed page) is corrected by the next events.
-- **Record input for 10 s** (sidebar, Navigation > Controls) saves what your trackpad or mouse sends, to report a navigation problem.
 
 Views
 - Fixed: a view saved in the viewer never reached Rhino. Creating a Perspective named view failed inside Rhino (a wrong call), which also paused all syncing after five tries. Views saved, updated, renamed or deleted in either app now change in the other, in all three projections, without touching the viewport you are working in.
@@ -29,7 +31,7 @@ Views
 - Checked again in Rhino: a named view made in either app, and the followed viewport, show a set of test points at the same pixels in both (within 0.01 px at the same window shape) in Perspective, Two-Point and Parallel. When the two windows differ in shape, the height of the view is the same and the wider window shows more at the sides, as when a Rhino viewport is resized.
 
 Light, sky and materials
-- Time of day: the map turns warm with a low sun and dark blue at night, with stars and a dim moonlight on the model, which takes the same tint. Cast shadows fade out as the sun reaches the horizon; before, a sun under the horizon drew streaks and stipple over a daytime map.
+- Time of day: the map turns warm with a low sun and dark blue at night under a dark sky with stars (the bright band at the horizon is gone), with a dim moonlight on the model, which takes the same tint. Cast shadows fade out as the sun reaches the horizon; before, a sun under the horizon drew streaks and stipple over a daytime map.
 - No stars or dark sky by day when you look up.
 - Materials are lit like Rhino's Rendered mode, measured on the same colour swatches in both: a sunlit white is white (it was grey), colours are as vivid as in Rhino, and shadows are as light as Rhino's.
 - Glass, polycarbonate and any transparent material are see-through. Rhino writes them in a form real-time viewers ignore, so they showed as opaque blocks.
@@ -37,8 +39,12 @@ Light, sky and materials
 - Textures keep the object's box, planar or other mapping (it was dropped, so a mapped texture came out at the wrong size). Polished metal shows its colour instead of turning dark. Rhino sends each existing set once more by itself to pick these up.
 
 Interface
+- Less text: cards show their controls, and explanations are in the documentation. The tools are one column in order of use (sidebar, capture, sun, surroundings, measure, feedback) and can be folded away.
+- Values can be typed as well as dragged: lens length (now in millimetres, 12 to 200 mm on the slider, like Rhino's), time of day, heading, tilt, sensitivity.
+- **Surroundings to Rhino** shows a progress bar.
+- The map's credits are smaller. They cannot be removed: Google's and Cesium's terms require them.
+- **The file remembers**: each set's display and cut-out, the height offset, the sun, the lights switch and the last camera and lens are kept in the Rhino file. Open the file, run EarthLinkViewer, and it comes back as you left it; its sets are exported again by themselves.
 - Delete is the leftmost action on a set and on a view, then edit.
-- The Navigation pop-up is gone. Click the compass for north up, or drag it to turn and tilt; Sensitivity and the controls list are in the sidebar.
 
 Fixed on Windows
 - The very first settings save could fail with "Permission denied" when Rhino and the viewer saved at the same moment.

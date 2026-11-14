@@ -132,6 +132,15 @@ def _watch_anchor(doc):
         _sun_location(doc, force=True)
 
 
+# ------------------------------------------------------------------ the viewer's state, kept in the file
+def _watch_state(doc):
+    now = time.time()
+    if now - _S.get("state_at", 0.0) < 3.0:
+        return
+    _S["state_at"] = now
+    core.save_state(doc)
+
+
 # ------------------------------------------------------------------ lights
 def _watch_lights(doc):
     """Lights added, moved, recoloured, switched or deleted in Rhino reach the viewer without a resend."""
@@ -372,6 +381,7 @@ def _tick(sender, e):
                     _apply_requests(doc)
                     _watch_sets(doc)
                     _watch_lights(doc)
+                    _watch_state(doc)
                 _watch_live(doc)
                 sun_linked = bool(s.get("sync_sun", True) and _shown(doc))
                 if sun_linked and not _S.get("sun_linked"):

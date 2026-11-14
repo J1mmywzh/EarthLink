@@ -18,8 +18,10 @@
 
    The pivot is Rhino's camera target: what is at the centre of the view when you start turning. It stays the
    same from one rotation to the next (a tree passing in front does not move it) until you pan, zoom or fly;
-   at the horizon or in the sky it is your model's depth, or a limited distance (see pivotDistance).
-   A gesture does one thing from start to finish: a stray pinch during a two-finger rotation is ignored.
+   while your model reaches the middle of the view the pivot is kept within the model's depth; at the horizon
+   or in the sky it is your model's depth, or a limited distance (see pivotDistance).
+   A gesture does one thing from start to finish: the small pinches a trackpad sends while two fingers scroll or
+   rest are dropped; a pinch has to be meant (see WheelLatch).
    Two-Point is the same camera drawn with a level axis and a shifted lens, so every gesture works the same.
    Nothing but this module moves the camera: Cesium's own collision is off. The camera passes through trees
    and buildings; it only comes to rest when it descends onto a surface from above, and follows gently rising
@@ -40,25 +42,39 @@
   };
   const STEP = { degrees: 6, pan: 1 / 8 };   // arrow keys: Rhino's 60 steps per turn; pan an eighth of the view
   const GESTURE_GAP = 220;   // ms without wheel events that ends a gesture (momentum included)
-  const TAKEOVER = 120;      // ms of only the other kind of event (pinch <-> scroll) before it starts a new gesture
+  const TAKEOVER = 120;      // ms a pinch must be quiet before scrolling takes over
+  const PINCH_START = 3, PINCH_OVER = 10, PINCH_WINDOW = 250;   // wheel units of pinch (1 = 1 % of magnification) that begin a zoom
   const TWO_POINT_MAX = 65 * Math.PI / 180;   // steeper than this a shifted lens stretches the picture badly
   const EASE = 0.045;        // s: time constant of the per-frame easing
+  const wheelPx = e => (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
 
   /* Decide what a wheel event does. One decision per gesture: Shift released or pressed during the momentum
-     tail cannot switch pan to orbit, and the other kind of event (a pinch during a two-finger scroll, or a scroll
-     during a pinch: macOS sends both when two fingers drift apart) is skipped unless it takes over for
-     TAKEOVER ms. The device is corrected if later events prove the first guess wrong, and remembered. */
+     tail cannot switch pan to orbit. macOS sends small pinch events whenever two scrolling or resting fingers drift
+     apart or together, and a burst of them when the fingers lift, so a pinch has to be meant: it begins only once
+     PINCH_START units of it arrive within PINCH_WINDOW ms (PINCH_OVER, and more than the scrolling itself, within
+     GESTURE_GAP of a scroll), and until then its events are dropped. During a
+     pinch, scroll events are dropped until the pinch has been quiet for TAKEOVER ms. The device is corrected if
+     later events prove the first guess wrong, and remembered. */
   class WheelLatch {
-    constructor() { this.last = -Infinity; this.mode = null; this.device = null; this.prior = null; this.kind = null; this.kindAt = -Infinity; this.n = 0; this.sure = 0; this.coast = new Coast(); }
+    constructor() { this.last = -Infinity; this.mode = null; this.device = null; this.prior = null; this.kind = null; this.n = 0; this.sure = 0; this.coast = new Coast(); this.pend = []; this.flow = []; }
     read(e, projection, now, mac = true) {
-      let fresh = now - this.last > GESTURE_GAP; this.last = now;
       const kind = e.ctrlKey ? "pinch" : "scroll";
-      if (!fresh && this.kind && kind !== this.kind) {
-        if (now - this.kindAt <= TAKEOVER) return { mode: "none", skip: true, start: false };
+      if (this.kind && now - this.last > GESTURE_GAP) { this.kind = null; this.pend = []; }   // the fingers lifted or rest: the gesture is over
+      let fresh = !this.kind;
+      if (kind === "pinch" && this.kind !== "pinch") {
+        this.pend = this.pend.filter(q => now - q[0] <= PINCH_WINDOW); this.pend.push([now, Math.abs(e.deltaY) * wheelPx(e)]);
+        // while the fingers are scrolling, the pinch must also outweigh the scroll (1 % of pinch is about 6 px of travel)
+        this.flow = this.flow.filter(q => now - q[0] <= PINCH_WINDOW);
+        const need = this.kind === "scroll" ? Math.max(PINCH_OVER, this.flow.reduce((a, q) => a + q[1], 0) / 3) : PINCH_START;   // lifting fingers also sends a burst of pinch
+        if (this.pend.reduce((a, q) => a + q[1], 0) < need) return { mode: "none", skip: true, start: false };
+        fresh = true;
+      } else if (kind === "scroll" && this.kind === "pinch") {
+        if (now - this.last <= TAKEOVER) return { mode: "none", skip: true, start: false };
         fresh = true;
       }
-      if (fresh) { this.kind = kind; this.n = 0; this.sure = 0; this.coast.reset(); }
-      this.kindAt = now; this.n++;
+      if (fresh) { this.kind = kind; this.n = 0; this.sure = 0; this.coast.reset(); this.pend = []; this.flow = []; }
+      this.last = now; this.n++;
+      if (kind === "scroll") this.flow.push([now, (Math.abs(e.deltaX) + Math.abs(e.deltaY)) * wheelPx(e)]);
       if (kind === "pinch") { this.mode = "zoom"; return { mode: "zoom", pinch: true, start: fresh, gain: 1 }; }
       const ev = wheelEvidence(e), choose = device => {
         this.device = device;
@@ -110,7 +126,6 @@
       return this.k;
     }
   }
-  const wheelPx = e => (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
 
   // Pending motion released gradually, frame by frame.
   class Ease {
@@ -230,20 +245,30 @@
       const [w, h] = size(), ray = cam.getPickRay(new Cesium.Cartesian2(w / 2, h / 2));
       const p = pick(w / 2, h / 2), dp = p ? C3.dot(C3.subtract(p, ray.origin, v3()), ray.direction) : null;
       const f = hooks.focus && hooks.focus();
-      let depth = null;                                    // the visible model's depth, when it is in view
+      let depth = null, within = null;                     // the visible model's depth, when it is in view
       if (f) {
         const to = C3.subtract(f.center, ray.origin, v3()), d = C3.dot(to, ray.direction), far = C3.magnitude(to);
         const side = Math.sqrt(Math.max(0, far * far - d * d));
         if (ortho()) { if (side <= Math.max(f.radius, cam.frustum.width)) depth = d; }
         // in view from outside: within the lens plus half the model's own angular size. Inside or beside the
         // model its centre says nothing about what you are looking at.
-        else if (d > 0 && far > 1.5 * f.radius && Math.atan2(side, d) <= (cam.frustum.fovy || 0.8) / 2 + 0.5 * Math.asin(f.radius / far)) depth = d;
+        else if (d > 0 && far > 1.5 * f.radius) {
+          const off = Math.atan2(side, d), wide = Math.asin(f.radius / far), fov = cam.frustum.fovy || 0.8;
+          if (off <= fov / 2 + 0.5 * wide) depth = d;
+          // The model reaches the middle of the view: it is what you are turning around. The centre of the view
+          // often passes it (through a gap, over a roof) and lands on ground far behind, or on a tree in front;
+          // turning about that makes the model rush towards you and away. The pivot stays within the model's depth.
+          if (off <= fov / 4 + wide) within = [Math.max(0.4, d - f.radius), d + f.radius];
+        }
       }
       let d;
       if (ortho()) {                                       // distances start far behind the scene: compare depths
         const span = f ? 3 * Math.max(f.radius, cam.frustum.width) : Infinity;
         d = dp != null && (depth == null || Math.abs(dp - depth) <= span) ? dp : depth ?? dp;
-      } else d = pivotDistance(dp, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
+      } else {
+        d = pivotDistance(dp, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
+        if (within) d = clamp(d ?? depth, within[0], within[1]);
+      }
       if (d == null) d = Math.max(50, height() * 2);
       return Cesium.Ray.getPoint(ray, d, v3());
     }
