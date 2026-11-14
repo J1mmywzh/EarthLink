@@ -466,9 +466,21 @@ def _copy_texture_mappings(src, dst, xform):
         pass
 
 
+def _legacy_key(m):
+    """Equal for material-table materials that look the same: Rhino keeps a copy per object of such a material."""
+    try:
+        argb = lambda c: c.ToArgb()
+        tex = tuple(sorted((str(t.TextureType), t.FileName or "") for t in m.GetTextures()))
+        return "legacy:%r" % ((m.Name, argb(m.DiffuseColor), argb(m.EmissionColor), argb(m.SpecularColor), argb(m.ReflectionColor),
+                               argb(m.TransparentColor), round(m.Transparency, 4), round(m.Shine, 4), round(m.Reflectivity, 4),
+                               round(m.IndexOfRefraction, 4), tex),)
+    except Exception:
+        return "legacy:%d" % m.Index
+
+
 def _legacy_copy(tmp, material, mats):
     """A render material made from a material-table material, added to the export document once."""
-    key = "legacy:%d" % material.Index
+    key = _legacy_key(material)
     if key not in mats:
         try:
             c = Rhino.Render.RenderMaterial.CreateBasicMaterial(material, tmp)
@@ -509,7 +521,7 @@ def _export_glb(doc, objs, path):
                     mats[key] = c
                 attrs.RenderMaterial = mats[key]
             elif legacy is not None and _legacy_copy(tmp, legacy, mats) is not None:
-                attrs.RenderMaterial = mats["legacy:%d" % legacy.Index]
+                attrs.RenderMaterial = _legacy_copy(tmp, legacy, mats)
             else:
                 attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
                 attrs.ObjectColor = _display_color(doc, src_obj, parent)

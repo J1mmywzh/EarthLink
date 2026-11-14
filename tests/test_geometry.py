@@ -54,6 +54,19 @@ def test_merge_makes_one_piece_per_material_without_changing_the_shape(tmp_path)
     assert len(j['materials'])==2 and sorted(m['primitives'][0]['material'] for m in j['meshes'])==[0,1]
     assert all('min' in j['accessors'][m['primitives'][0]['attributes']['POSITION']] for m in j['meshes'])
 
+def test_materials_that_differ_only_in_name_are_merged_into_one_piece(tmp_path):
+    # Rhino keeps a copy per object of a material made by a script or a Grasshopper bake: "plaster", "plaster (1)", ...
+    p=tmp_path/'m.glb';make_glb(p)
+    data=p.read_bytes();n=struct.unpack_from('<I',data,12)[0];j=json.loads(data[20:20+n]);binary=data[28+n:]
+    base=dict(j['materials'][0]);j['materials']=[dict(base,name='plaster')]+[dict(base,name='plaster (%d)'%k) for k in range(1,6)]+[{'name':'other','pbrMetallicRoughness':{'baseColorFactor':[1,0,0,1]}}]
+    first=j['meshes'][0];j['meshes']=[{'primitives':[dict(first['primitives'][0],material=k)]} for k in range(7)]
+    j['nodes']=[{'mesh':k,'translation':[40*k,0,0]} for k in range(7)];j['scenes'][0]['nodes']=list(range(7))
+    js=json.dumps(j).encode();js+=b' '*(-len(js)%4)
+    p.write_bytes(b'glTF'+struct.pack('<II',2,28+len(js)+len(binary))+struct.pack('<II',len(js),0x4e4f534a)+js+struct.pack('<II',len(binary),0x004e4942)+binary)
+    assert geometry.merge_glb(p)==(7,2)
+    data=p.read_bytes();n=struct.unpack_from('<I',data,12)[0];j=json.loads(data[20:20+n])
+    assert sorted(m['primitives'][0]['material'] for m in j['meshes'])==[0,6]
+
 def test_glass_and_other_see_through_materials_become_transparent(tmp_path):
     from earthlink import collada
     p=tmp_path/'m.glb';make_glb(p);js,binary=collada._read_glb(str(p))
