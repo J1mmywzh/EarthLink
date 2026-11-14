@@ -9,7 +9,6 @@ What is planned after 0.2.0-beta.11, most valuable first. Each item is small eno
 | Shadows from more Rhino lights | Two point lights or spotlights cast shadows (beta.11); Rhino casts them from every point, spot and directional light, so a third lamp in a room still lights the ground outside the wall |
 | Sun time in the site's time zone | The time slider uses the computer's time zone; a site in another zone shows the sun of the wrong hour |
 | One writer for `meta.json` | Rhino and the server both read, change and write it; a set deleted in the viewer during an export can come back |
-| Live sets notice material and layer changes | The change signature covers geometry, not a material edited in place or a layer's material |
 | Sign in with Cesium ion | One click instead of copying a token (OAuth with PKCE); needs EarthLink registered with Cesium and a check that ion accepts a redirect to the local viewer |
 | The 3D engine bundled with the plugin | CesiumJS is loaded from a CDN: no internet or a firewall means a blank page. Bundle it and say so when it fails |
 | A secret for the local server | Any program on the same computer can read the map token from the local server; hand the page a per-launch secret |
