@@ -261,11 +261,16 @@ def _watch_live(doc):
     for name, info in core.get_sets(doc).items():
         if not info.get("live"):
             continue
+        st = _S["live"].get(name)
+        if st and now < st.get("next", 0.0):                # a large set is read less often: at most a twentieth of Rhino's time
+            continue
+        t0 = time.time()
         objs = core.set_objects(doc, name)
         if look is None:
             look = core.doc_look(doc)                       # layers and materials: read once per tick, not per set
         sig = core.signature(objs, look)
         st = _S["live"].setdefault(name, {"sent": sig, "changed": None})
+        st["next"] = now + min(5.0, 20.0 * (time.time() - t0))
         if sig == st["sent"]:
             st["changed"] = None
             continue

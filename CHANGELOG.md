@@ -7,7 +7,7 @@
 - Safari: a trackpad pinch zooms the map. Ctrl + mouse wheel steps like the wheel (it jumped by 2x). On a Mac, **Scroll: Rotates / Zooms** in the compass panel is for a Magic Mouse or a smooth-scrolling mouse, which a web page cannot tell from the trackpad.
 - The dot beside the file's name is green only while Rhino itself is running the link (amber: the viewer is open but Rhino is not linked). EarthLinkViewer does not open a second tab when the viewer is already open; SendToEarth reopens a closed one.
 - A copy of a file (Save As, or a duplicate opened beside the original) becomes a project of its own and takes the original's views and camera with it; the two no longer overwrite each other's views and sets. A renamed or moved file stays the same project.
-- A Live set follows a material edited in place, a layer's colour or material, and an object moved to another layer (it followed geometry only).
+- A Live set follows a material edited in place, a layer's colour or material, and an object moved to another layer (it followed geometry only). A large Live set is checked less often, so watching it takes at most about a twentieth of Rhino's time.
 - Hidden objects and objects on layers that are off are no longer exported; hide or show them and a Live set follows. A Live set with everything hidden is no longer drawn.
 - A new Rhino file keeps the viewer's sunlight on: Rhino's Sun is off by default and used to switch it off on connecting. A Sun that is on in Rhino still sets the viewer's date and time. Changing the time in the viewer does not switch Rhino's Sun on.
 - The viewer draws when something changes instead of continuously, which leaves the graphics card to Rhino while you model.
