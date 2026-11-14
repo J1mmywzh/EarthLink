@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-beta.12 — preview, in progress
+## 0.2.0-beta.12 — preview, 2026-11-14
 - **Turning and tilting**: the view turns around what you are looking at, as in beta.9: the turning point keeps the distance you last focused on (Rhino's camera target) and no longer jumps to ground far behind your model, to the horizon, or to map detail that has not loaded yet. That jump made the scene swing in and out while tilting.
 - **Coming to rest**: after two fingers lift, the system's glide now runs its whole length (beta.10 cut it short, so a turn stopped abruptly); only a long flick counts for a little less. Moving fingers always count in full. A pinch or a wheel zoom is released more slowly instead of stopping dead.
 - **Near the ground**: a tilt that reaches the ground stays there for the rest of the gesture instead of following every bump while you turn. The camera passes through trees, poles and the like when it comes down onto them (a tilt used to stop in mid-air above a tree); ground and broad roofs still carry it.
