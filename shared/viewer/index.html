@@ -133,6 +133,7 @@
   #contextCard .opt { padding: 0; min-height: 32px; gap: 8px; } #contextCard .opt input:disabled { opacity: .4; }
   #contextCard .opt .s { margin-top: 1px; }
   .seg button:focus { outline: none; } .seg button:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }  #contextCard [hidden] { display: none !important; }
+  .cxProg { display: flex; align-items: center; gap: 10px; margin: 12px 0 6px; } .cxProg .bar { flex: 1; margin: 0; } #cxEta:empty { display: none; }
   .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
@@ -322,7 +323,7 @@
       <label class="chip" title="Road surfaces as meshes, on the ground"><input type="checkbox" id="cxSurfaces" data-v="surfaces">Surfaces</label>
     </div>
   </div>
-  <div class="bar" id="cxBar" hidden><i></i></div>
+  <div class="cxProg" id="cxProg" hidden><div class="bar" id="cxBar"><i></i></div><span class="val" id="cxEta"></span></div>
   <div class="row" style="margin-top:12px; justify-content:space-between; align-items:center"><span class="hint" id="cxStatus" role="status" style="margin:0"></span><button class="primary" id="cxImport" disabled>Import</button></div>
 </div>
 <div id="captureCard" class="glass pop">
@@ -2105,7 +2106,7 @@
     $("cxRoadRow").hidden = !$("cxRoads").checked && !$("cxPaths").checked;
     $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
     if (status !== undefined) { $("cxStatus").textContent = status; $("cxStatus").classList.toggle("bad", !!bad); }
-    $("cxBar").hidden = !cx.busy;
+    $("cxProg").hidden = !cx.busy; if (!cx.busy) $("cxEta").textContent = "";
   }
   function cxLeave() {                                        // the tool is put away; a running import carries on in Rhino
     document.body.classList.remove("cropping"); $("contextBtn").classList.remove("on");
@@ -2169,8 +2170,8 @@
   const cxMany = (n, one, more) => n ? `${n.toLocaleString()} ${n === 1 ? one : more || one + "s"}` : "";
   const cxWords = c => c ? [c.terrain && "terrain", cxMany(c.buildings, "building"), cxMany(c.roads, "road"), cxMany(c.paths, "path"),
     cxMany(c.railways, "railway"), cxMany(c.water, "water feature"), cxMany(c.contours, "contour line")].filter(Boolean).join(", ") : "";
-  // Time left, from how long the part done so far took. Smoothed, so it does not jump with every step; shown once a
-  // few seconds have passed, rounded as people say it.
+  // Time left, beside the bar, from how long the part done so far took: smoothed so it does not jump with every step,
+  // shown once a few seconds have passed, as "20s left" or "1m 30s left".
   function cxLeft(part) {
     const spent = (performance.now() - cx.started) / 1000;
     if (!(spent > 3 && part > 0.06 && part < 0.99)) return "";
@@ -2178,7 +2179,9 @@
     cx.left = cx.left == null ? guess : 0.7 * Math.max(0, cx.left - (spent - cx.at)) + 0.3 * guess;
     cx.at = spent;
     const t = cx.left;
-    return t < 5 ? "a few seconds left" : t < 60 ? `about ${Math.max(5, Math.round(t / 5) * 5)} s left` : `about ${Math.round(t / 60)} min left`;
+    const r = Math.max(5, Math.ceil(t / (t < 60 ? 5 : t < 600 ? 10 : 60)) * (t < 60 ? 5 : t < 600 ? 10 : 60));   // 5s, 20s, 1m 30s, 12m
+    const m = Math.floor(r / 60), sec = r % 60;
+    return (m ? `${m}m${sec ? ` ${sec}s` : ""}` : `${sec}s`) + " left";
   }
   async function cxWatch() {                                  // follow the import: the server fetches, then Rhino adds
     clearTimeout(cx.timer);
@@ -2186,8 +2189,8 @@
     if (r.state === "working" || r.state === "sent") {
       const part = Math.max(0.03, Math.min(1, r.progress ?? (r.state === "sent" ? 0.9 : 0.1)));
       $("cxBar").firstElementChild.style.width = Math.round(100 * part) + "%";
-      const left = cxLeft(part);
-      cxSync((r.state === "sent" ? (cxWords(r.counts) ? `Adding ${cxWords(r.counts)} to Rhino` : "Adding to Rhino") : r.message || "Working") + (left ? ` · ${left}` : ""));
+      $("cxEta").textContent = cxLeft(part);
+      cxSync(r.state === "sent" ? (cxWords(r.counts) ? `Adding ${cxWords(r.counts)} to Rhino` : "Adding to Rhino") : r.message || "Working");
       cx.timer = setTimeout(cxWatch, 400); return;
     }
     $("cxBar").firstElementChild.style.width = "100%";

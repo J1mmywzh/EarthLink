@@ -141,8 +141,9 @@ test('Surroundings to Rhino: a slow import shows about how long is left',async t
  await p.getByRole('button',{name:'Bring the surroundings into Rhino',exact:true}).click();
  await p.mouse.click(420,330);await p.waitForTimeout(250);await p.mouse.click(700,560);await p.waitForTimeout(250);
  await p.locator('#cxImport').click();
- await p.waitForFunction(()=>/left/.test(document.getElementById('cxStatus').textContent),null,{timeout:15000});
- const text=await p.locator('#cxStatus').innerText();assert.match(text,/^Reading OpenStreetMap · about \d+ (s|min) left$/,text);});
+ await p.waitForFunction(()=>/left/.test(document.getElementById('cxEta').textContent),null,{timeout:15000});
+ const eta=await p.locator('#cxEta').innerText();assert.match(eta,/^(\d+m( \d+s)?|\d+s) left$/,eta);
+ assert.equal(await p.locator('#cxStatus').innerText(),'Reading OpenStreetMap','the status says what is being done; the time stands beside the bar');});
 test('Surroundings to Rhino: a rectangle over 3 km a side cannot be imported; an error from the server is shown',async t=>{
  const p=await pageFor(t,async p=>{await p.route('**/api/context',route=>route.fulfill({json:{state:'error',message:'OpenStreetMap could not be reached (timed out). Try again in a minute.'}}));});
  await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
