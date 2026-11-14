@@ -142,8 +142,14 @@ def is_copy(stored_path, path, exists=os.path.exists):
     views and sets). A renamed or moved file, or the same file seen through another mount, keeps its project."""
     if not stored_path or not path:
         return False
-    same = os.path.normcase(os.path.normpath(stored_path)) == os.path.normcase(os.path.normpath(path))
-    return not same and bool(exists(stored_path))
+    if os.path.normcase(os.path.normpath(stored_path)) == os.path.normcase(os.path.normpath(path)):
+        return False
+    if not exists(stored_path):
+        return False
+    try:
+        return not os.path.samefile(stored_path, path)      # one file under two names: a mapped drive, a link, another letter case
+    except OSError:
+        return True
 
 
 def copy_views(old, new):
@@ -154,10 +160,14 @@ def copy_views(old, new):
     return len(views)
 
 
-def follow_copy(old, new, name=None):
-    """A file became a copy with project `new` while the viewer showed it as `old`: keep showing it, under the new
-    project, with its views and camera. Returns True when the viewer was showing it."""
+def follow_copy(old, new, name=None, shown=True):
+    """A file became a copy with project `new`: it takes the views along. With `shown` (the same open document was
+    being shown as `old`: a Save As) the viewer keeps showing it under the new project, camera included. A duplicate
+    opened while the viewer shows the original must not take the original's place: pass shown=False.
+    Returns True when the viewer now shows the copy."""
     copy_views(old, new)
+    if not shown:
+        return False
     path = os.path.join(live_dir(), "meta.json")
     try:
         with open(path) as fh:

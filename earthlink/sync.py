@@ -235,6 +235,7 @@ def _apply_requests(doc):
             try:
                 data = env.read_json(cpath)
                 if data:
+                    env.write_json(env.live_file("context_result.json"), {"file": req.get("file"), "started": True})   # the server stops its clock: a large import takes a while
                     text = core.add_context(doc, data)
                     result.update(ok=True, message="Rhino " + text + ".")
                     log(text + ". " + data.get("attribution", ""))
@@ -256,25 +257,30 @@ def _apply_requests(doc):
 
 # ------------------------------------------------------------------ live sets
 def _watch_live(doc):
-    now = time.time()
+    now, look = time.time(), None
     for name, info in core.get_sets(doc).items():
         if not info.get("live"):
             continue
         objs = core.set_objects(doc, name)
-        sig = core.signature(objs)
+        if look is None:
+            look = core.doc_look(doc)                       # layers and materials: read once per tick, not per set
+        sig = core.signature(objs, look)
         st = _S["live"].setdefault(name, {"sent": sig, "changed": None})
         if sig == st["sent"]:
             st["changed"] = None
             continue
         if st["changed"] is None:
             st["changed"] = now
-        elif now - st["changed"] > 0.8 and not Rhino.Commands.Command.InCommand() and objs:
+        elif now - st["changed"] > 0.8 and not Rhino.Commands.Command.InCommand():
             st["sent"], st["changed"] = sig, None
-            send_sets(doc, [name], reason="live")
+            if objs:
+                send_sets(doc, [name], reason="live")
+            elif _shown(doc):                               # everything in it hidden or deleted: the viewer stops drawing it
+                core.publish_empty(doc, name)
 
 
 def mark_sent(doc, name):
-    _S["live"][name] = {"sent": core.signature(core.set_objects(doc, name)), "changed": None}
+    _S["live"][name] = {"sent": core.signature(core.set_objects(doc, name), core.doc_look(doc)), "changed": None}
 
 
 # ------------------------------------------------------------------ sun
@@ -371,18 +377,18 @@ def _tick(sender, e):
     try:
         _apply_anchor_request(doc)
         s = env.load_settings()
+        if time.time() - _S.get("beat", 0.0) > 1.0:          # the viewer shows whether Rhino's side is running (also while a site is being picked)
+            _S["beat"] = time.time()
+            try:
+                env.write_json(env.live_file("rhino.json"), {"t": _S["beat"], "project": core.project_id(doc)})
+            except Exception:
+                pass
         if core.anchor_ok(doc):
             linked = bool(s.get("link_viewport"))
             if linked:
                 push_camera(force=not _S["was_linked"])
             _S["was_linked"] = linked
             now = time.time()
-            if now - _S.get("beat", 0.0) > 1.0:              # the viewer shows whether Rhino's side is running
-                _S["beat"] = now
-                try:
-                    env.write_json(env.live_file("rhino.json"), {"t": now, "project": core.project_id(doc)})
-                except Exception:
-                    pass
             if now - _S["slow"] > 0.5:
                 _S["slow"] = now
                 _watch_anchor(doc)

@@ -185,6 +185,8 @@ test("Rhino lights: a point light and a spotlight cast the model's shadow, and t
  const spot={id:'s',kind:'spot',pos:[25,50,25],dir:[-0.36,-0.86,-0.36],color:[1,0.9,0.7],intensity:1,att:[1,0,0],angle:0.7,exp:1};
  await set(spot,0);const sPlain=await read();assert.ok(sPlain[0]>dark[0]+40&&sPlain[1]>dark[1]+40,'the spotlight reaches both without shadows: '+JSON.stringify([dark,sPlain]));
  await set(spot,2);const sCast=await read();assert.ok(Math.abs(sCast[0]-dark[0])<12&&Math.abs(sCast[1]-sPlain[1])<12,"the spotlight's shadow: "+JSON.stringify([dark,sPlain,sCast]));
+ await p.locator('label.switch:has(#sunOn)').click();assert.equal(await p.locator('#shadowRow').isVisible(),true,'sunlight off, lamps on: the Shadows switch is still there');
+ await set(null,2);assert.equal(await p.locator('#shadowRow').isVisible(),false,'neither sun nor lamps: nothing to switch');await p.locator('label.switch:has(#sunOn)').click();
  assert.equal(await p.evaluate(()=>!!document.querySelector('.cesium-widget-errorPanel')),false);});
 test('the pivot stays within the model while it is in the middle of the view, though the centre of the view passes over it',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
  await view(p,[15,-70,60],[15,10,34]);                    // the centre of the view clears the roof by 4 m and lands on the ground 190 m away

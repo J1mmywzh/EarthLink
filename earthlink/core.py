@@ -133,27 +133,35 @@ def restore_state(doc):
     return True
 
 
+_SEEN = {}
+
+
 def project_id(doc):
     """This file's project. A copy of a file (Save As, or a duplicate opened beside the original) gets a project of its
     own with the original's saved views and camera; a renamed or moved file keeps its project."""
     pid = _get(doc, "project_id")
     path = getattr(doc, "Path", None) or ""
+    sn = getattr(doc, "RuntimeSerialNumber", None)
+    was = _SEEN.get(sn)                                     # this open document's project when last asked
     if not pid:
         pid = str(uuid.uuid4())
         _put(doc, "project_id", pid)
         if path:
             _put(doc, "project_path", path)
+        _SEEN[sn] = pid
         return pid
     if not path:
+        _SEEN[sn] = pid
         return pid
     stored = _get(doc, "project_path")
     if stored == path:
+        _SEEN[sn] = pid
         return pid
     if env.is_copy(stored, path):
         old, pid = pid, str(uuid.uuid4())
         _put(doc, "project_id", pid)
         try:
-            env.follow_copy(old, pid, project_name(doc))
+            env.follow_copy(old, pid, project_name(doc), shown=(was == old))   # Save As in this session, not a duplicate just opened
             state = _get(doc, "viewer_state")
             if isinstance(state, dict) and isinstance(state.get("view"), dict) and state["view"].get("project") == old:
                 state["view"]["project"] = pid
@@ -161,6 +169,7 @@ def project_id(doc):
         except Exception:
             pass
     _put(doc, "project_path", path)
+    _SEEN[sn] = pid
     return pid
 
 
@@ -286,22 +295,63 @@ def set_objects(doc, name):
     return out
 
 
-def signature(objs):
+def doc_look(doc):
+    """The document's layers and materials as signature() needs them: ({layer index: (colour, material id)}, {material id: hash}).
+    Read once per tick for all live sets."""
+    try:
+        layers = {L.Index: (L.Color.ToArgb(), str(L.RenderMaterial.Id) if L.RenderMaterial else "") for L in doc.Layers if not L.IsDeleted}
+        mats = {str(m.Id): int(m.RenderHash) for m in doc.RenderMaterials}
+        return layers, mats
+    except Exception:
+        return {}, {}
+
+
+def signature(objs, look=None):
     """Changes whenever a set's geometry or look changes. Rhino gives an object with edited geometry a new serial; its
-    attributes are read for what leaves the serial as it is (material, colour, layer); the document's layers and
-    materials are read once for what leaves the object as it is: a layer's colour or material, a material edited in place."""
-    out = []
+    attributes are read for what leaves the serial as it is (material, colour, layer); `look` (doc_look) adds what
+    leaves the object as it is, for the layers and materials this set uses: a layer's colour or material, a material
+    edited in place."""
+    out, used_layers, used_mats = [], set(), set()
     for o in objs:
         a = o.Attributes                                    # fetched once: each access makes a new wrapper
-        out.append((o.RuntimeSerialNumber, a.MaterialIndex, a.LayerIndex, a.ObjectColor.ToArgb(), a.MaterialSource, a.ColorSource))
+        mi, li = a.MaterialIndex, a.LayerIndex
+        out.append((o.RuntimeSerialNumber, mi, li, a.ObjectColor.ToArgb(), a.MaterialSource, a.ColorSource))
+        used_layers.add(li)
+        if mi >= 0 and mi not in used_mats:                 # a material of its own
+            used_mats.add(mi)
+    if objs and look is None:
+        look = doc_look(objs[0].Document)
     if objs:
-        try:
-            doc = objs[0].Document
-            out.append(tuple((L.Color.ToArgb(), str(L.RenderMaterial.Id) if L.RenderMaterial else "") for L in doc.Layers))
-            out.append(tuple((str(m.Id), int(m.RenderHash)) for m in doc.RenderMaterials))
-        except Exception:
-            pass
+        layers, mats = look
+        ids = set(layers.get(i, (0, ""))[1] for i in used_layers)
+        if used_mats:                                       # object materials: resolved once per material index
+            seen = set()
+            for o in objs:
+                mi = o.Attributes.MaterialIndex
+                if mi >= 0 and mi not in seen:
+                    seen.add(mi)
+                    try:
+                        if o.RenderMaterial:
+                            ids.add(str(o.RenderMaterial.Id))
+                    except Exception:
+                        pass
+                    if len(seen) == len(used_mats):
+                        break
+        out.append(tuple(sorted((i, layers.get(i)) for i in used_layers)))
+        out.append(tuple(sorted((m, mats.get(m)) for m in ids if m)))
     return tuple(out)
+
+
+def publish_empty(doc, name):
+    """A set with nothing left to show (all hidden or deleted): the viewer keeps its entry and stops drawing it."""
+    meta = load_meta()
+    entry = (meta.get("sets") or {}).get(name)
+    if entry is None or meta.get("project") != project_id(doc) or entry.get("empty"):
+        return False
+    entry["empty"] = True
+    meta["version"] = int(meta.get("version", 0)) + 1
+    env.write_json(os.path.join(env.live_dir(), "meta.json"), meta)
+    return True
 
 
 # ----------------------------------------------------------------- export (headless document)

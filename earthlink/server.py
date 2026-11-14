@@ -223,9 +223,15 @@ def _context_status():
     with _CONTEXT_LOCK:
         if _CONTEXT.get("state") == "sent":      # Rhino reports back in a small file
             done = env.read_json(env.live_file("context_result.json")) or {}
-            if done.get("file") == _CONTEXT.get("job"):
+            if done.get("file") == _CONTEXT.get("job") and "ok" in done:
                 _CONTEXT.update(state="done" if done.get("ok") else "error", message=done.get("message", ""))
+            elif done.get("file") == _CONTEXT.get("job"):                      # Rhino has picked it up and is adding it: no clock
+                pass
             elif time.time() - _CONTEXT.get("sent_at", time.time()) > 90:      # Rhino is closed, busy or on another file
+                try:                                                           # withdraw it, or Rhino would add it later, beside the next import
+                    os.remove(env.live_file(str(_CONTEXT.get("job"))))
+                except OSError:
+                    pass
                 _CONTEXT.update(state="error", message="Rhino did not answer. Run EarthLinkViewer in Rhino and import again.")
         out = dict(_CONTEXT)
     out.pop("sent_at", None)
@@ -532,7 +538,7 @@ def serve(viewer_dir, port):
                         if alive != rhino:
                             rhino = alive
                             self.wfile.write(("event: rhino\ndata: %s\n\n" % json.dumps({"alive": alive})).encode()); self.wfile.flush()
-                    if time.time() - beat > 15:
+                    if time.time() - beat > 2:               # also how a closed tab is noticed (viewer_open)
                         self.wfile.write(b": keepalive\n\n"); self.wfile.flush()
                         beat = time.time()
                     time.sleep(0.05)

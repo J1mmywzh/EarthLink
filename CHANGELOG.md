@@ -8,10 +8,11 @@
 - The dot beside the file's name is green only while Rhino itself is running the link (amber: the viewer is open but Rhino is not linked). EarthLinkViewer does not open a second tab when the viewer is already open; SendToEarth reopens a closed one.
 - A copy of a file (Save As, or a duplicate opened beside the original) becomes a project of its own and takes the original's views and camera with it; the two no longer overwrite each other's views and sets. A renamed or moved file stays the same project.
 - A Live set follows a material edited in place, a layer's colour or material, and an object moved to another layer (it followed geometry only).
-- Hidden objects and objects on layers that are off are no longer exported; hide or show them and a Live set follows.
-- A new Rhino file keeps the viewer's sunlight on: Rhino's Sun is off by default and used to switch it off on connecting. A Sun that is on in Rhino still sets the viewer's date and time.
+- Hidden objects and objects on layers that are off are no longer exported; hide or show them and a Live set follows. A Live set with everything hidden is no longer drawn.
+- A new Rhino file keeps the viewer's sunlight on: Rhino's Sun is off by default and used to switch it off on connecting. A Sun that is on in Rhino still sets the viewer's date and time. Changing the time in the viewer does not switch Rhino's Sun on.
 - The viewer draws when something changes instead of continuously, which leaves the graphics card to Rhino while you model.
 - A site is picked on the map itself, not on your model standing on it. Enter on a focused Cancel no longer confirms.
+- Surroundings: an import Rhino did not pick up in time is withdrawn (it used to arrive later, beside the next one), and a large import is no longer reported as unanswered while Rhino is adding it. Contours over very steep ground use every second, third... of your interval.
 - Server: set names with accents or non-Latin letters load; file replacement is retried on Windows; a Surroundings import started twice runs once and gives up with a message when Rhino does not answer.
 
 ## 0.2.0-beta.10 — preview, 2026-11-13

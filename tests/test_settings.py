@@ -60,4 +60,12 @@ def test_a_copy_shown_in_the_viewer_stays_shown_with_its_views_and_camera(tmp_pa
     assert env.load_settings()['view']=={'project':'new','cam':[1,2,3]}
     env.save_views('new',[{'name':'Roof'}])
     assert env.follow_copy('old','newer') is False and env.load_views('newer')==[{'name':'Street'}]   # not shown: only the views come along
+    assert env.follow_copy('new','dup','tower copy',shown=False) is False and env.current_project()=='new'   # a duplicate opened beside it does not take its place
+    assert env.load_views('dup')==[{'name':'Roof'}]
     assert env.load_views('new')==[{'name':'Roof'}]
+
+def test_one_file_under_two_names_is_not_a_copy(tmp_path):
+    import os
+    a=tmp_path/'tower.3dm';a.write_text('x');link=tmp_path/'link.3dm';os.symlink(a,link)
+    b=tmp_path/'tower v2.3dm';b.write_text('x')
+    assert not env.is_copy(str(a),str(link)) and env.is_copy(str(a),str(b))

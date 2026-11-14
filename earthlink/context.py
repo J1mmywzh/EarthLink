@@ -490,7 +490,8 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
             lat_of = lambda fj: b["south"] + (b["north"] - b["south"]) * fj / (ny - 1)
             lon_of = lambda fi: b["west"] + (b["east"] - b["west"]) * fi / (nx - 1)
             sea = [[dem.at(lat_of(j), lon_of(i)) for i in range(nx)] for j in range(ny)]
-            step = max(contours, (max(map(max, sea)) - min(map(min, sea))) / 400.0, 0.1)      # never thousands of lines
+            wanted = max(contours, 0.1)
+            step = wanted * max(1, math.ceil((max(map(max, sea)) - min(map(min, sea))) / 400.0 / wanted))   # never thousands of lines: every 2nd, 3rd... of yours
             out["contours"] = contour_lines(nx, ny, lambda i, j: sea[j][i],
                                             lambda fi, fj, e: [round(v, 3) for v in enu(lat_of(fj), lon_of(fi), e + offset, lat0, lon0)], step)
             out["contour_interval"] = round(step, 3)

@@ -369,8 +369,8 @@
   <div id="sunControls">
     <label class="navLabel" for="date">Date</label><input type="date" id="date" aria-label="Date" style="width:100%">
     <label class="navLabel" for="hourT">Time <input type="time" id="hourT" aria-label="Time of day"></label><input type="range" id="hour" aria-label="Time" min="0" max="1439" step="1" style="width:100%">
-    <div class="item"><span class="grow">Shadows</span><label class="switch"><input id="castShadows" type="checkbox" aria-label="Shadows"><span></span></label></div>
   </div>
+  <div class="item" id="shadowRow"><span class="grow">Shadows</span><label class="switch"><input id="castShadows" type="checkbox" aria-label="Shadows"><span></span></label></div>
   <div class="item rhinoOnly"><span class="grow">Sync with Rhino</span><label class="switch"><input type="checkbox" id="syncSun" aria-label="Sync sun with Rhino"><span></span></label></div>
   <div class="item hide" id="lampRow"><span class="grow">Rhino lights <span class="val" id="lampCount"></span></span><label class="switch"><input type="checkbox" id="lampsOn" aria-label="Lights from Rhino"><span></span></label></div>
 </div>
@@ -489,13 +489,15 @@
   let serverUp = false, rhinoUp = false;
   function showLink() { $("dot").className = !RHINO || (serverUp && rhinoUp) ? "live" : serverUp ? "wait" : ""; $("dot").title = !RHINO ? "Shared copy" : serverUp && rhinoUp ? "Linked to Rhino" : "Rhino is not linked: run EarthLinkViewer in Rhino"; }
   let cfg = await api("/api/config");
-  if (!cfg.google_key && !cfg.ion_token && !store.get("skipKeys")) cfg = (await askKeys()) || {};
+  const asked = new URLSearchParams(location.search).get("connect");   // EarthLinkSettings > ConnectMap
+  if (asked) history.replaceState(null, "", location.pathname);
+  if (!cfg.google_key && !cfg.ion_token && (asked || !store.get("skipKeys"))) cfg = (await askKeys()) || {};
   if (cfg.ion_token) Cesium.Ion.defaultAccessToken = cfg.ion_token;
   if (cfg.google_key) Cesium.GoogleMaps.defaultApiKey = cfg.google_key;
   const haveTiles = !!(cfg.google_key || cfg.ion_token);
   const connectMap = async note => { const c = await askKeys(cfg, typeof note === "string" ? note : ""); if (c) location.reload(); };   // the map is opened at start: start again with the new key
   $("mapLink").hidden = haveTiles; $("mapLink").onclick = $("mapEdit").onclick = connectMap;
-  if (new URLSearchParams(location.search).get("connect")) { history.replaceState(null, "", location.pathname); connectMap(); }   // EarthLinkSettings > ConnectMap
+  if (asked && haveTiles) connectMap();   // EarthLinkSettings > ConnectMap
 
   // ---------------------------------------------------------------- viewer
   const viewer = new Cesium.Viewer("cesium", {
@@ -694,6 +696,7 @@
     if(scene.sun)scene.sun.show=on;
     $("sunOn").checked=on;$("castShadows").checked=S.shadows!==false;
     $("sunControls").classList.toggle("hide",!on);$("shadows").classList.toggle("on",on);
+    $("shadowRow").classList.toggle("hide",!on&&$("lampRow").classList.contains("hide"));   // the sun's shadows and the lamps': nothing to switch with neither
   }
   function applySun(fromRhino=false,postEnabled=false){
     clearTimeout(sunPost);sunPost=null;
@@ -704,7 +707,7 @@
     if(S.sun_enabled!==false)viewer.clock.currentTime=Cesium.JulianDate.fromDate(d);
     store.set("date",$("date").value);store.set("hour",m);applyShadows();
     if(!fromRhino){saveS({sun_utc:utc});if(RHINO&&S.sync_sun!==false&&(S.sun_enabled!==false||postEnabled)){
-      const payload={utc,enabled:S.sun_enabled!==false,tz:-d.getTimezoneOffset()};
+      const payload={utc,tz:-d.getTimezoneOffset()};if(postEnabled)payload.enabled=S.sun_enabled!==false;   // a time change must not switch Rhino's Sun on
       sunPost=setTimeout(()=>{sunPost=null;if(S.sync_sun!==false)api("/api/sun",payload).catch(()=>msg("Rhino disconnected."));},postEnabled?0:400);
     }}
   }
@@ -1251,7 +1254,7 @@
     for (const [n, m] of Object.entries(models)) if (m.customShader !== sh) { m.customShader = sh; styleModel(m, n); }
     applyLampShadows();
     const count = (meta?.lights || []).length;
-    $("lampRow").classList.toggle("hide", !count); $("lampCount").textContent = count ? `${count} from Rhino` : "";
+    $("lampRow").classList.toggle("hide", !count); $("shadowRow").classList.toggle("hide", S.sun_enabled === false && !count); $("lampCount").textContent = count ? `${count} from Rhino` : "";
   }
   function applyClip() {
     applyLights();
@@ -1367,14 +1370,17 @@
       } catch (e) { if(generation!==modelGeneration)return;msg(`Could not load “${n}”: ${e.message}`); }
     }
     const hid = hidden();
-    for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
+    for (const n of Object.keys(models)) { models[n].show = !hid.has(n) && !(m.sets[n] || {}).empty; styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
     if (shownProject !== (m.project || "")) {               // a file's first appearance; a later update that overtook it still does this
-      const switched = shownProject !== null; shownProject = m.project || "";
+      const switched = shownProject !== null;
       if (switched && RHINO) {                               // another Rhino file: show it as that file was left
         try { Object.assign(S, await api("/api/settings")); } catch { /* keep what is shown */ }
-        if (generation !== modelGeneration) return;
-        for (const n of Object.keys(models)) { models[n].show = !hidden().has(n); styleModel(models[n], n); }
+        if (generation !== modelGeneration) return;         // overtaken: the newer update does this work
+      }
+      shownProject = m.project || "";
+      if (switched && RHINO) {
+        for (const n of Object.keys(models)) { models[n].show = !hidden().has(n) && !(m.sets[n] || {}).empty; styleModel(models[n], n); }
         renderSets(); placeModels(); showSite(); restyle(); if (S.sun_utc) sunFromUtc(S.sun_utc, S.sun_enabled);
       }
       const left = S.view && S.view.project === m.project && S.view.cam;
@@ -1415,7 +1421,7 @@
     if(walk)walk.exit();
     const hid = hidden(); h ? hid.add(n) : hid.delete(n);
     saveS({ hidden_sets: [...hid] });
-    if (models[n]) models[n].show = !h;
+    if (models[n]) models[n].show = !h && !((meta && meta.sets[n]) || {}).empty;
     renderSets(); applyClip(); applySection();
   }
   $("flipSets").onclick = () => {
@@ -1424,7 +1430,7 @@
     const vis = names.filter(n => !hidden().has(n));
     const next = vis.length === 1 ? names[(names.indexOf(vis[0]) + 1) % names.length] : names[0];
     saveS({ hidden_sets: names.filter(n => n !== next) });
-    names.forEach(n => models[n] && (models[n].show = n === next));
+    names.forEach(n => models[n] && (models[n].show = n === next && !((meta && meta.sets[n]) || {}).empty));
     renderSets(); applyClip(); applySection(); msg(`Showing “${next}”`, 1800);
   };
 

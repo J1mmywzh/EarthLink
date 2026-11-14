@@ -93,8 +93,19 @@ def test_server_runs_the_import_and_hands_it_to_rhino(tmp_path,monkeypatch):
     st=server._context_status();assert st['state']=='sent' and st['counts']['buildings']==2 and st['counts']['roads']==0
     reqs=os.listdir(env.live_file('requests'));req=env.read_json(os.path.join(env.live_file('requests'),reqs[0]))
     assert req['type']=='context' and req['project']=='p1' and os.path.exists(env.live_file(req['file']))
+    server._CONTEXT['sent_at']=time.time()-200                       # long past the wait, but Rhino has picked it up: no clock while it adds
+    env.write_json(env.live_file('context_result.json'),{'file':req['file'],'started':True})
+    assert server._context_status()['state']=='sent' and os.path.exists(env.live_file(req['file']))
     env.write_json(env.live_file('context_result.json'),{'file':req['file'],'ok':True,'message':'Rhino added terrain.'})
     assert server._context_status()=={'state':'done','message':'Rhino added terrain.','job':req['file'],'counts':st['counts'],'progress':0.9}
+
+
+def test_an_import_rhino_never_picked_up_is_withdrawn(tmp_path,monkeypatch):
+    monkeypatch.setattr(env,'data_dir',lambda:str(tmp_path));import os;os.makedirs(env.live_dir(),exist_ok=True)
+    env.write_json(env.live_file('context_7.json'),{'terrain':{}})
+    server._CONTEXT.clear();server._CONTEXT.update(state='sent',job='context_7.json',message='Rhino is adding it',sent_at=time.time()-91)
+    st=server._context_status();assert st['state']=='error' and 'did not answer' in st['message']
+    assert not os.path.exists(env.live_file('context_7.json'))      # Rhino, back later, finds nothing to add beside the next import
 
 
 def osm_map(limit=None):
