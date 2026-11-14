@@ -125,8 +125,11 @@ def restore_state(doc):
     """Give the viewer this file's saved state (called when the file takes over the viewer)."""
     state = _get(doc, "viewer_state")
     if not isinstance(state, dict):
+        # A file with nothing saved starts clean; it must not take over the last file's ground height, hidden sets,
+        # display or sun (and then save them as its own).
+        env.save_settings({k: env.DEFAULTS.get(k) for k in STATE_KEYS})
         return False
-    env.save_settings({k: v for k, v in state.items() if k in STATE_KEYS})
+    env.save_settings(dict({k: env.DEFAULTS.get(k) for k in STATE_KEYS}, **{k: v for k, v in state.items() if k in STATE_KEYS}))
     return True
 
 

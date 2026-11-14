@@ -1322,8 +1322,9 @@
     store.set("camera", { x: p.x, y: p.y, z: p.z, h: viewer.camera.heading, p: viewer.camera.pitch, r: viewer.camera.roll });
     // Rhino keeps the last camera and lens in the file (with the other settings), so the file reopens as it was left.
     clearTimeout(viewSave);
-    if (RHINO && meta?.project && anchor() && !walk) viewSave = setTimeout(() => {
-      if (!meta?.project || walk || $("follow").checked) return;
+    const shown = meta?.project;
+    if (RHINO && shown && anchor() && !walk) viewSave = setTimeout(() => {
+      if (meta?.project !== shown || walk || $("follow").checked) return;   // another file took over meanwhile: its camera is not this one
       const c = captureCamera(""), cam = { projection: c.projection, pos: c.pos, dir: c.dir, up: c.up, vfov: c.vfov, shift: c.shift, half_height: c.half_height };
       saveS({ view: { project: meta.project, cam } });
     }, 4000);

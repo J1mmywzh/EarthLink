@@ -62,11 +62,15 @@
       if (this.kind && now - this.last > GESTURE_GAP) { this.kind = null; this.pend = []; }   // the fingers lifted or rest: the gesture is over
       let fresh = !this.kind;
       if (kind === "pinch" && this.kind !== "pinch") {
-        this.pend = this.pend.filter(q => now - q[0] <= PINCH_WINDOW); this.pend.push([now, Math.abs(e.deltaY) * wheelPx(e)]);
+        // Counted with its sign: drift goes back and forth and cancels, a pinch keeps one direction. During a scroll
+        // only the last PINCH_WINDOW ms count; with the fingers otherwise still, the whole run does, so a slow pinch
+        // starts too (a run ends after GESTURE_GAP without pinch events).
+        const from = this.kind === "scroll" ? PINCH_WINDOW : this.pend.length && now - this.pend[this.pend.length - 1][0] > GESTURE_GAP ? 0 : Infinity;
+        this.pend = this.pend.filter(q => now - q[0] <= from); this.pend.push([now, e.deltaY * wheelPx(e)]);
         // while the fingers are scrolling, the pinch must also outweigh the scroll (1 % of pinch is about 6 px of travel)
         this.flow = this.flow.filter(q => now - q[0] <= PINCH_WINDOW);
         const need = this.kind === "scroll" ? Math.max(PINCH_OVER, this.flow.reduce((a, q) => a + q[1], 0) / 3) : PINCH_START;   // lifting fingers also sends a burst of pinch
-        if (this.pend.reduce((a, q) => a + q[1], 0) < need) return { mode: "none", skip: true, start: false };
+        if (Math.abs(this.pend.reduce((a, q) => a + q[1], 0)) < need) return { mode: "none", skip: true, start: false };
         fresh = true;
       } else if (kind === "scroll" && this.kind === "pinch") {
         if (now - this.last <= TAKEOVER) return { mode: "none", skip: true, start: false };
@@ -379,7 +383,7 @@
       const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), Math.min(pitch, -lim), Math.max(pitch, lim));
       const right = C3.normalize(C3.cross(dir, n, v3()), v3());
       dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
-      pivot = null;
+      pivot = null; held = null;                           // the view turned where it stands: the old turning point is no longer ahead
       setPose(P.pos, dir, P.up);
     }
     function zoom(logFactor) {                             // > 0 zooms out

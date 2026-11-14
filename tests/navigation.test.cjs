@@ -77,6 +77,9 @@ test('a pinch has to be meant: the small pinches of scrolling or resting fingers
   for(let i=0;i<4;i++){t+=16;l.read(pad(0,5),'perspective',t);}
   let took=false;for(let i=0;i<6&&!took;i++){t+=16;took=!l.read(pad(0,-6,{ctrlKey:true}),'perspective',t).skip;}   // a firm pinch right after a flick, its glide still running
   assert.ok(took,'a firm pinch takes over from a scroll that is still running');
+  {const s=new N.WheelLatch();let u=0,began=-1;for(let i=0;i<180&&began<0;i++){u+=16;if(!s.read(pad(0,-0.15,{ctrlKey:true}),'perspective',u).skip)began=i;}
+   assert.ok(began>0&&began<=22,'a slow pinch (9 % a second) starts within a third of a second: '+began);}
+  {const s=new N.WheelLatch();let u=0,any=false;for(let i=0;i<300;i++){u+=16;any=any||!s.read(pad(0,i%2?0.4:-0.4,{ctrlKey:true}),'perspective',u).skip;}assert.equal(any,false,'jitter back and forth never zooms, however long');}
   assert.equal(new N.WheelLatch().read({deltaX:0,deltaY:-100,deltaMode:0,ctrlKey:true,shiftKey:false},'perspective',0).mode,'zoom','Ctrl + mouse wheel zooms from the first notch');
 });
 test('the device is corrected when the first event misleads, and remembered',()=>{
