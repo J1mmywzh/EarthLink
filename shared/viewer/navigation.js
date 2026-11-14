@@ -326,9 +326,29 @@
       if (groundAt) { const d = C3.subtract(pos, groundAt, v3()); moved = C3.magnitude(C3.subtract(d, C3.multiplyByScalar(n, C3.dot(d, n), v3()), d)); }
       groundAt = C3.clone(pos);
       let below = null;                                    // only matters under the upper surface
-      if (top != null && c.height < top + floor.clear) { const u = hooks.ground(new Cesium.Ray(pos, C3.negate(n, v3()))); below = u ? Cesium.Cartographic.fromCartesian(u)?.height ?? null : null; }
+      if (top != null && c.height < top + floor.clear) {
+        const u = hooks.ground(new Cesium.Ray(pos, C3.negate(n, v3()))); below = u ? Cesium.Cartographic.fromCartesian(u)?.height ?? null : null;
+        // Coming down onto something that stands out of its surroundings (a tree, a pole, a chimney): the camera
+        // passes through it, as it does when it meets one from the side. Only ground and broad roofs carry it.
+        if (floor.known && !floor.inside && c.height >= top - 1 && bump(pos, n, top)) floor.inside = true;
+      }
       const h = floor.step(c.height, top, moved, below);
       return h === c.height ? { pos, rests: false } : { pos: C3.add(pos, C3.multiplyByScalar(n, h - c.height, v3()), v3()), rests: true };
+    }
+    // Does the map's surface at `pos` stand at least BUMP m above most of what is around it (BUMP_R m away)?
+    const BUMP = 2.5, BUMP_R = 8;
+    function bump(pos, n, top) {
+      let e = C3.cross(C3.UNIT_Z, n, v3()); if (C3.magnitude(e) < 1e-6) e = C3.cross(C3.UNIT_X, n, v3()); C3.normalize(e, e);
+      const f = C3.cross(n, e, v3()), hs = [];
+      for (let k = 0; k < 6; k++) {
+        const a = k * Math.PI / 3, o = C3.add(C3.multiplyByScalar(e, BUMP_R * Math.cos(a), v3()), C3.multiplyByScalar(f, BUMP_R * Math.sin(a), v3()), v3());
+        const hit = hooks.ground(new Cesium.Ray(C3.add(C3.add(pos, o, v3()), C3.multiplyByScalar(n, 1000, v3()), v3()), C3.negate(n, v3())));
+        const h = hit ? Cesium.Cartographic.fromCartesian(hit)?.height : null;
+        if (h != null) hs.push(h);
+      }
+      if (hs.length < 4) return false;
+      hs.sort((x, y) => x - y);
+      return top - hs[Math.floor(hs.length / 2)] >= BUMP;      // above the upper middle of them: more than half lie lower
     }
     const rotate = (q, v) => Cesium.Matrix3.multiplyByVector(Cesium.Matrix3.fromQuaternion(q), v, v3());
 
