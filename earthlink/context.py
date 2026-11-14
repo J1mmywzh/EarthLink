@@ -1,4 +1,5 @@
-"""Site context from open data, for Rhino: terrain, building massing and roads inside a rectangle.
+"""Site context from open data, for Rhino: terrain, contours, building massing, roads, paths, railways and water inside a
+rectangle, much as CADMapper offers it (roads as centrelines, outlines or surfaces).
 
 Pure Python, run by the local server (never inside Rhino's interface thread). Sources, both free to export:
   * OpenStreetMap (buildings, roads): the map download openstreetmap.org's own Export uses, one request for a
@@ -23,13 +24,27 @@ import zlib
 OSM_MAP = "https://api.openstreetmap.org/api/0.6/map.json?bbox=%.7f,%.7f,%.7f,%.7f"     # west, south, east, north
 OVERPASS = ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
 TERRAIN = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
-ATTRIBUTION = ("Buildings and roads (c) OpenStreetMap contributors, ODbL. "
+ATTRIBUTION = ("Buildings, roads, railways and water (c) OpenStreetMap contributors, ODbL. "
                "Terrain: Terrain Tiles (Mapzen, AWS Open Data; USGS 3DEP, SRTM and other sources).")
 MAX_SIDE, MIN_SIDE = 3000.0, 20.0          # metres
 MAX_ZOOM, GRID = 15, 200                   # elevation tiles stop at zoom 15; at most GRID cells along the longer side
 PAD = 200.0                                # metres of OpenStreetMap asked for around the rectangle (see fetch_osm)
 LEVEL, DEFAULT_HEIGHT = 3.2, 7.0           # metres per storey; height of a building OpenStreetMap gives no height for
 A, E2 = 6378137.0, 6.69437999014e-3        # WGS84
+
+# What an OpenStreetMap line is drawn as. highway value -> (layer, usual width kerb to kerb in metres); a way's own
+# width or lanes tag wins over the usual width. Layers as CADMapper has them: major roads, minor roads and paths.
+ROADS = {"motorway": ("major", 14.0), "trunk": ("major", 12.0), "primary": ("major", 11.0), "secondary": ("major", 10.0),
+         "motorway_link": ("major", 6.0), "trunk_link": ("major", 6.0), "primary_link": ("major", 6.0), "secondary_link": ("major", 6.0),
+         "tertiary": ("minor", 8.0), "tertiary_link": ("minor", 6.0), "residential": ("minor", 7.0), "unclassified": ("minor", 6.0),
+         "living_street": ("minor", 6.0), "road": ("minor", 6.0), "busway": ("minor", 6.0), "service": ("minor", 4.5),
+         "track": ("minor", 3.5), "pedestrian": ("path", 5.0), "footway": ("path", 2.0), "path": ("path", 1.8),
+         "cycleway": ("path", 2.2), "bridleway": ("path", 2.0), "steps": ("path", 2.0), "corridor": ("path", 2.0)}
+LANE = 3.3                                 # metres a lane
+RAILS = {"rail", "light_rail", "subway", "tram", "narrow_gauge", "monorail", "funicular", "preserved", "miniature"}
+WATERWAYS = {"river", "stream", "canal", "drain", "ditch", "brook", "tidal_channel"}
+STYLES = ("lines", "outlines", "surfaces")  # road geometry: centrelines, closed outlines, mesh surfaces
+LIFT = {"major": 0.12, "minor": 0.08, "path": 0.04}   # road surfaces sit this much above the ground, the bigger road on top
 
 
 class ContextError(Exception):
@@ -165,14 +180,46 @@ def zoom_for(lat, cell):
 
 
 # ----------------------------------------------------------------- OpenStreetMap
-def overpass_query(b, buildings, roads):
+def overpass_query(b, buildings, roads, railways=False, water=False):
     box = "(%.7f,%.7f,%.7f,%.7f)" % (b["south"], b["west"], b["north"], b["east"])
     parts = []
     if buildings:
         parts += ['way["building"]%s;' % box, 'relation["building"]["type"="multipolygon"]%s;' % box]
     if roads:
         parts.append('way["highway"]%s;' % box)
+    if railways:
+        parts.append('way["railway"]%s;' % box)
+    if water:
+        for key in ('["natural"="water"]', '["waterway"]', '["landuse"~"^(reservoir|basin)$"]'):
+            parts += ['way%s%s;' % (key, box), 'relation%s%s;' % (key, box)]
     return "[out:json][timeout:40];(%s);out geom tags;" % "".join(parts)
+
+
+def road_kind(tags):
+    """('major' | 'minor' | 'path', width in metres) of an OpenStreetMap way, or None when it is not a road to draw."""
+    k = ROADS.get(tags.get("highway"))
+    if not k:
+        return None
+    w = _number(tags.get("width") or tags.get("est_width"))
+    if not (w and 1.0 <= w <= 60.0):
+        lanes = _number(tags.get("lanes"))
+        w = max(3.0, lanes * LANE) if k[0] != "path" and lanes and 1 <= lanes <= 16 else k[1]
+    return k[0], round(w, 2)
+
+
+def is_railway(tags):
+    return tags.get("railway") in RAILS
+
+
+def is_water(tags):
+    """A water area: lake, pond, river surface, reservoir."""
+    return (tags.get("natural") == "water" or tags.get("waterway") == "riverbank"
+            or tags.get("landuse") in ("reservoir", "basin"))
+
+
+def _straight(tags):
+    """Bridges and tunnels run straight between their ends, not over the valley floor or the hill above them."""
+    return tags.get("bridge") not in (None, "no") or tags.get("tunnel") not in (None, "no")
 
 
 def _number(text):
@@ -303,7 +350,7 @@ def parse_osm(data):
                 ring = _ring(el.get("geometry"))
                 if len(ring) >= 3:
                     buildings.append({"outer": ring, "inners": [], "tags": tags})
-            elif "highway" in tags:
+            elif "highway" in tags or "railway" in tags or tags.get("waterway") in WATERWAYS:
                 pts = [(p["lat"], p["lon"]) for p in el.get("geometry") or [] if p]
                 if len(pts) >= 2:
                     roads.append({"pts": pts, "tags": tags})
@@ -316,6 +363,30 @@ def parse_osm(data):
     return buildings, roads
 
 
+def parse_water(data):
+    """-> water areas [{outer, inners, tags}] with (lat, lon) points, and the ids of water relations that came without
+    all of their outer ways (OpenStreetMap's map download leaves out the parts of a big lake outside the area)."""
+    areas, missing = [], []
+    for el in data.get("elements", []):
+        tags = el.get("tags") or {}
+        if not is_water(tags):
+            continue
+        if el.get("type") == "way":
+            geo = [p for p in el.get("geometry") or [] if p]
+            if len(geo) >= 4 and geo[0] == geo[-1]:
+                areas.append({"outer": _ring(geo), "inners": [], "tags": tags})
+        elif el.get("type") == "relation":
+            members = [m for m in el.get("members", []) if m.get("type") == "way"]
+            if any(not m.get("geometry") for m in members if m.get("role") in ("outer", "")):
+                missing.append(el.get("id"))
+                continue
+            ways = lambda roles: [[(p["lat"], p["lon"]) for p in m.get("geometry") or [] if p] for m in members if m.get("role") in roles]
+            inners = _join(ways(("inner",)))
+            for o in _join(ways(("outer", ""))):
+                areas.append({"outer": o, "inners": [i for i in inners if _inside(i[0], o)], "tags": tags})
+    return areas, missing
+
+
 def _inside(p, ring):
     x, y, hit = p[1], p[0], False
     for i in range(len(ring)):
@@ -325,10 +396,16 @@ def _inside(p, ring):
     return hit
 
 
+def _lerp(p, q, t):
+    return tuple(a + (c - a) * t for a, c in zip(p, q))
+
+
 def clip_line(pts, b):
-    """A (lat, lon) polyline cut to the rectangle: a list of polylines."""
+    """A (lat, lon, ...) polyline cut to the rectangle: a list of polylines. Further values of a point (a distance
+    along the way, say) are interpolated where a line is cut."""
     out, cur = [], []
-    for (la1, lo1), (la2, lo2) in zip(pts, pts[1:]):
+    for p1, p2 in zip(pts, pts[1:]):
+        (la1, lo1), (la2, lo2) = p1[:2], p2[:2]
         t0, t1, dx, dy = 0.0, 1.0, lo2 - lo1, la2 - la1
         for p, q in ((-dx, lo1 - b["west"]), (dx, b["east"] - lo1), (-dy, la1 - b["south"]), (dy, b["north"] - la1)):
             if p == 0:
@@ -346,7 +423,7 @@ def clip_line(pts, b):
                 out.append(cur)
                 cur = []
             continue
-        a, c = (la1 + dy * t0, lo1 + dx * t0), (la1 + dy * t1, lo1 + dx * t1)
+        a, c = _lerp(p1, p2, t0), _lerp(p1, p2, t1)
         if not cur:
             cur = [a]
         cur.append(c)
@@ -356,6 +433,107 @@ def clip_line(pts, b):
     if cur:
         out.append(cur)
     return [l for l in out if len(l) >= 2]
+
+
+def clip_polygon(poly, inside):
+    """A closed polygon cut by half-planes (Sutherland-Hodgman). `inside` are functions f(point) >= 0 inside; values
+    after the first two of a point are interpolated. Returns the points of the part inside, or []."""
+    for f in inside:
+        if not poly:
+            break
+        out = []
+        for i, cur in enumerate(poly):
+            prev = poly[i - 1]
+            fc, fp = f(cur), f(prev)
+            if (fc >= 0) != (fp >= 0):
+                out.append(_lerp(prev, cur, fp / (fp - fc)))
+            if fc >= 0:
+                out.append(cur)
+        poly = out
+    return poly if len(poly) >= 3 else []
+
+
+def clip_ring(ring, b):
+    """A closed (lat, lon) ring cut to the rectangle."""
+    return clip_polygon(list(ring), [lambda p: p[1] - b["west"], lambda p: b["east"] - p[1],
+                                     lambda p: p[0] - b["south"], lambda p: b["north"] - p[0]])
+
+
+def _metres(p, q):
+    return math.hypot((q[0] - p[0]) * 111320.0, (q[1] - p[1]) * 111320.0 * math.cos(math.radians(p[0])))
+
+
+def densify(line, step):
+    """A (lat, lon, ...) polyline with points added so that none is more than `step` metres from the next: a road
+    then follows the ground between the points OpenStreetMap has."""
+    out = [line[0]]
+    for p, q in zip(line, line[1:]):
+        n = int(_metres(p, q) // step)
+        out += [_lerp(p, q, k / (n + 1.0)) for k in range(1, n + 1)]
+        out.append(q)
+    return out
+
+
+# ----------------------------------------------------------------- road outlines and surfaces
+class Mesh(object):
+    """Vertices and faces (3 or 4 indices) cut to a convex site outline; equal points are shared."""
+
+    def __init__(self, inside):
+        self.v, self.f, self._at, self.inside = [], [], {}, inside
+
+    def _index(self, p):
+        key = (round(p[0], 3), round(p[1], 3), round(p[2], 3))
+        i = self._at.get(key)
+        if i is None:
+            i = self._at[key] = len(self.v)
+            self.v.append(list(key))
+        return i
+
+    def add(self, poly):
+        if not all(f(p) >= 0 for f in self.inside for p in poly):
+            poly = clip_polygon(poly, self.inside)
+        if len(poly) < 3:
+            return
+        ids = [self._index(p) for p in poly]
+        ids = [i for k, i in enumerate(ids) if i != ids[k - 1]]
+        if len(ids) in (3, 4):
+            self.f.append(ids)
+        else:
+            self.f += [[ids[0], ids[k], ids[k + 1]] for k in range(1, len(ids) - 1)]
+
+    def disk(self, c, r, n=12):
+        ring = [(c[0] + r * math.cos(2 * math.pi * k / n), c[1] + r * math.sin(2 * math.pi * k / n), c[2]) for k in range(n)]
+        for k in range(n):
+            self.add([c, ring[k], ring[(k + 1) % n]])
+
+    def strip(self, pts, w, lift=0.0):
+        """A road `w` metres wide along a polyline of (x, y, z) points, its cross-section level, with round ends and
+        round outer corners where it turns sharply. Faces point up."""
+        pts = [p for k, p in enumerate(pts) if k == 0 or math.hypot(p[0] - pts[k - 1][0], p[1] - pts[k - 1][1]) > 1e-3]
+        if len(pts) < 2:
+            return
+        dirs = []
+        for p, q in zip(pts, pts[1:]):
+            d = math.hypot(q[0] - p[0], q[1] - p[1])
+            dirs.append(((q[0] - p[0]) / d, (q[1] - p[1]) / d))
+        half, left, right = w / 2.0, [], []
+        for k, p in enumerate(pts):
+            a, b = dirs[max(0, k - 1)], dirs[min(len(dirs) - 1, k)]
+            tx, ty = a[0] + b[0], a[1] + b[1]
+            t = math.hypot(tx, ty)
+            tx, ty = (tx / t, ty / t) if t > 1e-9 else b
+            cos = tx * b[0] + ty * b[1]
+            m = 1.0 / cos if cos > 0.5 else 1.0                # the mitre keeps the width; a sharp turn gets a round corner
+            z = p[2] + lift
+            left.append((p[0] - ty * half * m, p[1] + tx * half * m, z))
+            right.append((p[0] + ty * half * m, p[1] - tx * half * m, z))
+            if k in (0, len(pts) - 1) or cos <= 0.5:
+                self.disk((p[0], p[1], z), half)
+        for k in range(len(pts) - 1):
+            self.add([left[k], right[k], right[k + 1], left[k + 1]])
+
+    def data(self):
+        return {"v": self.v, "f": self.f}
 
 
 # ----------------------------------------------------------------- the build
@@ -418,7 +596,7 @@ def _osm_map(b, fetch, depth=0):
     return out
 
 
-def fetch_osm(b, buildings, roads, fetch=http_get):
+def fetch_osm(b, buildings, roads, fetch=http_get, railways=False, water=False):
     """Buildings and roads in the rectangle, as {"elements": [...]} with each way's points.
 
     A way is only listed when one of its points lies in the area asked for, so the area is PAD metres wider on every
@@ -431,7 +609,7 @@ def fetch_osm(b, buildings, roads, fetch=http_get):
         return {"elements": _osm_map(b, fetch)}
     except Exception as e:                                  # busy or unreachable: the Overpass servers know the same map
         last = e
-    body = urllib.parse.urlencode({"data": overpass_query(b, buildings, roads)}).encode()
+    body = urllib.parse.urlencode({"data": overpass_query(b, buildings, roads, railways, water)}).encode()
     for url in OVERPASS:
         try:
             return json.loads(fetch(url, body).decode("utf-8"))
@@ -440,11 +618,28 @@ def fetch_osm(b, buildings, roads, fetch=http_get):
     raise ContextError("OpenStreetMap could not be reached (%s). Try again in a minute." % (last,))
 
 
+def fetch_relations(ids, fetch=http_get):
+    """Whole relations (all their ways' points) from the Overpass servers, or {"elements": []} when none answers."""
+    ids = [int(i) for i in ids if i is not None][:20]
+    if not ids:
+        return {"elements": []}
+    body = urllib.parse.urlencode({"data": "[out:json][timeout:60];relation(id:%s);out geom tags;" % ",".join(map(str, ids))}).encode()
+    for url in OVERPASS:
+        try:
+            return json.loads(fetch(url, body).decode("utf-8"))
+        except Exception:
+            pass
+    return {"elements": []}
+
+
 def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text, part=None: None,
-          contours=0.0, default_height=DEFAULT_HEIGHT, level_height=LEVEL):
+          contours=0.0, default_height=DEFAULT_HEIGHT, level_height=LEVEL, paths=True, railways=True, water=True,
+          road_style="lines", assume_height=True):
     """The context inside `bounds`, in metres east/north/up of the model base point.
 
-    anchor: the published EarthAnchorPoint (lat, lon, elev, zero). settings: ground_h, nudge, geoid_offset."""
+    anchor: the published EarthAnchorPoint (lat, lon, elev, zero). settings: ground_h, nudge, geoid_offset.
+    road_style: "lines" (centrelines), "outlines" or "surfaces" for roads and paths; railways and rivers are lines.
+    assume_height: a building OpenStreetMap gives no height for gets default_height; otherwise only its footprint."""
     b = check_bounds(bounds)
     if not anchor or anchor.get("lat") is None:
         raise ContextError("Place the model on the map first (SendToEarth).")
@@ -474,7 +669,9 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
     default_height = min(300.0, max(1.0, float(default_height or DEFAULT_HEIGHT)))
     level_height = min(10.0, max(2.0, float(level_height or LEVEL)))
     contours = float(contours or 0.0)
-    out = {"bounds": b, "size": [round(w, 1), round(h, 1)], "attribution": ATTRIBUTION, "terrain": None, "buildings": [], "roads": [], "contours": []}
+    road_style = road_style if road_style in STYLES else "lines"
+    out = {"bounds": b, "size": [round(w, 1), round(h, 1)], "attribution": ATTRIBUTION, "terrain": None, "buildings": [], "roads": [],
+           "railways": [], "water": [], "contours": [], "road_style": road_style}
     if terrain or contours > 0:
         nx, ny = max(2, int(round(w / cell)) + 1), max(2, int(round(h / cell)) + 1)
         pts = []
@@ -495,26 +692,83 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
             out["contours"] = contour_lines(nx, ny, lambda i, j: sea[j][i],
                                             lambda fi, fj, e: [round(v, 3) for v in enu(lat_of(fj), lon_of(fi), e + offset, lat0, lon0)], step)
             out["contour_interval"] = round(step, 3)
-    if buildings or roads:
+    if buildings or roads or paths or railways or water:
         progress("Buildings and roads", 0.55 if terrain else 0.1)
-        found, ways = parse_osm(fetch_osm(b, buildings, roads, fetch))
+        data = fetch_osm(b, buildings, roads or paths, fetch, railways, water)
+        found, ways = parse_osm(data)
+        areas, missing = parse_water(data) if water else ([], [])
+        if missing:                                        # a lake bigger than the area: fetch it whole, then cut it
+            progress("Water", 0.7)
+            areas += parse_water(fetch_relations(missing, fetch))[0]
         progress("Buildings and roads", 0.8)
         for f in (found if buildings else []):
             c = [sum(p[k] for p in f["outer"]) / len(f["outer"]) for k in (0, 1)]
             if not (b["south"] <= c[0] <= b["north"] and b["west"] <= c[1] <= b["east"]):
                 continue                                   # whole buildings only: those centred in the rectangle
             height, assumed = building_height(f["tags"], default_height, level_height)
+            if assumed and not assume_height:
+                height = 0.0                               # only its footprint
             base = min(rel(la, lo) for la, lo in f["outer"])
             flat = lambda ring: [[round(v, 3) for v in enu(la, lo, base, lat0, lon0)[:2]] for la, lo in ring]
             out["buildings"].append({"outer": flat(f["outer"]), "inners": [flat(i) for i in f["inners"]],
                                      "base": round(enu(c[0], c[1], base, lat0, lon0)[2], 3), "height": round(height, 2), "assumed": assumed,
                                      "name": f["tags"].get("name") or f["tags"].get("addr:housenumber", ""),
                                      "tags": {str(k)[:60]: str(v)[:200] for k, v in list(f["tags"].items())[:40]}})
-        for r in (ways if roads else []):
-            for line in clip_line(r["pts"], b):
-                out["roads"].append({"pts": [point(la, lo) for la, lo in line], "kind": r["tags"].get("highway", ""), "name": r["tags"].get("name", ""),
-                                     "tags": {str(k)[:60]: str(v)[:200] for k, v in list(r["tags"].items())[:40]}})
+        step = min(max(cell, 2.0), 10.0)                   # metres between the points of a line, so it follows the ground
+        keep = lambda tags: {str(k)[:60]: str(v)[:200] for k, v in list(tags.items())[:40]}
+        corners = [enu(la, lo, 0.0, lat0, lon0)[:2] for la, lo in ((b["south"], b["west"]), (b["south"], b["east"]),
+                                                                   (b["north"], b["east"]), (b["north"], b["west"]))]
+        inside = [(lambda a, c: lambda p: (c[0] - a[0]) * (p[1] - a[1]) - (c[1] - a[1]) * (p[0] - a[0]))(corners[k], corners[(k + 1) % 4])
+                  for k in range(4)]                       # the rectangle on the ground, counter-clockwise
+        meshes = {}
+        for r in ways:
+            tags = r["tags"]
+            kind = road_kind(tags)
+            if kind:
+                cls, width = kind
+                if not (paths if cls == "path" else roads):
+                    continue
+                into = out["roads"]
+            elif is_railway(tags) and railways:
+                into, cls, width = out["railways"], "rail", 0.0
+            elif tags.get("waterway") in WATERWAYS and water:
+                into, cls, width = out["water"], "waterway", 0.0
+            else:
+                continue
+            full, run = r["pts"], [0.0]
+            for p, q in zip(full, full[1:]):
+                run.append(run[-1] + _metres(p, q))
+            straight = _straight(tags) and run[-1] > 0
+            if straight:
+                z0, z1 = rel(*full[0]), rel(*full[-1])
+            for line in clip_line([(la, lo, s) for (la, lo), s in zip(full, run)], b):
+                pts = [[round(v, 3) for v in enu(la, lo, z0 + (z1 - z0) * s / run[-1] if straight else rel(la, lo), lat0, lon0)]
+                       for la, lo, s in densify(line, step)]
+                item = {"pts": pts, "kind": tags.get("highway") or tags.get("railway") or tags.get("waterway") or "",
+                        "name": tags.get("name", ""), "tags": keep(tags)}
+                if into is out["roads"]:
+                    item.update({"class": cls, "width": width})
+                    if road_style != "lines":
+                        if cls not in meshes:
+                            meshes[cls] = Mesh(inside)
+                        meshes[cls].strip(pts, width, LIFT[cls])
+                into.append(item)
+        if meshes:
+            out["road_meshes"] = {k: m.data() for k, m in meshes.items()}
+        for a in areas:                                    # lakes, ponds and rivers: flat at the water level
+            outer = clip_ring(a["outer"], b)
+            if not outer:
+                continue
+            level = min(rel(la, lo) for la, lo in outer)
+            ring = lambda pts: [[round(v, 3) for v in enu(la, lo, level, lat0, lon0)] for la, lo in pts]
+            name, kind = a["tags"].get("name", ""), a["tags"].get("water") or a["tags"].get("natural") or a["tags"].get("landuse") or "water"
+            out["water"].append({"pts": ring(outer), "closed": True, "kind": kind, "name": name, "tags": keep(a["tags"])})
+            for i in a["inners"]:
+                inner = clip_ring(i, b)
+                if inner:
+                    out["water"].append({"pts": ring(inner), "closed": True, "island": True, "kind": kind, "name": name, "tags": keep(a["tags"])})
     out["counts"] = {"terrain": (out["terrain"]["nx"] - 1) * (out["terrain"]["ny"] - 1) if out["terrain"] else 0,
-                     "buildings": len(out["buildings"]), "assumed": sum(1 for x in out["buildings"] if x["assumed"]), "roads": len(out["roads"]),
-                     "contours": len(out["contours"])}
+                     "buildings": len(out["buildings"]), "assumed": sum(1 for x in out["buildings"] if x["assumed"]),
+                     "roads": sum(1 for r in out["roads"] if r["class"] != "path"), "paths": sum(1 for r in out["roads"] if r["class"] == "path"),
+                     "railways": len(out["railways"]), "water": len(out["water"]), "contours": len(out["contours"]), "road_style": road_style}
     return out

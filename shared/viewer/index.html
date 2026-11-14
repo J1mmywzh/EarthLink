@@ -131,6 +131,9 @@
   .cxSize .s { display: block; font-size: 12px; font-weight: 400; color: var(--fg2); }
   #cxStatus.bad { color: var(--red); }
   #cxMore { margin-top: 10px; font-size: 12.5px; } #cxMore summary { color: var(--fg2); cursor: pointer; } #cxMore .item { padding: 6px 0; }
+  #contextCard .opt { padding: 6px 0; min-height: 0; font-size: 12.5px; } #contextCard .opt + .opt { border-top: 0; }
+  #contextCard .opt label { display: flex; align-items: center; gap: 6px; cursor: pointer; } #contextCard .opt input:disabled { opacity: .45; }
+  #cxStyleSeg { display: flex; width: 100%; } #cxStyleSeg button { flex: 1; }  #contextCard [hidden] { display: none !important; } #contextCard .opt input[type=checkbox] { margin: 0; }
   .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
@@ -296,15 +299,22 @@
 <div id="contextCard" class="glass pop">
   <h3>Surroundings to Rhino <button class="mini" data-close="contextCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
   <div class="cxSize" id="cxSize">Click two corners on the map</div>
-  <div class="row" style="margin-top:10px">
+  <div class="lbl">Include</div>
+  <div class="row" style="flex-wrap:wrap; gap:6px">
     <label class="chip"><input type="checkbox" id="cxTerrain" checked>Terrain</label>
+    <label class="chip"><input type="checkbox" id="cxContours">Contours</label>
     <label class="chip"><input type="checkbox" id="cxBuildings" checked>Buildings</label>
     <label class="chip"><input type="checkbox" id="cxRoads" checked>Roads</label>
-    <label class="chip"><input type="checkbox" id="cxContours">Contours</label>
+    <label class="chip"><input type="checkbox" id="cxPaths" checked>Paths</label>
+    <label class="chip"><input type="checkbox" id="cxRail" checked>Railways</label>
+    <label class="chip"><input type="checkbox" id="cxWater" checked>Water</label>
+  </div>
+  <div class="item opt" id="cxContourRow"><span class="grow">Contours every</span><input type="number" id="cxInterval" class="typed" min="0.1" max="100" step="0.5" value="1" aria-label="Contour interval"><span class="val">m</span></div>
+  <div class="item opt" id="cxHeightRow"><label class="grow"><input type="checkbox" id="cxAssume" checked>Height when none is known</label><input type="number" id="cxHeight" class="typed" min="1" max="300" step="0.5" value="7" aria-label="Height when none is known"><span class="val">m</span></div>
+  <div id="cxRoadRow"><div class="lbl">Roads and paths as</div>
+    <div class="seg" id="cxStyleSeg" role="group" aria-label="Road geometry"><button data-v="lines" title="One line along the middle of each road">Centerlines</button><button data-v="outlines" title="The edges of the roads, joined where they meet">Outlines</button><button data-v="surfaces" title="Road surfaces as meshes, on the ground">Surfaces</button></div>
   </div>
   <details id="cxMore"><summary>Options</summary>
-    <div class="item"><span class="grow">Contour interval</span><input type="number" id="cxInterval" class="typed" min="0.1" max="100" step="0.5" value="1"><span class="val">m</span></div>
-    <div class="item"><span class="grow">Height when unknown</span><input type="number" id="cxHeight" class="typed" min="1" max="300" step="0.5" value="7"><span class="val">m</span></div>
     <div class="item"><span class="grow">Storey height</span><input type="number" id="cxLevel" class="typed" min="2" max="10" step="0.1" value="3.2"><span class="val">m</span></div>
   </details>
   <div class="bar" id="cxBar" hidden><i></i></div>
@@ -2055,6 +2065,7 @@
      buildings and roads, open elevation tiles) and Rhino adds it as terrain, massing and road lines, in place.
      Google's map itself is never exported: its terms forbid it. Nothing is fetched until Import is pressed. */
   const CX = { max: 3000, min: 20 };                         // metres a side: the server's limits
+  const CX_KINDS = [["cxTerrain", "terrain"], ["cxContours", "contours"], ["cxBuildings", "buildings"], ["cxRoads", "roads"], ["cxPaths", "paths"], ["cxRail", "railways"], ["cxWater", "water"]];
   const cxOpen = () => $("contextCard").classList.contains("open");
   function cxPoint(pos) {                                     // the map point under the mouse (the site's ground plane without a map)
     let p = mapPoint(pos) || (scene.pickPositionSupported && tileset ? scene.pickPosition(pos) : undefined);
@@ -2083,7 +2094,9 @@
     $("cxSize").classList.toggle("none", !size || big || small);
     $("cxSize").innerHTML = !size ? (cx.a ? "Click the opposite corner" : "Click two corners on the map") : big ? `Too large (limit ${CX.max / 1000} km a side)` : small ? `Too small (at least ${CX.min} m a side)`
       : `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
-    const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked || $("cxContours").checked;
+    const any = CX_KINDS.some(([id]) => $(id).checked);
+    $("cxContourRow").hidden = !$("cxContours").checked; $("cxHeightRow").hidden = !$("cxBuildings").checked;
+    $("cxRoadRow").hidden = !$("cxRoads").checked && !$("cxPaths").checked; $("cxHeight").disabled = !$("cxAssume").checked;
     $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
     if (status !== undefined) { $("cxStatus").textContent = status; $("cxStatus").classList.toggle("bad", !!bad); }
     $("cxBar").hidden = !cx.busy;
@@ -2105,9 +2118,15 @@
     cxSync(cx.busy ? undefined : "");
   }
   $("contextBtn").onclick = () => toggleContext(!cxOpen());
-  $("cxTerrain").onchange = $("cxBuildings").onchange = $("cxRoads").onchange = $("cxContours").onchange = () => cxSync();
-  { const o = store.get("contextOptions") || {};            // the panel's options are remembered
-    for (const [id, k] of [["cxInterval", "interval"], ["cxHeight", "height"], ["cxLevel", "level"]]) { if (o[k] > 0) $(id).value = o[k]; $(id).onchange = () => store.set("contextOptions", { interval: +$("cxInterval").value, height: +$("cxHeight").value, level: +$("cxLevel").value }); } }
+  // The panel's choices are remembered: what to include, the road geometry (as CADMapper offers it: centerlines,
+  // outlines or surfaces), the contour interval and the height of a building OpenStreetMap gives none for.
+  const cxOpts = Object.assign({ style: "lines", assume: true }, store.get("contextOptions") || {});
+  const cxSave = () => store.set("contextOptions", Object.assign(cxOpts, { interval: +$("cxInterval").value, height: +$("cxHeight").value, level: +$("cxLevel").value,
+    assume: $("cxAssume").checked, include: Object.fromEntries(CX_KINDS.map(([id, k]) => [k, $(id).checked])) }));
+  for (const [id, k] of [["cxInterval", "interval"], ["cxHeight", "height"], ["cxLevel", "level"]]) { if (cxOpts[k] > 0) $(id).value = cxOpts[k]; $(id).onchange = cxSave; }
+  for (const [id, k] of CX_KINDS) { if (cxOpts.include && typeof cxOpts.include[k] === "boolean") $(id).checked = cxOpts.include[k]; $(id).onchange = () => { cxSave(); cxSync(); }; }
+  $("cxAssume").checked = cxOpts.assume !== false; $("cxAssume").onchange = () => { cxSave(); cxSync(); };
+  seg("cxStyleSeg", ["lines", "outlines", "surfaces"].includes(cxOpts.style) ? cxOpts.style : "lines", v => { cxOpts.style = v; cxSave(); });
   // The rectangle: click one corner, then the opposite one (two fingers on a trackpad move the map, so nothing is
   // dragged there). Pressing and dragging with a mouse draws it in one go. A further click starts a new one.
   const cxHandler = new Cesium.ScreenSpaceEventHandler(scene.canvas), cxBlue = Cesium.Color.fromCssColorString("#0a84ff");
@@ -2136,13 +2155,15 @@
     if (e.key !== "Escape" || !cxOpen() || !cx.drag) return;
     cx.drag = false; cx.a = cx.b = null; cx.down = null; cxSync(""); scene.requestRender(); e.stopPropagation();
   }, true);
-  const cxWords = c => c ? [c.terrain && "terrain", c.buildings && `${c.buildings} building${c.buildings === 1 ? "" : "s"}`, c.roads && `${c.roads} road line${c.roads === 1 ? "" : "s"}`, c.contours && `${c.contours} contour line${c.contours === 1 ? "" : "s"}`].filter(Boolean).join(", ") : "";
+  const cxMany = (n, one, more) => n ? `${n.toLocaleString()} ${n === 1 ? one : more || one + "s"}` : "";
+  const cxWords = c => c ? [c.terrain && "terrain", cxMany(c.buildings, "building"), cxMany(c.roads, "road"), cxMany(c.paths, "path"),
+    cxMany(c.railways, "railway"), cxMany(c.water, "water feature"), cxMany(c.contours, "contour line")].filter(Boolean).join(", ") : "";
   async function cxWatch() {                                  // follow the import: the server fetches, then Rhino adds
     clearTimeout(cx.timer);
     let r; try { r = await api("/api/context"); } catch { r = { state: "error", message: "Rhino is not answering." }; }
     if (r.state === "working" || r.state === "sent") {
       $("cxBar").firstElementChild.style.width = Math.round(100 * Math.max(0.03, Math.min(1, r.progress ?? (r.state === "sent" ? 0.9 : 0.1)))) + "%";
-      cxSync(r.state === "sent" ? "Adding to Rhino" : r.message || "Working");
+      cxSync(r.state === "sent" ? (cxWords(r.counts) ? `Adding ${cxWords(r.counts)} to Rhino` : "Adding to Rhino") : r.message || "Working");
       cx.timer = setTimeout(cxWatch, 400); return;
     }
     $("cxBar").firstElementChild.style.width = "100%";
@@ -2155,6 +2176,7 @@
     const b = cxBounds(); if (!b || cx.busy) return;
     cx.busy = true; $("cxBar").firstElementChild.style.width = "3%"; cxSync("Starting");
     let r; try { r = await api("/api/context", { bounds: b, terrain: $("cxTerrain").checked, buildings: $("cxBuildings").checked, roads: $("cxRoads").checked,
+      paths: $("cxPaths").checked, railways: $("cxRail").checked, water: $("cxWater").checked, road_style: cxOpts.style || "lines", assume_height: $("cxAssume").checked,
       contours: $("cxContours").checked ? Math.max(0.1, +$("cxInterval").value || 1) : 0, default_height: +$("cxHeight").value || 7, level_height: +$("cxLevel").value || 3.2 }); } catch { r = { state: "error", message: "Rhino is not answering." }; }
     if (r.state === "error") { cx.busy = false; return cxSync(r.message || "The import could not start.", true); }
     cxWatch();

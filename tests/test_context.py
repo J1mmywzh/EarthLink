@@ -44,7 +44,7 @@ def test_flat_ground_lands_on_the_site_ground_and_curves_with_the_earth():
     assert abs(centre[2])<0.01,'the terrain passes through the site ground at the site location'
     corner=pts[0];assert corner[0]==pytest.approx(-123.4,abs=0.3) and corner[1]==pytest.approx(-111.1,abs=0.3)
     assert -0.01<corner[2]<0,'166 m away the ground is 2 mm lower: the Earth curves, as the map does'
-    assert out['attribution'].startswith('Buildings and roads (c) OpenStreetMap')
+    assert out['attribution'].startswith('Buildings, roads, railways and water (c) OpenStreetMap')
 
 def test_sloping_ground_buildings_and_roads():
     out=C.build(BOUNDS,ANCHOR,{},fetch=world(slope=0.1))
@@ -176,3 +176,107 @@ def test_contour_lines_close_around_a_hill():
     assert [l['elevation'] for l in lines]==[-4.0,-2.0,0.0,2.0,4.0,6.0,8.0] or len(lines)>=5
     ring=[l for l in lines if l['elevation']==6.0];assert len(ring)==1,'one closed ring per height'
     p=ring[0]['pts'];assert abs(p[0][0]-p[-1][0])<1e-6 and abs(p[0][1]-p[-1][1])<1e-6 and all(abs(((q[0]-10)**2+(q[1]-10)**2)**0.5-4.0)<0.35 for q in p)
+
+
+def lines_world(slope=0.0, extra=()):
+    """world(), with a primary road, a footway, a bridge over a 20 m deep dip, a railway, a stream, a pond and a lake
+    that OpenStreetMap's map download gives only in part (its relation is fetched whole from Overpass)."""
+    base=world(slope)
+    E=lambda *p:[{'lat':LAT+a,'lon':LON+b} for a,b in p]
+    lake=E((-0.003,-0.003),(-0.003,0.0005),(-0.0006,0.0005),(-0.0006,-0.003),(-0.003,-0.003))
+    island=E((-0.0009,-0.0005),(-0.0009,-0.0003),(-0.0007,-0.0003),(-0.0007,-0.0005),(-0.0009,-0.0005))
+    calls=[]
+    def fetch(url,data=None,timeout=0):
+        calls.append((url,data))
+        if 'terrarium' in url:
+            z,x,y=[int(v) for v in url.split('terrarium/')[1][:-4].split('/')]
+            def px(i,j):
+                n=2.0**z;lat=math.degrees(math.atan(math.sinh(math.pi*(1-2*(y+(j+0.5)/256)/n))));lon=(x+(i+0.5)/256)/n*360-180
+                dip=-20.0 if abs(lat-(LAT+0.0005))<0.00012 else 0.0          # a gorge running east-west north of the site
+                return terrarium(250.0+slope*(lat-LAT)*111000.0+dip)
+            return png(256,256,px)
+        if 'api.openstreetmap.org' in url:raise OSError('unreachable')
+        if data and b'relation%28id' in data:                  # the lake, whole
+            return json.dumps({'elements':[{'type':'relation','id':77,'tags':{'natural':'water','name':'Lake'},'members':[
+                {'type':'way','role':'outer','geometry':lake},{'type':'way','role':'inner','geometry':island}]}]}).encode()
+        els=json.loads(base(url,data))['elements']+[
+            {'type':'way','id':10,'tags':{'highway':'primary','lanes':'4'},'geometry':E((-0.0003,-0.01),(-0.0003,0.01))},
+            {'type':'way','id':11,'tags':{'highway':'footway'},'geometry':E((-0.0009,-0.0005),(0.0009,-0.0005))},
+            {'type':'way','id':12,'tags':{'highway':'tertiary','bridge':'yes','width':'9'},'geometry':E((0.0002,0.0008),(0.0008,0.0008))},
+            {'type':'way','id':13,'tags':{'highway':'construction'},'geometry':E((0,0),(0.0005,0.0005))},
+            {'type':'way','id':14,'tags':{'railway':'rail','name':'Line'},'geometry':E((0.0009,-0.01),(0.0009,0.01))},
+            {'type':'way','id':15,'tags':{'railway':'abandoned'},'geometry':E((0.0008,-0.01),(0.0008,0.01))},
+            {'type':'way','id':16,'tags':{'waterway':'stream'},'geometry':E((-0.001,0.001),(0.001,0.0012))},
+            {'type':'way','id':17,'tags':{'natural':'water','water':'pond'},'geometry':E((0.0003,0.001),(0.0003,0.0012),(0.0005,0.0012),(0.0005,0.001),(0.0003,0.001))},
+            {'type':'relation','id':77,'tags':{'natural':'water'},'members':[{'type':'way','role':'outer','geometry':[]}]}]+list(extra)
+        return json.dumps({'elements':els}).encode()
+    return fetch,calls
+
+def test_roads_are_sorted_like_cadmapper_with_their_widths_and_rails_and_water_on_their_own():
+    fetch,calls=lines_world()
+    out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False)
+    by={r['kind']:r for r in out['roads']}
+    assert set(by)=={'residential','primary','footway','tertiary'},'a road under construction is left out'
+    assert by['primary']['class']=='major' and by['primary']['width']==pytest.approx(13.2),'four lanes'
+    assert by['residential']['class']=='minor' and by['residential']['width']==7.0 and by['footway']['class']=='path'
+    assert by['tertiary']['width']==9.0,'a width OpenStreetMap gives wins'
+    assert out['counts']['roads']==3 and out['counts']['paths']==1
+    pts=by['residential']['pts'];assert len(pts)>=100 and max(math.hypot(q[0]-p[0],q[1]-p[1]) for p,q in zip(pts,pts[1:]))<=2.01,'lines get points every few metres, to follow the ground'
+    bridge=by['tertiary']['pts'];assert max(abs(p[2]) for p in bridge)<0.05,'a bridge runs straight between its ends, over the dip'
+    assert min(p[2] for p in by['footway']['pts'])<-15 and max(abs(p[2]) for p in out['railways'][0]['pts'])<0.05,'other lines follow the ground, down into the dip'
+    assert [r['kind'] for r in out['railways']]==['rail'] and out['railways'][0]['name']=='Line','an abandoned line is left out'
+    stream=[w for w in out['water'] if not w.get('closed')];assert len(stream)==1 and stream[0]['kind']=='stream'
+    pond=[w for w in out['water'] if w.get('kind')=='pond'];assert len(pond)==1 and len(pond[0]['pts'])==4
+    lake=[w for w in out['water'] if w.get('name')=='Lake' and not w.get('island')]
+    assert len(lake)==1 and any(b'relation%28id%3A77' in (d or b'') for u,d in calls),'the lake is fetched whole'
+    xs=[p[0] for p in lake[0]['pts']];ys=[p[1] for p in lake[0]['pts']]
+    assert min(xs)==pytest.approx(-123.4,abs=0.3) and min(ys)==pytest.approx(-111.1,abs=0.3),'and cut at the rectangle'
+    assert max(p[2] for p in lake[0]['pts'])-min(p[2] for p in lake[0]['pts'])<0.01,'flat, at the water level (but for the curve of the Earth)'
+    assert any(w.get('island') for w in out['water']),'an island stays an island'
+    only=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,paths=False,railways=False,water=False)
+    assert {r['class'] for r in only['roads']}=={'major','minor'} and only['railways']==[] and only['water']==[]
+    q=C.overpass_query(BOUNDS,True,True,True,True);assert '["railway"]' in q and '["natural"="water"]' in q
+
+def test_road_outlines_and_surfaces_are_meshes_cut_to_the_rectangle():
+    fetch,_=lines_world(slope=0.05)
+    lines=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False)
+    assert 'road_meshes' not in lines and lines['road_style']=='lines'
+    out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,road_style='surfaces')
+    assert out['road_style']=='surfaces' and set(out['road_meshes'])=={'major','minor','path'}
+    for cls,m in out['road_meshes'].items():
+        v,f=m['v'],m['f'];assert v and f and all(len(x) in (3,4) and max(x)<len(v) for x in f)
+        assert all(-123.5<=p[0]<=123.5 and -111.2<=p[1]<=111.2 for p in v),'nothing beyond the rectangle'
+        for x in f:                                          # faces point up
+            a,b,c=(v[i] for i in x[:3]);assert (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])>=-1e-6
+    major=out['road_meshes']['major']['v'];ys=sorted({round(p[1],1) for p in major})
+    road_y=out['roads'][[r['kind'] for r in out['roads']].index('primary')]['pts'][0][1]
+    assert max(ys)-min(ys)==pytest.approx(13.2,abs=0.05) and (max(ys)+min(ys))/2==pytest.approx(road_y,abs=0.05),'as wide as the road, on its line'
+    centre=min(major,key=lambda p:abs(p[0]));assert centre[2]==pytest.approx(0.05*road_y+C.LIFT['major'],abs=0.05),'level across, at the height of its line, a little above the ground'
+    outl=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,road_style='outlines')
+    assert outl['road_meshes'].keys()==out['road_meshes'].keys(),'Rhino draws outlines around the same surfaces'
+
+def test_strip_turns_and_ends():
+    m=C.Mesh([]);m.strip([(0,0,0),(10,0,0),(10,10,1)],4.0)
+    xs=[p[0] for p in m.v];ys=[p[1] for p in m.v]
+    assert min(xs)==pytest.approx(-2) and max(xs)==pytest.approx(12) and max(ys)==pytest.approx(12),'round ends: half the width beyond each end'
+    corner=[p for p in m.v if p[0]>11.9 and p[1]<-1.9];assert corner,'the outer corner is mitred, the road keeps its width'
+    sharp=C.Mesh([]);sharp.strip([(0,0,0),(10,0,0),(0,1,0)],2.0);assert max(p[0] for p in sharp.v)<=11.01,'a hairpin gets a round corner, no spike'
+    assert C.clip_ring([(0,-5),(0,5),(5,5),(5,-5)],{'west':-1,'east':1,'south':-1,'north':1})==[(0,-1.0),(0,1.0),(1.0,1.0),(1.0,-1.0)] or len(C.clip_ring([(0,-5),(0,5),(5,5),(5,-5)],{'west':-1,'east':1,'south':-1,'north':1}))==4
+
+def test_buildings_without_a_known_height_can_stay_footprints():
+    out=C.build(BOUNDS,ANCHOR,{},fetch=world(),terrain=False,roads=False,assume_height=False)
+    hall,other=out['buildings'];assert hall['height']==pytest.approx(12.8) and other['assumed'] and other['height']==0.0
+
+def test_the_panels_choices_reach_the_build(tmp_path,monkeypatch):
+    monkeypatch.setattr(env,'data_dir',lambda:str(tmp_path));import os;os.makedirs(env.live_dir(),exist_ok=True);env.write_json(env.live_file('meta.json'),{'anchor':ANCHOR,'project':'p'})
+    seen=[]
+    def build(b,a,s,progress,**want):
+        seen.append(want);raise C.ContextError('stop here')
+    for n,ask in enumerate(({'road_style':'outlines','paths':False,'water':False,'assume_height':False},{'road_style':'zigzag'})):
+        server._CONTEXT.clear();server._context_start(dict(ask,bounds=BOUNDS),build=build)
+        for _ in range(100):
+            if len(seen)>n:break
+            time.sleep(0.02)
+    a,b=seen
+    assert a['road_style']=='outlines' and a['paths'] is False and a['water'] is False and a['assume_height'] is False and a['railways'] is True
+    assert b['road_style']=='lines' and b['paths'] and b['water'] and b['assume_height'],'anything else: centrelines, everything in'

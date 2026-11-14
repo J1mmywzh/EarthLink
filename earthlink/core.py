@@ -392,6 +392,7 @@ def _display_color(doc, obj, parent_obj=None):
 
 # ----------------------------------------------------------------- site context from open data
 CONTEXT_LAYER = "EarthLink Context"
+ROAD_LAYERS = {"major": ("Major roads", (55, 55, 60)), "minor": ("Minor roads", (100, 100, 105)), "path": ("Paths", (150, 135, 110))}
 
 
 def _layer(doc, path, color):
@@ -414,8 +415,10 @@ def _layer(doc, path, color):
 
 
 def add_context(doc, data):
-    """Add terrain, buildings and roads from context.build() to the document, on EarthLink Context layers, as one
-    undo step. `data` is in metres east/north/up of the model base point. Returns what was added, as a sentence."""
+    """Add terrain, contours, buildings, roads, paths, railways and water from context.build() to the document, on
+    EarthLink Context layers (one for each kind, as CADMapper has them), as one undo step. Roads come as centrelines,
+    closed outlines or mesh surfaces (data["road_style"]). `data` is in metres east/north/up of the model base point.
+    Returns what was added, as a sentence."""
     scale = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, doc.ModelUnitSystem)
     ok, inv = enu_transform(doc).TryGetInverse()
     if not ok:
@@ -424,7 +427,14 @@ def add_context(doc, data):
     tol = doc.ModelAbsoluteTolerance
     C = System.Drawing.Color
     undo = doc.BeginUndoRecord("EarthLink context")
-    ids, counts = [], {"terrain": 0, "buildings": 0, "roads": 0, "contours": 0}
+    ids = []
+    counts = {"terrain": 0, "buildings": 0, "footprints": 0, "roads": 0, "paths": 0, "outlines": 0, "surfaces": 0,
+              "railways": 0, "water": 0, "contours": 0}
+    origin = inv * rg.Point3d(0, 0, 0)
+    up = (inv * rg.Point3d(0, 0, 1)) - origin
+    up.Unitize()
+    ground = rg.Plane(origin, up)                         # the site's level plane, in model coordinates
+    poly = lambda pts, closed=False: rg.PolylineCurve(pts + [pts[0]] if closed else pts)
     try:
         note = lambda a, kind: (a.SetUserString("EarthLink", "context"), a.SetUserString("source", kind))
 
@@ -451,7 +461,7 @@ def add_context(doc, data):
             ids.append(doc.Objects.AddMesh(mesh, at))
             counts["terrain"] = mesh.Faces.Count
         for b in data.get("buildings") or []:
-            base, up = b.get("base", 0.0), b.get("height", 0.0)
+            base, up_ = b.get("base", 0.0), b.get("height", 0.0)
             loops = []
             for ring in [b["outer"]] + list(b.get("inners") or []):
                 pts = [pt((p[0], p[1], base)) for p in ring]
@@ -459,7 +469,16 @@ def add_context(doc, data):
                     loops.append(rg.Polyline(pts + [pts[0]]).ToNurbsCurve())
             if not loops:
                 continue
-            path = rg.LineCurve(pt((0, 0, base)), pt((0, 0, base + up)))
+            if up_ <= 0:                                  # no height known and none to be assumed: the footprint only
+                at = Rhino.DocObjects.ObjectAttributes()
+                at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Buildings (footprint only)", C.FromArgb(150, 150, 145)), b.get("name") or ""
+                note(at, "OpenStreetMap")
+                tags(at, b)
+                for loop in loops:
+                    ids.append(doc.Objects.AddCurve(loop, at))
+                counts["footprints"] += 1
+                continue
+            path = rg.LineCurve(pt((0, 0, base)), pt((0, 0, base + up_)))
             path.Translate(loops[0].PointAtStart - path.PointAtStart)
             solid = None
             faces = rg.Brep.CreatePlanarBreps(System.Array[rg.Curve](loops), tol)
@@ -473,22 +492,87 @@ def add_context(doc, data):
             layer = "::Buildings (height assumed)" if b.get("assumed") else "::Buildings"
             at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + layer, C.FromArgb(200, 200, 195)), b.get("name") or ""
             note(at, "OpenStreetMap")
-            at.SetUserString("height_m", "%.2f" % up)
+            at.SetUserString("height_m", "%.2f" % up_)
             tags(at, b)
             ids.append(doc.Objects.AddBrep(solid, at))
             counts["buildings"] += 1
-        for r in data.get("roads") or []:
+        style = data.get("road_style") or "lines"
+        road_layer = lambda cls: _layer(doc, CONTEXT_LAYER + "::" + ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0],
+                                        C.FromArgb(*ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[1]))
+        for r in (data.get("roads") or []) if style == "lines" else []:
             pts = [pt(p) for p in r["pts"]]
             if len(pts) < 2:
                 continue
             at = Rhino.DocObjects.ObjectAttributes()
-            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Roads", C.FromArgb(90, 90, 95)), r.get("name") or r.get("kind") or ""
+            at.LayerIndex, at.Name = road_layer(r.get("class")), r.get("name") or r.get("kind") or ""
             note(at, "OpenStreetMap")
             if r.get("kind"):
                 at.SetUserString("highway", r["kind"])
+            if r.get("width"):
+                at.SetUserString("width_m", "%g" % r["width"])
             tags(at, r)
-            ids.append(doc.Objects.AddCurve(rg.Polyline(pts).ToNurbsCurve(), at))
-            counts["roads"] += 1
+            ids.append(doc.Objects.AddCurve(poly(pts), at))
+            counts["paths" if r.get("class") == "path" else "roads"] += 1
+        for cls, m in sorted((data.get("road_meshes") or {}).items()) if style != "lines" else []:
+            mesh = rg.Mesh()
+            for v in m.get("v") or []:
+                mesh.Vertices.Add(pt(v))
+            for f in m.get("f") or []:
+                if len(f) == 4:
+                    mesh.Faces.AddFace(f[0], f[1], f[2], f[3])
+                elif len(f) == 3:
+                    mesh.Faces.AddFace(f[0], f[1], f[2])
+            if mesh.Faces.Count == 0:
+                continue
+            mesh.Normals.ComputeNormals()
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex = road_layer(cls)
+            note(at, "OpenStreetMap")
+            if style == "surfaces":
+                at.Name = ROAD_LAYERS.get(cls, ROAD_LAYERS["minor"])[0]
+                ids.append(doc.Objects.AddMesh(mesh, at))
+                counts["surfaces"] += 1
+                continue
+            # Outlines: the roads' surfaces seen from above, merged where they meet (Rhino's mesh outline), then laid
+            # back onto the surfaces, so each outline follows the ground as its road does.
+            flat = mesh.DuplicateMesh()
+            flat.Transform(rg.Transform.PlanarProjection(ground))
+            for loop in mesh.GetOutlines(ground) or []:
+                pts = []
+                for p in loop:
+                    mp = flat.ClosestMeshPoint(p, 0.0)
+                    pts.append(mesh.PointAt(mp) if mp is not None else p)
+                line = rg.Polyline(pts)
+                if line.Count < 4:
+                    continue
+                line.ReduceSegments(0.005 * scale)
+                at.Name = "outline"
+                ids.append(doc.Objects.AddCurve(rg.PolylineCurve(line), at))
+                counts["outlines"] += 1
+        for r in data.get("railways") or []:
+            pts = [pt(p) for p in r["pts"]]
+            if len(pts) < 2:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Railways", C.FromArgb(120, 75, 60)), r.get("name") or r.get("kind") or ""
+            note(at, "OpenStreetMap")
+            at.SetUserString("railway", r.get("kind") or "")
+            tags(at, r)
+            ids.append(doc.Objects.AddCurve(poly(pts), at))
+            counts["railways"] += 1
+        for w in data.get("water") or []:
+            pts = [pt(p) for p in w["pts"]]
+            if len(pts) < (3 if w.get("closed") else 2):
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Water", C.FromArgb(70, 130, 200)), w.get("name") or w.get("kind") or ""
+            note(at, "OpenStreetMap")
+            at.SetUserString("water", w.get("kind") or "")
+            if w.get("island"):
+                at.SetUserString("island", "yes")
+            tags(at, w)
+            ids.append(doc.Objects.AddCurve(poly(pts, bool(w.get("closed"))), at))
+            counts["water"] += 1
         step = data.get("contour_interval") or 0
         for c in data.get("contours") or []:
             pts = [pt(p) for p in c["pts"]]
@@ -510,15 +594,28 @@ def add_context(doc, data):
     finally:
         doc.EndUndoRecord(undo)
     doc.Views.Redraw()
+    many = lambda n, one, more=None: "%d %s" % (n, one if n == 1 else (more or one + "s"))
     parts = []
     if counts["terrain"]:
         parts.append("terrain (%d faces)" % counts["terrain"])
     if counts["buildings"]:
-        parts.append("%d building%s" % (counts["buildings"], "" if counts["buildings"] == 1 else "s"))
+        parts.append(many(counts["buildings"], "building"))
+    if counts["footprints"]:
+        parts.append(many(counts["footprints"], "building footprint"))
     if counts["roads"]:
-        parts.append("%d road line%s" % (counts["roads"], "" if counts["roads"] == 1 else "s"))
+        parts.append(many(counts["roads"], "road line"))
+    if counts["paths"]:
+        parts.append(many(counts["paths"], "path line"))
+    if counts["outlines"]:
+        parts.append(many(counts["outlines"], "road outline"))
+    if counts["surfaces"]:
+        parts.append(many(counts["surfaces"], "road surface"))
+    if counts["railways"]:
+        parts.append(many(counts["railways"], "railway line"))
+    if counts["water"]:
+        parts.append(many(counts["water"], "water outline"))
     if counts["contours"]:
-        parts.append("%d contour line%s" % (counts["contours"], "" if counts["contours"] == 1 else "s"))
+        parts.append(many(counts["contours"], "contour line"))
     return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
 
 

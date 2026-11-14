@@ -117,6 +117,18 @@ test('Surroundings to Rhino: a dragged rectangle is sent as bounds, the import i
  const b=posted.bounds;assert.ok(b.west<b.east&&b.south<b.north,'west/south/east/north in order');
  const here=await p.evaluate(()=>EL.meta.anchor);assert.ok(Math.abs((b.south+b.north)/2-here.lat)<0.05&&Math.abs((b.west+b.east)/2-here.lon)<0.05,'the rectangle is at the site');
  assert.equal(await p.locator('#cxImport').isEnabled(),true,'ready for another import');
+ assert.ok(posted.paths===true&&posted.railways===true&&posted.water===true&&posted.road_style==='lines'&&posted.assume_height===true,'paths, railways and water come too; roads as centerlines');
+ assert.equal(await p.locator('#cxContourRow').isVisible(),false,'the contour interval shows only with Contours');
+ await p.locator('label.chip:has(#cxContours)').click();assert.equal(await p.locator('#cxContourRow').isVisible(),true);
+ assert.equal(await p.locator('#cxRoadRow').isVisible(),true,'paths are still in: the road geometry choice stays');
+ await p.locator('label.chip:has(#cxPaths)').click();assert.equal(await p.locator('#cxRoadRow').isVisible(),false,'no roads, no paths: no road geometry to choose');
+ await p.locator('label.chip:has(#cxRoads)').click();await p.getByRole('button',{name:'Outlines',exact:true}).click();
+ await p.locator('#cxAssume').uncheck();assert.equal(await p.locator('#cxHeight').isDisabled(),true,'no assumed height: footprints only');
+ await p.locator('#cxInterval').fill('2');await p.locator('#cxInterval').dispatchEvent('change');
+ polls=0;await p.locator('#cxImport').click();await p.waitForFunction(()=>/Rhino added terrain/.test(document.getElementById('cxStatus').textContent),null,{timeout:15000});
+ assert.ok(posted.road_style==='outlines'&&posted.roads===true&&posted.paths===false&&posted.assume_height===false&&posted.contours===2,'the new choices are sent: '+JSON.stringify(posted));
+ const kept=await p.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>/contextOptions/.test(k)))||'null'));
+ assert.ok(kept&&kept.style==='outlines'&&kept.assume===false&&kept.include.paths===false&&kept.include.contours===true,'and remembered: '+JSON.stringify(kept));
  await p.keyboard.press('Escape');assert.equal(await p.locator('#contextCard').isVisible(),false);
  assert.equal(await p.evaluate(()=>document.body.classList.contains('cropping')),false);});
 test('Surroundings to Rhino: a rectangle over 3 km a side cannot be imported; an error from the server is shown',async t=>{
