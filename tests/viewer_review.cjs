@@ -204,6 +204,15 @@ test('Surroundings: the rectangle is two clicks (two fingers on a trackpad move 
  await p.mouse.click(500,400);assert.match(await p.locator('#cxSize').innerText(),/Click the opposite corner/,'a further click starts a new one');
  await p.keyboard.press('Escape');assert.match(await p.locator('#cxSize').innerText(),/Click two corners/,'Esc forgets the first corner');
  assert.equal(await p.locator('#contextCard').isVisible(),true,'and leaves the tool open');});
+test('after a camera flight (search, Fit, a saved view) two fingers only tilt: Cesium\'s own wheel zoom stays off',async t=>{const p=await pageFor(t,null,'mac');
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
+ await p.evaluate(()=>new Promise(r=>{const c=EL.viewer.camera;const d=Cesium.Cartesian3.add(c.positionWC,Cesium.Cartesian3.multiplyByScalar(c.rightWC,5,new Cesium.Cartesian3()),new Cesium.Cartesian3());c.flyTo({destination:d,orientation:{direction:c.directionWC,up:c.upWC},duration:0.3,complete:r});}));
+ assert.equal(await p.evaluate(()=>EL.viewer.scene.screenSpaceCameraController.enableInputs),false,'Cesium turned its controls back on after the flight');
+ const P0=await p.evaluate(()=>{const c=EL.viewer.camera,d=EL.surfaceHit(new Cesium.Ray(c.positionWC,c.directionWC)),q=Cesium.Ray.getPoint(new Cesium.Ray(c.positionWC,c.directionWC),d);window.__P0=q;return {d,pitch:c.pitch};});
+ await p.evaluate(async()=>{const cv=EL.viewer.scene.canvas;for(let i=0;i<30;i++){cv.dispatchEvent(new WheelEvent('wheel',{deltaX:0,deltaY:-6,deltaMode:0,wheelDeltaY:18,clientX:640,clientY:400,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,16));}});await p.waitForTimeout(1200);   // a trackpad's two fingers, as Chrome reports them
+ const r=await p.evaluate(()=>{const c=EL.viewer.camera;return {d:Cesium.Cartesian3.distance(window.__P0,c.positionWC),pitch:c.pitch};});
+ assert.ok(Math.abs(r.pitch-P0.pitch)>0.05,'it tilted: '+JSON.stringify([P0,r]));
+ assert.ok(Math.abs(r.d-P0.d)<0.01*P0.d,'about the point it looked at, at the same distance (no zoom): '+P0.d.toFixed(2)+' -> '+r.d.toFixed(2));});
 test('placing a file for the first time shows that file\'s model on the clicked spot, not the sets of the file shown before',async t=>{const p=await pageFor(t);
  const glb=await p.evaluate(()=>EL.meta.sets.Main.glb);
  await p.evaluate(glb=>EL.site.open({project:'another-file',name:'Tower',set:'Main',preview:{glb}}),glb);

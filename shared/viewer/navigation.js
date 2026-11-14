@@ -244,7 +244,11 @@
     let held = null, groundAt = null, rec = null;        // the pivot kept between rotations; last ground check; input recording
     const floor = new Floor();
     const ssc = scene.screenSpaceCameraController;
-    ssc.enableInputs = false;                // one input path only
+    // One input path only. Cesium switches its own controls back on at the end of every camera flight (CameraFlightPath
+    // sets enableInputs = true on complete and on cancel): after a search, Fit or a saved view, every two-finger scroll
+    // then also zoomed the camera with Cesium's own wheel zoom, so a tilt pulled the view in and out (found in a
+    // recording from the author's trackpad, 2026-11-14). The switch is pinned off for good.
+    Object.defineProperty(ssc, "enableInputs", { configurable: true, get: () => false, set: () => {} });
     ssc.enableCollisionDetection = false;    // and one thing that moves the camera: Cesium's collision lifts it by itself
     const mac = () => (hooks.mac ? !!hooks.mac() : isMac());
 
