@@ -34,7 +34,7 @@
   const RATE = {
     orbit: 0.117, tilt: 0.105,         // two fingers
     orbitMouse: 0.219, tiltMouse: 0.197, // right-drag
-    pan: 0.89,                         // x the distance under the fingers (1 = exact follow)
+    pan: 0.80,                         // x the distance under the fingers (1 = exact follow); 10 % slower (the author, 2026-11-14)
     // zoom: 10 % and then 15 % faster than beta.12 (the author, 2026-11-14); turning and panning are as they like them
     pinch: 0.01383, scroll: 0.00696,   // zoom: log-distance per wheel delta unit (trackpad)
     wheel: 0.00329, dragZoom: 0.00557, // mouse wheel, Ctrl + right-drag
