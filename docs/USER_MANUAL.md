@@ -74,6 +74,8 @@ On first named-view reconciliation, Rhino wins conflicting cameras with the same
 
 The Sun panel controls sunlight, date, all 24 hours, and dynamic shadows. The map is a daytime photograph, so the time of day tints it: warm with the sun under about 12°, dark blue once it is 8° under the horizon, with stars and a dim moonlight on your model, which takes the same tint; emissive materials keep glowing. Cast shadows fade out as the sun comes down to the horizon (a sun on the horizon would streak the whole map). By day the sky overhead is blue with no stars. Sunlight off uses neutral illumination and hides date/time controls. Sync with Rhino exchanges both the enabled state and UTC time; Rhino is authoritative when connecting or reconnecting. The browser computer's per-date time-zone offset is sent to Rhino. This is not an independent site-time-zone scheduler. Photographed shadows in Google's textures cannot be removed by disabling dynamic sunlight.
 
+**Lights.** The lights of the Rhino model (point, spot, directional, rectangular and linear, switched on and visible) are drawn as Rhino 8's Rendered mode draws them, measured there on a white matte plane: colour x intensity x the cosine of the angle to the surface; the fall-off set in Rhino (Constant by default: none; Linear and Inverse squared are taken in model units, as Rhino takes them, so they are dark beyond a few units); a spotlight cut off at its cone and fading from its axis as cos^exponent (its hot spot); a rectangular or a linear light acting as a point light at its centre. They light the model and the map. A change to a light in Rhino reaches the viewer within about a second without a resend. A light belongs to the design set nearest to it: it moves and turns with that set's placement and is dark while the set is hidden. Turn them off with **Lights** in the Sun panel (shown when the model has lights). Limits: no shadows from these lights yet (in Rhino, point, spot and directional lights cast them); up to 32 lights; on the map a light without fall-off fades between one and two times the size of its set (at least 12 m); Clay display does not show them; the sun and the skylight are not Rhino lights here, they follow the viewer's time of day.
+
 When switching Rhino documents, run SendToEarth or EarthLinkViewer/Sync for the file you intend to link. One local viewer/exchange area is active at a time. Keep Rhino open and responsive for two-way requests.
 
 ## Search, navigation and walking
@@ -96,6 +98,27 @@ Collisions use what is drawn: your exported model mesh (both face sides) and the
 - **Section cut** clips the displayed model at a chosen local height.
 - **Hide map underneath** is chosen per design set (the scissors beside its eye in **Design Sets**). It removes Google geometry only under the set's base: every triangle is cut 1 cm above the set's lowest point and the part below is projected to plan, so overhangs, cantilevers and sets that widen upward keep the map under them. Concave outlines, disconnected pieces and courtyard holes are preserved, and ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. Gaps under 1 m² are covered. Older settings with one switch for all sets carry over as on for every set. The map itself is reshaped as it is drawn: inside the base it is not drawn, and within 3 m around it the map's own ground is graded to the base's level, so its own pixels meet the model with no gap, no separate patch and nothing photographed (earlier previews moved the camera for an instant to photograph the ground, which showed as a jump and as white patches). Trees, buildings and slopes more than about 4 m above or below the base keep their height, fading in up to 8 m. All cut sets share one mask (20 pixels per metre up to about 100 m across, coarser beyond; sets more than about 400 m apart get a visibly coarser edge). The grading is a presentation fill, not survey data. If a graphics driver cannot draw the map this way, the viewer reloads once without it and says the cut-out is unavailable.
 - **Measure** picks two visible surface points and reports distance in metres and feet/inches plus height difference. Press Esc to clear. Photorealistic mesh picking is approximate and is not a survey measurement.
+
+## Surroundings to Rhino
+
+The **Surroundings to Rhino** tool imports terrain, building massing and road centre lines for a rectangle you drag on the map (20 m to 3 km a side). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
+
+| Layer | Content |
+| --- | --- |
+| EarthLink Context::Terrain | One mesh; 1 m cells up to 200 m a side, then at most 200 cells along the longer side. Its height at the site equals the map's ground there |
+| EarthLink Context::Buildings | Closed solids with a height from OpenStreetMap (`height`, or `building:levels` x 3.2 m) |
+| EarthLink Context::Buildings (height assumed) | Buildings OpenStreetMap gives no height for: 7 m |
+| EarthLink Context::Roads | Centre lines on the terrain, cut at the rectangle; the name and the `highway` kind are in the object's name and user text |
+
+Everything is in the file's units, in place, grouped, and one Undo removes it. Each object's user text records its source; the attribution is on the parent layer. Importing again adds another copy: delete the old layer first if you want to replace it.
+
+Sources and privacy: buildings and roads come from OpenStreetMap (its own map download, the one openstreetmap.org's Export uses; the public Overpass servers if that fails), terrain from Terrain Tiles on AWS Open Data. The rectangle's corner coordinates are sent to those services when you press Import, from your computer; EarthLink has no server. Google's map is never exported: its terms forbid it. Credit "© OpenStreetMap contributors" when you publish drawings made from it.
+
+Limits: a preview of open data, not a survey. Terrain is about 10 m data in much of the world (finer in parts of the US), so kerbs and retaining walls are not in it. Roofs are flat. A very crowded 3 km square is downloaded in up to 16 parts and can take a minute.
+
+## Feedback
+
+**Send feedback** collects a comment, an optional screenshot and system details and hands them to GitHub (a filled-in issue at github.com/J1mmywzh/EarthLink) or to your mail app (to rhinoearthlink@gmail.com). You see exactly what will be shared and nothing leaves the computer until you submit the issue or send the email. The screenshot shows your site and model; the system details hold no location. Your draft is kept if you close the card.
 
 ## 8. Capture images
 
@@ -145,6 +168,9 @@ The server binds to `127.0.0.1:8765` by default; it is not a public hosting serv
 | Live set does not change | Check Live is on, objects are still in the recorded set, and Rhino is idle; send selection again |
 | Deleted all objects but old model remains | Remove that empty set in the viewer; automatic empty-set export is a known issue |
 | Named views or sun do not sync | Named views are always shared; for the sun check its **Sync with Rhino** switch. Check the linked document, and restart sync with EarthLinkSync if it paused after errors |
+| Lights from Rhino do not show | Check the light is on and its layer visible, **Lights** is on in the Sun panel, and the display is Materials; a Linear or Inverse squared fall-off in a millimetre file is dark, as in Rhino |
+| Surroundings import says OpenStreetMap could not be reached | Its servers are busy or blocked on your network: try again in a minute. Terrain alone still imports |
+| Imported buildings are all 7 m | OpenStreetMap has no heights there; they are on **Buildings (height assumed)** for you to adjust |
 | Earth Pro model disappears | Re-send with EarthPro enabled to regenerate its retained files |
 | Commands work from source only | Verify the installed package separately; source execution is not an installed-plugin check |
 

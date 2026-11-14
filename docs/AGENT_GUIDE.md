@@ -20,6 +20,10 @@ This guide is for an assistant helping someone use or develop EarthLink. Start w
 - `env.viewer_dir()` prefers installed resources. When testing source, pass an explicit source viewer directory to the server.
 - If Rhino is unresponsive, stop trying to drive it and continue with work that does not need Rhino. Ask before restarting it.
 
+- Nothing from Google's map may be written to Rhino or to a file: its terms forbid export. "Surroundings to Rhino" uses OpenStreetMap and open elevation tiles only (`earthlink/context.py`); keep it that way, keep its requests single and user-started, and keep the EarthLink User-Agent.
+- Rhino lights are matched to Rendered mode by measurement (a white matte plane, captures with `RhinoView.CaptureToBitmap(size, Rendered)`): Lambert in linear light with a 2.2 display curve, the light colour's numbers used as they are, attenuation in model units, spot = hard cone x cos^max(exponent, 1), rectangular and linear lights = a point at the centre. Re-measure before changing `LAMPS` or `elLamps`.
+- Objects can carry a material-table material with no render material (scripts, Grasshopper bakes); Rhino keeps one table entry per object. `core._legacy_copy` and `geometry.merge_glb` merge the look-alikes; Rhino's glTF writer alone writes them black.
+
 ## Test and release discipline
 
 Use isolated temporary application data and the supplied fixture. Do not read or print user tokens. Do not publish live model exports, private notes, captures, account credentials, or runtime files. Keep plugin GUID stable. Test the installed package in Rhino separately from unit tests. Windows support is implemented but awaits integration testing. Track the retained known issues in ARCHITECTURE.md rather than claiming they are resolved.

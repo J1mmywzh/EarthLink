@@ -75,6 +75,8 @@ Open **Sun** to control sunlight, date, time, and dynamic shadows. Turning sunli
 
 With the sun low the map turns warm, and at night dark blue, with stars and a dim moonlight on your model; shadows fade out as the sun reaches the horizon. (The map is a daytime photograph: it is tinted, not relit.) **Sync with Rhino** exchanges the sun's enabled state and time. Rhino's current sun is used when connecting or reconnecting synchronization. Time uses the browser computer's time zone, including the selected date's daylight-saving offset.
 
+**Lights.** The lights in your Rhino model (point, spot, directional, rectangular, linear) light the model and the map around it, as Rhino's Rendered mode draws them: the light's colour times its intensity times the cosine of its angle to the surface, with the fall-off chosen in Rhino (none by default), a spotlight cut off at its cone and fading from its axis by its hot spot, and a rectangular or linear light acting as a point light at its centre. Add, move, recolour, switch or delete a light in Rhino and the viewer follows within a second; nothing is exported again. A light belongs to the nearest design set: it moves with that set's placement and goes dark when the set is hidden. The **Lights** switch in the Sun panel turns them off. Two differences from Rhino: these lights cast no shadows yet (Rhino's point, spot and directional lights do), so a lamp in a room also lights the ground outside the wall; and on the map a light with no fall-off fades out one to two times its set's size away, so that a lamp does not light the whole city.
+
 Save named views in Rhino or the viewer: they are always the same in both. A view saved, updated, renamed or deleted in the viewer changes in Rhino's Named Views panel, and the other way round. Saved views retain the camera, projection, lens, and sun time; recalling a time does not switch sunlight on.
 
 ## Design sets and display
@@ -84,6 +86,20 @@ Save named views in Rhino or the viewer: they are always the same in both. A vie
 - **Edit** a set (select its name) to place it on the site: drag it on the map (**Move on map**), type its East / North / Up offset in metres, or rotate it about the centre of its base with the slider or an exact angle. The same card has **Update when it changes in Rhino** (SendToEarth's Live option) and **Update now**, so you do not need Rhino's command line to refresh a set. Changes show at once and are saved automatically; there is no Apply step and nothing is exported again. Placement is an EarthLink layer kept with the set in your Rhino file: your Rhino geometry never moves, so you can keep modelling on Rhino's own grid. **Original position** puts the set back where it is in Rhino. While you drag or rotate, **Hide map underneath** pauses and returns when you stop.
 - **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved. Ground is removed as well as buildings and vegetation. Around the base, within 3 m, the map's own ground is graded to the base's level, so the map meets the model with no gap and no separate patch; trees and buildings more than about 4 m above or below the base keep their height. The grading is a presentation fill, not survey data. Sets more than about 400 m apart share one cut-out and its edge gets coarser.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
+
+## Bring the surroundings into Rhino
+
+**Surroundings to Rhino** (the dashed square with an arrow, right-hand tools) brings the area around your site into the Rhino file as geometry you can model against. Drag a rectangle on the map (20 m to 3 km a side), choose **Terrain**, **Buildings** and **Roads**, and press **Import to Rhino**. Rhino adds, on layer **EarthLink Context**, in place and as one Undo step:
+
+- **Terrain**: a mesh of the ground (cells of 1 m, coarser for areas over 200 m a side), placed so that it passes through the map's ground at your site.
+- **Buildings**: closed solids from each building's outline, standing on the terrain. The height comes from OpenStreetMap (its height, or 3.2 m per storey); where it has none, 7 m is assumed and the building goes on its own layer, **Buildings (height assumed)**. Whole buildings only: those centred in the rectangle.
+- **Roads**: centre lines draped on the terrain, cut at the rectangle, named and tagged with their kind.
+
+This is open data, not Google's map, which its terms do not allow to be exported: buildings and roads © OpenStreetMap contributors (ODbL), terrain from Terrain Tiles on AWS Open Data. Pressing Import sends the rectangle's coordinates to those two services, and nothing before that. It is massing and context, not a survey: outlines are as accurate as OpenStreetMap is there, usually a metre or two.
+
+## Send feedback
+
+**Send feedback** (the speech bubble, right-hand tools) opens a card with your comment, an optional screenshot of the view and system details (version, system, browser, graphics card, view size; no location). **Open on GitHub** opens a filled-in issue for you to submit (a GitHub account is needed); **Email** opens your mail app with the message addressed to rhinoearthlink@gmail.com. Nothing is sent until you submit or send it yourself. A web page cannot attach a file for you, so the screenshot is put on the clipboard (paste it into the issue) and saved as `earthlink-feedback.png` in Downloads (attach it to the email).
 
 ## Capture and share
 

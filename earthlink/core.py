@@ -19,7 +19,7 @@ from earthlink import env, collada, geometry
 KEEP_VERSIONS = 3
 SECTION = "EarthLink"
 DEFAULT_SET = "Main"
-EXPORT_FORMAT = 2     # 2: see-through materials and texture mappings (0.2.0-beta.10); older exports are sent once more
+EXPORT_FORMAT = 2     # 2: see-through materials, texture mappings, materials without a render material (0.2.0-beta.10); older exports are sent once more
 
 
 # ----------------------------------------------------------------- anchor / frames
@@ -252,6 +252,19 @@ def _effective_material(obj, parent_obj=None):
         return obj.RenderMaterial
 
 
+def _legacy_material(obj, parent_obj=None):
+    """The object's material from the document's material table, for objects that have no render material
+    (materials made by scripts, Grasshopper bakes and some importers). Rhino's Rendered mode draws these."""
+    src = obj.Attributes.MaterialSource
+    if parent_obj is not None and src == Rhino.DocObjects.ObjectMaterialSource.MaterialFromParent:
+        obj = parent_obj
+    try:
+        m = obj.GetMaterial(True)
+        return m if m is not None and m.Index >= 0 else None
+    except Exception:
+        return None
+
+
 def _display_color(doc, obj, parent_obj=None):
     a = obj.Attributes
     if a.ColorSource == Rhino.DocObjects.ObjectColorSource.ColorFromObject:
@@ -259,6 +272,184 @@ def _display_color(doc, obj, parent_obj=None):
     if a.ColorSource == Rhino.DocObjects.ObjectColorSource.ColorFromParent and parent_obj is not None:
         return _display_color(doc, parent_obj)
     return doc.Layers[a.LayerIndex].Color
+
+
+# ----------------------------------------------------------------- site context from open data
+CONTEXT_LAYER = "EarthLink Context"
+
+
+def _layer(doc, path, color):
+    """Index of the layer `A::B` (created with its parents if missing)."""
+    i = doc.Layers.FindByFullPath(path, -1)
+    if i >= 0:
+        return i
+    parent, index = System.Guid.Empty, -1
+    for part in path.split("::"):
+        full = part if index < 0 else doc.Layers[index].FullPath + "::" + part
+        j = doc.Layers.FindByFullPath(full, -1)
+        if j < 0:
+            layer = Rhino.DocObjects.Layer()
+            layer.Name, layer.Color = part, color
+            if parent != System.Guid.Empty:
+                layer.ParentLayerId = parent
+            j = doc.Layers.Add(layer)
+        index, parent = j, doc.Layers[j].Id
+    return index
+
+
+def add_context(doc, data):
+    """Add terrain, buildings and roads from context.build() to the document, on EarthLink Context layers, as one
+    undo step. `data` is in metres east/north/up of the model base point. Returns what was added, as a sentence."""
+    scale = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, doc.ModelUnitSystem)
+    ok, inv = enu_transform(doc).TryGetInverse()
+    if not ok:
+        raise ValueError("the site transform cannot be inverted")
+    pt = lambda p: inv * rg.Point3d(p[0] * scale, p[1] * scale, (p[2] if len(p) > 2 else 0.0) * scale)
+    tol = doc.ModelAbsoluteTolerance
+    C = System.Drawing.Color
+    undo = doc.BeginUndoRecord("EarthLink context")
+    ids, counts = [], {"terrain": 0, "buildings": 0, "roads": 0}
+    try:
+        note = lambda a, kind: (a.SetUserString("EarthLink", "context"), a.SetUserString("source", kind))
+        t = data.get("terrain")
+        if t and t.get("points"):
+            mesh, nx, ny = rg.Mesh(), int(t["nx"]), int(t["ny"])
+            for p in t["points"]:
+                mesh.Vertices.Add(pt(p))
+            for j in range(ny - 1):
+                for i in range(nx - 1):
+                    a = j * nx + i
+                    mesh.Faces.AddFace(a, a + 1, a + nx + 1, a + nx)
+            mesh.Normals.ComputeNormals()
+            mesh.Compact()
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Terrain", C.FromArgb(120, 140, 110)), "Terrain"
+            note(at, "Terrain Tiles (Mapzen, AWS Open Data)")
+            ids.append(doc.Objects.AddMesh(mesh, at))
+            counts["terrain"] = mesh.Faces.Count
+        for b in data.get("buildings") or []:
+            base, up = b.get("base", 0.0), b.get("height", 0.0)
+            loops = []
+            for ring in [b["outer"]] + list(b.get("inners") or []):
+                pts = [pt((p[0], p[1], base)) for p in ring]
+                if len(pts) >= 3:
+                    loops.append(rg.Polyline(pts + [pts[0]]).ToNurbsCurve())
+            if not loops:
+                continue
+            path = rg.LineCurve(pt((0, 0, base)), pt((0, 0, base + up)))
+            path.Translate(loops[0].PointAtStart - path.PointAtStart)
+            solid = None
+            faces = rg.Brep.CreatePlanarBreps(System.Array[rg.Curve](loops), tol)
+            if faces and len(faces) > 0:
+                solid = faces[0].Faces[0].CreateExtrusion(path, True)
+            if solid is None:                             # a footprint Rhino cannot make planar: extrude its outline
+                solid = rg.Surface.CreateExtrusion(loops[0], path.PointAtEnd - path.PointAtStart).ToBrep().CapPlanarHoles(tol)
+            if solid is None:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            layer = "::Buildings (height assumed)" if b.get("assumed") else "::Buildings"
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + layer, C.FromArgb(200, 200, 195)), b.get("name") or ""
+            note(at, "OpenStreetMap")
+            at.SetUserString("height_m", "%.2f" % up)
+            ids.append(doc.Objects.AddBrep(solid, at))
+            counts["buildings"] += 1
+        for r in data.get("roads") or []:
+            pts = [pt(p) for p in r["pts"]]
+            if len(pts) < 2:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Roads", C.FromArgb(90, 90, 95)), r.get("name") or r.get("kind") or ""
+            note(at, "OpenStreetMap")
+            if r.get("kind"):
+                at.SetUserString("highway", r["kind"])
+            ids.append(doc.Objects.AddCurve(rg.Polyline(pts).ToNurbsCurve(), at))
+            counts["roads"] += 1
+        ids = [i for i in ids if i != System.Guid.Empty]
+        if ids:
+            doc.Groups.Add("EarthLink context", System.Array[System.Guid](ids))
+        doc.Layers[_layer(doc, CONTEXT_LAYER, C.FromArgb(120, 120, 120))].SetUserString("attribution", data.get("attribution", ""))
+    finally:
+        doc.EndUndoRecord(undo)
+    doc.Views.Redraw()
+    parts = []
+    if counts["terrain"]:
+        parts.append("terrain (%d faces)" % counts["terrain"])
+    if counts["buildings"]:
+        parts.append("%d building%s" % (counts["buildings"], "" if counts["buildings"] == 1 else "s"))
+    if counts["roads"]:
+        parts.append("%d road line%s" % (counts["roads"], "" if counts["roads"] == 1 else "s"))
+    return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
+
+
+# ----------------------------------------------------------------- lights
+_LIGHT_KINDS = {"WorldPoint": "point", "WorldSpot": "spot", "WorldDirectional": "directional",
+                "WorldRectangular": "rect", "WorldLinear": "linear"}
+
+
+def lights_info(doc):
+    """The document's lights that are on, for the viewer: positions and sizes in metres east/north/up of the model
+    base point (the frame the exported geometry is in), colours as Rhino shows them (0..1), Rhino's own intensity and
+    attenuation. The sun and the skylight are not in this table; they follow the viewer's time of day."""
+    if not anchor_ok(doc):
+        return []
+    xf = enu_transform(doc)
+    scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
+    r = lambda v: round(float(v), 4)
+
+    def point(p):
+        q = rg.Point3d(p)
+        q.Transform(xf)
+        return [r(q.X * scale), r(q.Y * scale), r(q.Z * scale)]
+
+    def vector(v, unit=False):
+        w = rg.Vector3d(v)
+        w.Transform(xf)
+        if unit:
+            if not w.Unitize():
+                return [0.0, 0.0, -1.0]
+            return [round(w.X, 5), round(w.Y, 5), round(w.Z, 5)]
+        return [r(w.X * scale), r(w.Y * scale), r(w.Z * scale)]
+
+    out = []
+    for lo in doc.Lights:
+        try:
+            lg = lo.LightGeometry
+            kind = _LIGHT_KINDS.get(str(lg.LightStyle))
+            if kind is None or lo.IsDeleted or not lg.IsEnabled or not lo.Visible:
+                continue
+            c = lg.Diffuse
+            a = lg.AttenuationVector
+            item = {"id": str(lo.Id), "name": lo.Name or "", "kind": kind, "pos": point(lg.Location),
+                    "dir": vector(lg.Direction, True), "color": [round(c.R / 255.0, 4), round(c.G / 255.0, 4), round(c.B / 255.0, 4)],
+                    "intensity": r(lg.Intensity),
+                    # 1 / (a0 + a1 d + a2 d^2) with d in model units, rewritten for metres
+                    "att": [r(a.X), round(a.Y / scale, 6), round(a.Z / (scale * scale), 8)],
+                    "att_type": str(lg.AttenuationType), "shadow": r(lg.ShadowIntensity)}
+            if kind == "spot":
+                item["angle"] = r(lg.SpotAngleRadians)          # half the cone
+                item["exp"] = r(lg.SpotExponent)                 # the fade from the axis is cos^exp (Rhino's "hot spot")
+            if kind in ("rect", "linear"):
+                item["length"] = vector(lg.Length)
+                item["width"] = vector(lg.Width)
+            out.append(item)
+        except Exception:
+            continue                                             # an odd light never stops the others
+    out.sort(key=lambda x: x["id"])
+    return out
+
+
+def publish_lights(doc, lights=None):
+    """Make live/meta.json carry the document's lights. No geometry is exported. Returns True when meta changed."""
+    meta = load_meta()
+    if not meta.get("sets") or meta.get("project") != project_id(doc):
+        return False
+    lights = lights_info(doc) if lights is None else lights
+    if (meta.get("lights") or []) == lights:
+        return False
+    meta["lights"] = lights
+    meta["version"] = int(meta.get("version", 0)) + 1
+    env.write_json(os.path.join(env.live_dir(), "meta.json"), meta)
+    return True
 
 
 def _copy_texture_mappings(src, dst, xform):
@@ -273,6 +464,31 @@ def _copy_texture_mappings(src, dst, xform):
                 dst.SetTextureMapping(ch, mapping, xform * own.Value)
     except Exception:
         pass
+
+
+def _legacy_key(m):
+    """Equal for material-table materials that look the same: Rhino keeps a copy per object of such a material."""
+    try:
+        argb = lambda c: c.ToArgb()
+        tex = tuple(sorted((str(t.TextureType), t.FileName or "") for t in m.GetTextures()))
+        return "legacy:%r" % ((m.Name, argb(m.DiffuseColor), argb(m.EmissionColor), argb(m.SpecularColor), argb(m.ReflectionColor),
+                               argb(m.TransparentColor), round(m.Transparency, 4), round(m.Shine, 4), round(m.Reflectivity, 4),
+                               round(m.IndexOfRefraction, 4), tex),)
+    except Exception:
+        return "legacy:%d" % m.Index
+
+
+def _legacy_copy(tmp, material, mats):
+    """A render material made from a material-table material, added to the export document once."""
+    key = _legacy_key(material)
+    if key not in mats:
+        try:
+            c = Rhino.Render.RenderMaterial.CreateBasicMaterial(material, tmp)
+            tmp.RenderMaterials.Add(c)
+            mats[key] = c
+        except Exception:
+            mats[key] = None
+    return mats[key]
 
 
 def _export_glb(doc, objs, path):
@@ -296,6 +512,7 @@ def _export_glb(doc, objs, path):
             g.Transform(xf)
             attrs = Rhino.DocObjects.ObjectAttributes()
             rm = _effective_material(src_obj, parent)
+            legacy = _legacy_material(src_obj, parent) if rm is None else None
             if rm is not None:
                 key = str(rm.Id)
                 if key not in mats:
@@ -303,6 +520,8 @@ def _export_glb(doc, objs, path):
                     tmp.RenderMaterials.Add(c)
                     mats[key] = c
                 attrs.RenderMaterial = mats[key]
+            elif legacy is not None and _legacy_copy(tmp, legacy, mats) is not None:
+                attrs.RenderMaterial = _legacy_copy(tmp, legacy, mats)
             else:
                 attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
                 attrs.ObjectColor = _display_color(doc, src_obj, parent)
@@ -437,7 +656,7 @@ def send_set(doc, name, to_earthpro=False):
         entry["dae"] = meta["sets"][name]["dae"]   # keep showing the last Earth Pro version
 
     meta.update(version=version, project=pid, name=project_name(doc), anchor=anchor_info(doc),
-                sent_at=entry["sent_at"])
+                sent_at=entry["sent_at"], lights=lights_info(doc))
     meta.setdefault("sets", {})[name] = entry
     if entry.get("dae") or any(s.get("dae") for s in meta["sets"].values()):
         master = _write_earthpro(live, meta)

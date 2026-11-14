@@ -30,12 +30,12 @@
 
   // Per-feature rates at Sensitivity 100 %. Degrees per pixel unless noted.
   const RATE = {
-    orbit: 0.13, tilt: 0.117,          // two fingers
-    orbitMouse: 0.243, tiltMouse: 0.219, // right-drag
-    pan: 0.99,                         // x the distance under the fingers (1 = exact follow)
-    pinch: 0.01215, scroll: 0.0061,    // zoom: log-distance per wheel delta unit (trackpad)
-    wheel: 0.0029, dragZoom: 0.0049,   // mouse wheel, Ctrl + right-drag
-    hold: Math.LN2 / 0.68,             // +/- held: distance halves every 0.68 s
+    orbit: 0.117, tilt: 0.105,         // two fingers
+    orbitMouse: 0.219, tiltMouse: 0.197, // right-drag
+    pan: 0.89,                         // x the distance under the fingers (1 = exact follow)
+    pinch: 0.01094, scroll: 0.0055,    // zoom: log-distance per wheel delta unit (trackpad)
+    wheel: 0.0026, dragZoom: 0.0044,   // mouse wheel, Ctrl + right-drag
+    hold: Math.LN2 / 0.76,             // +/- held: distance halves every 0.76 s
     look: 0.072, lookMouse: 0.135,     // walking
   };
   const STEP = { degrees: 6, pan: 1 / 8 };   // arrow keys: Rhino's 60 steps per turn; pan an eighth of the view

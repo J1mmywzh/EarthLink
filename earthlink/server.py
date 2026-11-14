@@ -9,15 +9,16 @@ Rhino talks to it only through files in the EarthLink data folder:
 
 From Rhino use start()/stop()/running(); they launch or stop the process.
 """
-import os, sys, json, math, time, socket, subprocess, base64
+import os, sys, json, math, time, socket, subprocess, base64, threading
 
 if __name__ == "__main__" and __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from earthlink import env, geometry  # noqa: E402
+from earthlink import env, geometry, context  # noqa: E402
+import earthlink  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
-                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
+                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc", "lights")
 VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js")
 
 
@@ -148,6 +149,49 @@ def _queue_for_rhino(req):
     os.makedirs(d, exist_ok=True)
     req = dict(req, t=time.time())
     env.write_json(os.path.join(d, "%.6f.json" % req["t"]), req)
+
+
+# ----------------------------------------------------------------- site context from open data (context.py)
+_CONTEXT = {"state": "idle"}
+
+
+def _context_start(data, build=None):
+    """Fetch terrain, buildings and roads for a rectangle in a worker thread; Rhino adds the result on its next tick."""
+    if _CONTEXT.get("state") == "working":
+        return dict(_CONTEXT)
+    meta = env.current_meta()
+    try:
+        bounds = context.check_bounds(data.get("bounds") or {})
+        if not (meta.get("anchor") or {}).get("lat") and (meta.get("anchor") or {}).get("lat") != 0:
+            raise context.ContextError("Place the model on the map first (SendToEarth).")
+    except context.ContextError as e:
+        _CONTEXT.clear(); _CONTEXT.update(state="error", message=str(e))
+        return dict(_CONTEXT)
+    job = "context_%d.json" % int(time.time() * 1000)
+    _CONTEXT.clear(); _CONTEXT.update(state="working", message="Starting", job=job)
+    want = {k: data.get(k, True) is not False for k in ("terrain", "buildings", "roads")}
+
+    def run():
+        try:
+            out = (build or context.build)(bounds, meta.get("anchor"), env.load_settings(),
+                                           progress=lambda text: _CONTEXT.update(message=text), **want)
+            env.write_json(env.live_file(job), out)
+            _queue_for_rhino({"type": "context", "file": job, "project": meta.get("project")})
+            _CONTEXT.update(state="sent", message="Rhino is adding it", counts=out["counts"])
+        except context.ContextError as e:
+            _CONTEXT.update(state="error", message=str(e))
+        except Exception as e:           # never leave the viewer waiting
+            _CONTEXT.update(state="error", message="The import failed: %s" % (e,))
+    threading.Thread(target=run, daemon=True).start()
+    return dict(_CONTEXT)
+
+
+def _context_status():
+    if _CONTEXT.get("state") == "sent":      # Rhino reports back in a small file
+        done = env.read_json(env.live_file("context_result.json")) or {}
+        if done.get("file") == _CONTEXT.get("job"):
+            _CONTEXT.update(state="done" if done.get("ok") else "error", message=done.get("message", ""))
+    return dict(_CONTEXT)
 
 
 def _rename_in_settings(old, new):
@@ -305,7 +349,7 @@ def serve(viewer_dir, port):
                 query = self.path[1:] if self.path.startswith("/?") else ""   # keep options such as ?controls=mac
                 self.send_response(302); self.send_header("Location", "/viewer/" + query); self.end_headers()
             elif path == "/api/ping":
-                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir})
+                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir, "version": earthlink.__version__})
             elif path == "/api/config":
                 s = env.load_settings()
                 self._json({"ion_token": s.get("ion_token", ""), "google_key": s.get("google_key", "")})
@@ -315,6 +359,8 @@ def serve(viewer_dir, port):
                 self._json(_read(os.path.join(live, "meta.json"), {}))
             elif path == "/api/pick":
                 self._json(_read(env.live_file("pick_request.json"), {}))
+            elif path == "/api/context":
+                self._json(_context_status())
             elif path == "/api/sun":
                 self._json(_read(env.live_file("sun.json"), {}))
             elif path == "/api/camera":
@@ -341,6 +387,8 @@ def serve(viewer_dir, port):
             elif path == "/api/config":
                 env.save_settings({k: (data.get(k) or "").strip() for k in ("ion_token", "google_key") if k in data})
                 self._json({"ok": True})
+            elif path == "/api/context":
+                self._json(_context_start(data))
             elif path == "/api/views":
                 name = env.current_project()
                 if data.get("op") == "put" and isinstance(data.get("view"), dict) and data["view"].get("name"):

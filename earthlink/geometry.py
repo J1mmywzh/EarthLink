@@ -134,6 +134,11 @@ def merge_glb(path):
         return before, before
     nodes = js.get("nodes", [])
     textured = {i for i, m in enumerate(js.get("materials", [])) if "Texture" in str(m)}
+    # Materials that differ only in name are one material: Rhino keeps a copy per object of a material made by a
+    # script or a Grasshopper bake ("plaster", "plaster (1)", ...), which would otherwise be a piece per object.
+    first, same = {}, {}
+    for i, m in enumerate(js.get("materials", [])):
+        same[i] = first.setdefault(json.dumps({k: v for k, v in m.items() if k != "name"}, sort_keys=True), i)
     drawn = [0]
     groups = {}            # (material, kind) -> {"p": [], "n": [], "uv": [], "i": [], "has_n": bool, "has_uv": bool}
 
@@ -149,7 +154,7 @@ def merge_glb(path):
             idx = [k for i in range(1, len(idx) - 1) for k in (idx[0], idx[i], idx[i + 1])]
         elif mode in (2, 3):
             idx = [k for i in range(len(idx) - 1 + (mode == 2)) for k in (idx[i], idx[(i + 1) % len(idx)])]
-        key = (prim.get("material"), kind)
+        key = (same.get(prim.get("material"), prim.get("material")), kind)
         g = groups.setdefault(key, {"p": [], "n": [], "uv": [], "i": [], "has_n": True, "has_uv": True})
         base = len(g["p"])
         if m == IDENTITY:

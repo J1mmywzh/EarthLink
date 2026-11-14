@@ -20,6 +20,8 @@ DEFAULTS = {
     "sync_views": True, "link_viewport": False, "sync_sun": True,
     # viewer display
     "style": "materials", "ghost": 0.45, "hidden_sets": [], "set_styles": {},
+    # the Rhino model's lights are shown in the viewer
+    "lights": True,
 }
 
 
