@@ -12,6 +12,8 @@ What is planned after 0.2.0-beta.11, most valuable first. Each item is small eno
 | Sign in with Cesium ion | One click instead of copying a token (OAuth with PKCE); needs EarthLink registered with Cesium and a check that ion accepts a redirect to the local viewer |
 | The 3D engine bundled with the plugin | CesiumJS is loaded from a CDN: no internet or a firewall means a blank page. Bundle it and say so when it fails |
 | A secret for the local server | Any program on the same computer can read the map token from the local server; hand the page a per-launch secret |
+| Copies: the last corners | A copy that is never saved (or is opened read-only) becomes a new project at each opening; a file used from two computers with different paths rewrites its stored path each time |
+| Shadows from lights outside the view | A lamp's shadow map is filled from what the camera sees, so a caster behind the camera may cast no shadow: to be checked and, if so, drawn separately |
 | Progress and Esc for sends and imports | A large send or a 3 km import blocks Rhino with no bar and no way out |
 | Surroundings: roof shapes, road widths, water and green areas | OpenStreetMap has them; today buildings are flat-topped and roads are centre lines |
 
