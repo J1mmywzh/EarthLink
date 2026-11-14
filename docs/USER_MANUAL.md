@@ -148,7 +148,7 @@ The browser is the primary viewer. Earth Pro support is optional. In this previe
 
 ## Reopening a file
 
-The Rhino file keeps what the viewer shows for it (Document User Text, section EarthLink): project identity, sets and their placement, and the viewer's state for this file: each set's display and cut-out, hidden sets, the height offset and ground sample, the sun's date, time and switches, the lights switch, and the last camera and lens. Named views are Rhino named views. Open the file, run **EarthLinkViewer**: its sets are exported again and the viewer returns to that state. The state is written to the file a few seconds after it changes, which marks the file as modified; save the file to keep it.
+The Rhino file keeps what the viewer shows for it (Document User Text, section EarthLink): project identity, sets and their placement, and the viewer's state for this file: each set's display and cut-out, hidden sets, the height offset and ground sample, the sun's date, time and switches, the lights switch, and the last camera and lens. Named views are Rhino named views. Open the file, run **EarthLinkViewer**: its sets are exported again and the viewer returns to that state. The state is written to the file a few seconds after it changes, which marks the file as modified; save the file to keep it. A copy of the file (Save As, or a duplicate while the original still exists) is a project of its own from then on and starts with the original's views and camera; a renamed or moved file stays the same project.
 
 ## 11. Local files and privacy
 

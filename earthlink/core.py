@@ -134,10 +134,33 @@ def restore_state(doc):
 
 
 def project_id(doc):
+    """This file's project. A copy of a file (Save As, or a duplicate opened beside the original) gets a project of its
+    own with the original's saved views and camera; a renamed or moved file keeps its project."""
     pid = _get(doc, "project_id")
+    path = getattr(doc, "Path", None) or ""
     if not pid:
         pid = str(uuid.uuid4())
         _put(doc, "project_id", pid)
+        if path:
+            _put(doc, "project_path", path)
+        return pid
+    if not path:
+        return pid
+    stored = _get(doc, "project_path")
+    if stored == path:
+        return pid
+    if env.is_copy(stored, path):
+        old, pid = pid, str(uuid.uuid4())
+        _put(doc, "project_id", pid)
+        try:
+            env.follow_copy(old, pid, project_name(doc))
+            state = _get(doc, "viewer_state")
+            if isinstance(state, dict) and isinstance(state.get("view"), dict) and state["view"].get("project") == old:
+                state["view"]["project"] = pid
+                _put(doc, "viewer_state", state)
+        except Exception:
+            pass
+    _put(doc, "project_path", path)
     return pid
 
 

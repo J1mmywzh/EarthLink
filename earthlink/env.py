@@ -136,6 +136,46 @@ def put_view(model_name, view):
     return views
 
 
+def is_copy(stored_path, path, exists=os.path.exists):
+    """True when a file that carries a project made at stored_path is now at path while the original is still there:
+    a Save As or a duplicate, which must get a project of its own (two files sharing one would overwrite each other's
+    views and sets). A renamed or moved file, or the same file seen through another mount, keeps its project."""
+    if not stored_path or not path:
+        return False
+    same = os.path.normcase(os.path.normpath(stored_path)) == os.path.normcase(os.path.normpath(path))
+    return not same and bool(exists(stored_path))
+
+
+def copy_views(old, new):
+    """Give project `new` the saved views of `old` (when it has none of its own)."""
+    views = load_views(old)
+    if views and not load_views(new):
+        save_views(new, views)
+    return len(views)
+
+
+def follow_copy(old, new, name=None):
+    """A file became a copy with project `new` while the viewer showed it as `old`: keep showing it, under the new
+    project, with its views and camera. Returns True when the viewer was showing it."""
+    copy_views(old, new)
+    path = os.path.join(live_dir(), "meta.json")
+    try:
+        with open(path) as fh:
+            meta = json.load(fh)
+    except Exception:
+        return False
+    if meta.get("project") != old:
+        return False
+    meta["project"] = new
+    if name:
+        meta["name"] = name
+    write_json(path, meta)
+    view = load_settings().get("view")
+    if isinstance(view, dict) and view.get("project") == old:
+        save_settings({"view": dict(view, project=new)})
+    return True
+
+
 def current_meta():
     """live/meta.json, read again only when the file changed (the server asks many times a second)."""
     path = os.path.join(live_dir(), "meta.json")
