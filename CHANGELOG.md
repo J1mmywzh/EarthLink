@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-beta.11 — preview, in progress
+## 0.2.0-beta.11 — preview, 2026-11-14
 - **Shadows from Rhino's lights**: the two brightest point lights or spotlights cast shadows from your model and the map, so a lamp in a room no longer lights the ground outside the wall. The Shadows switch turns them off with the sun's.
 - **Map connection**: a guided dialog with links to Cesium ion's sign-up and token pages; a pasted token is checked at once. Reopen it under Site > Map connection or with EarthLinkSettings > ConnectMap. A map that does not open offers "Connect map" instead of a grey globe.
 - **Surroundings to Rhino**: contour lines at your interval (every fifth on its own layer), the height for buildings without one, the storey height, and OpenStreetMap's tags as user text.
