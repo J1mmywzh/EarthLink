@@ -327,11 +327,14 @@ def _sync_sun(doc):
     rh = _utc_str(sun.GetDateTime(System.DateTimeKind.Utc))
     project = core.project_id(doc)
     state = (rh, bool(sun.Enabled))
-    if _S["sun_utc"] is None:    # Rhino owns the sun on first connection/reconnection.
+    if _S["sun_utc"] is None:    # first connection or reconnection
         t = time.time()
         _S["sun_utc"], _S["sun_seen"] = state, t
-        env.write_json(path, {"utc": rh, "enabled": state[1], "project": project, "source": "rhino", "t": t})
-        env.save_settings({"sun_enabled": state[1], "sun_utc": rh})
+        # A Sun that is on in Rhino is the one being worked with: the viewer takes its date and time. Rhino's Sun is
+        # off in a new file; that must not switch the viewer's sunlight off or replace the time this file was left at.
+        if state[1]:
+            env.write_json(path, {"utc": rh, "enabled": True, "project": project, "source": "rhino", "t": t})
+            env.save_settings({"sun_enabled": True, "sun_utc": rh})
         return
     if f.get("source") == "viewer" and f.get("project", project) == project and f.get("t", 0) > _S["sun_seen"]:
         _S["sun_seen"] = f["t"]

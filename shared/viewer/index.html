@@ -1251,7 +1251,7 @@
   $("sectionOn").onchange = applySection; $("sectionH").oninput = applySection;
 
   // ---------------------------------------------------------------- design sets
-  let modelGeneration = 0;
+  let modelGeneration = 0, shownProject = null;           // shownProject: the file whose first-appearance work is done
   async function loadMeta(m) {
     const generation = ++modelGeneration;
     if(walk)walk.exit();
@@ -1297,15 +1297,16 @@
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
-    if (first || projectChanged) {
-      if (projectChanged && RHINO) {                         // another Rhino file: show it as that file was left
+    if (shownProject !== (m.project || "")) {               // a file's first appearance; a later update that overtook it still does this
+      const switched = shownProject !== null; shownProject = m.project || "";
+      if (switched && RHINO) {                               // another Rhino file: show it as that file was left
         try { Object.assign(S, await api("/api/settings")); } catch { /* keep what is shown */ }
         if (generation !== modelGeneration) return;
         for (const n of Object.keys(models)) { models[n].show = !hidden().has(n); styleModel(models[n], n); }
         renderSets(); placeModels(); showSite(); restyle(); if (S.sun_utc) sunFromUtc(S.sun_utc, S.sun_enabled);
       }
       const left = S.view && S.view.project === m.project && S.view.cam;
-      if (left) applyView(left, 0); else if (!restoreCamera() || projectChanged) flyTo(0);
+      if (left) applyView(left, 0); else if (switched || !restoreCamera()) flyTo(0);
       sampleGround(false); refreshViews();
     }
     setTimeout(() => { if (generation === modelGeneration) showLink(); }, 400);
