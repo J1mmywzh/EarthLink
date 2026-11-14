@@ -108,11 +108,12 @@ Save named views in Rhino or the viewer: they are always the same in both. A vie
 
 ## Bring the surroundings into Rhino
 
-**Surroundings to Rhino** (the dashed square with an arrow, right-hand tools) brings the area around your site into the Rhino file as geometry you can model against. Click two opposite corners of a rectangle on the map (20 m to 3 km a side; with a mouse you can also press and drag it), choose **Terrain**, **Buildings**, **Roads** and **Contours**, and press **Import**; a bar shows the progress. **Options** holds the contour interval, the height given to buildings OpenStreetMap has no height for (7 m unless you change it) and the storey height used when it gives storeys. Rhino adds, on layer **EarthLink Context**, in place and as one Undo step:
+**Surroundings to Rhino** (the dashed square with an arrow, right-hand tools) brings the area around your site into the Rhino file as geometry you can model against. Click two opposite corners of a rectangle on the map (20 m to 3 km a side; with a mouse you can also press and drag it), choose what to include (**Terrain**, **Contours**, **Buildings**, **Roads**, **Paths**, **Railways**, **Water**) and how roads come in (**Centerlines**, **Outlines** or **Surfaces**, as in CADMapper), and press **Import**; a bar shows the progress. The panel also holds the contour interval and the height given to buildings OpenStreetMap has no height for (7 m; turn it off for footprints only); **Options** holds the storey height used when it gives storeys. Rhino adds, on layer **EarthLink Context**, in place and as one Undo step:
 
 - **Terrain**: a mesh of the ground (cells of 1 m, coarser for areas over 200 m a side), placed so that it passes through the map's ground at your site.
 - **Buildings**: closed solids from each building's outline, standing on the terrain. The height comes from OpenStreetMap (its height, or 3.2 m per storey); where it has none, 7 m is assumed and the building goes on its own layer, **Buildings (height assumed)**. Whole buildings only: those centred in the rectangle.
-- **Roads**: centre lines draped on the terrain, cut at the rectangle, named and tagged with their kind.
+- **Roads and paths**: on layers **Major roads**, **Minor roads** and **Paths**, cut at the rectangle and on the terrain. They come as centre lines, as outlines joined where roads meet, or as surface meshes, at each road's width (OpenStreetMap's, or the usual one for its kind). Bridges stay level.
+- **Railways** and **Water**: rail lines; lakes, ponds and rivers as closed curves at the water level, streams as lines.
 - **Contours**: lines at round heights above sea level at your interval, every fifth on its own layer, each named with its height.
 
 Everything OpenStreetMap records about a building or road (use, storeys, material, name) is in the object's user text, as `osm:` keys.

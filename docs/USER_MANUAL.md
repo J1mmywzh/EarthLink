@@ -101,19 +101,32 @@ Collisions use what is drawn: your exported model mesh (both face sides) and the
 
 ## Surroundings to Rhino
 
-The **Surroundings to Rhino** tool imports terrain, building massing and road centre lines for a rectangle you mark on the map with two clicks, one corner and then the opposite one (20 m to 3 km a side; with a mouse you can also press and drag it; Esc forgets the first corner). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
+The **Surroundings to Rhino** tool imports terrain, contours, building massing, roads, paths, railways and water for a rectangle you mark on the map with two clicks, one corner and then the opposite one (20 m to 3 km a side; with a mouse you can also press and drag it; Esc forgets the first corner). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
+
+The panel works as CADMapper's does. Under **Include**, choose Terrain, Contours, Buildings, Roads, Paths, Railways and Water. **Contours every** sets the interval. **Height when none is known** gives buildings without a height in OpenStreetMap that height; turn it off to get their footprints only. **Roads and paths as** chooses the road geometry:
+
+- **Centerlines**: one line along the middle of each road.
+- **Outlines**: closed curves along the road edges, joined where roads meet, so a street grid becomes one outline with each block as a hole.
+- **Surfaces**: one mesh for each road layer.
+
+Outlines and surfaces use each road's width from OpenStreetMap (its `width`, or its lanes at 3.3 m). Where it has neither, the usual width for its kind is used: 14 m for a motorway, 7 m for a residential street, 2 m for a footway. They lie on the ground right across and are cut at the rectangle. Bridges and tunnels run straight between their ends. The panel remembers your choices.
 
 | Layer | Content |
 | --- | --- |
 | EarthLink Context::Terrain | One mesh; 1 m cells up to 200 m a side, then at most 200 cells along the longer side. Its height at the site equals the map's ground there |
 | EarthLink Context::Buildings | Closed solids with a height from OpenStreetMap (`height`, or `building:levels` x the storey height: 3.2 m unless you change it under More options) |
 | EarthLink Context::Buildings (height assumed) | Buildings OpenStreetMap gives no height for: 7 m, or the height you set under More options |
-| EarthLink Context::Roads | Centre lines on the terrain, cut at the rectangle; the name and the `highway` kind are in the object's name and user text |
+| EarthLink Context::Buildings (footprint only) | With **Height when none is known** off: the outlines of buildings OpenStreetMap gives no height for |
+| EarthLink Context::Major roads | Motorways, trunk, primary and secondary roads: centre lines, outlines or a surface mesh. Names, `highway` kind and width are in the name and user text |
+| EarthLink Context::Minor roads | Tertiary, residential, service and other streets, tracks |
+| EarthLink Context::Paths | Footways, paths, cycleways, steps, pedestrian streets |
+| EarthLink Context::Railways | Rail, light rail, tram and subway centre lines (not abandoned or disused ones) |
+| EarthLink Context::Water | Lakes, ponds, river surfaces and reservoirs as closed curves at the water level, cut at the rectangle (islands are marked in user text); rivers, streams and canals as lines |
 | EarthLink Context::Contours | With **Contours** on: terrain contour lines at your interval, every fifth on the sublayer Index. Over very steep ground the interval is doubled, tripled and so on to stay under about 400 levels |
 
 Everything is in the file's units, in place, grouped, and one Undo removes it. Each object's user text records its source; the attribution is on the parent layer. Importing again adds another copy: delete the old layer first if you want to replace it.
 
-Sources and privacy: buildings and roads come from OpenStreetMap (its own map download, the one openstreetmap.org's Export uses; the public Overpass servers if that fails), terrain from Terrain Tiles on AWS Open Data. The rectangle's corner coordinates are sent to those services when you press Import, from your computer; EarthLink has no server. Google's map is never exported: its terms forbid it. Credit "© OpenStreetMap contributors" when you publish drawings made from it.
+Sources and privacy: buildings, roads, railways and water come from OpenStreetMap (its own map download, the one openstreetmap.org's Export uses; the public Overpass servers if that fails, and for a lake larger than the area, which is fetched whole by its OpenStreetMap number), terrain from Terrain Tiles on AWS Open Data. The rectangle's corner coordinates are sent to those services when you press Import, from your computer; EarthLink has no server. Google's map is never exported: its terms forbid it. Credit "© OpenStreetMap contributors" when you publish drawings made from it.
 
 Limits: a preview of open data, not a survey. Terrain is about 10 m data in much of the world (finer in parts of the US), so kerbs and retaining walls are not in it. Roofs are flat. A very crowded 3 km square is downloaded in up to 16 parts and can take a minute.
 

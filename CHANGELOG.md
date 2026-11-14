@@ -7,6 +7,17 @@
 - **Placing a file**: SendToEarth asks for a base point, as the Block command does (Enter: bottom centre of the selection). The viewer's Place panel then puts the cursor in the search field; the base point goes where you click. Later sets of the same file keep their position in Rhino.
 - **Surroundings to Rhino**: the rectangle is two clicks, a corner and the opposite one (two fingers on a trackpad move the map, so it could not be dragged there). Press and drag still works with a mouse; Esc forgets the first corner.
 - The map's credits stand on one line: logos and text are the same height.
+- **Surroundings to Rhino, as CADMapper offers it**:
+  - Roads are sorted onto the layers Major roads, Minor roads and Paths, and railways and water get layers of their own.
+  - **Roads and paths as** chooses the road geometry:
+    - **Centerlines**.
+    - **Outlines**: the road edges, joined where roads meet.
+    - **Surfaces**: a mesh on the ground for each layer.
+  - Outlines and surfaces use each road's width (OpenStreetMap's width or lanes, else the usual width for its kind). Bridges stay level.
+  - Lines get a point every few metres so they follow the ground.
+  - The contour interval and the height for buildings without one are in the panel itself. That height can be turned off to bring in footprints only.
+  - A lake larger than the area is fetched whole and cut at the rectangle.
+  - The panel remembers your choices.
 
 ## 0.2.0-beta.12 — preview, 2026-11-14
 - **Turning and tilting**: the view turns around what you are looking at, as in beta.9: the turning point keeps the distance you last focused on (Rhino's camera target) and no longer jumps to ground far behind your model, to the horizon, or to map detail that has not loaded yet. That jump made the scene swing in and out while tilting.
