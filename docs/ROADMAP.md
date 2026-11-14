@@ -6,7 +6,7 @@ What is planned after 0.2.0-beta.11, most valuable first. Each item is small eno
 
 | Item | Why |
 | --- | --- |
-| Shadows from Rhino lights | Rhino's point, spot and directional lights cast shadows in Rendered mode; EarthLink's do not, so a lamp in a room also lights the ground outside the wall |
+| Shadows from more Rhino lights | Two point lights or spotlights cast shadows (beta.11); Rhino casts them from every point, spot and directional light, so a third lamp in a room still lights the ground outside the wall |
 | Sun time in the site's time zone | The time slider uses the computer's time zone; a site in another zone shows the sun of the wrong hour |
 | Copies of a file share one project | A file saved under a new name keeps the project id: both copies write the same views and sets. Give a copy its own id |
 | One writer for `meta.json` | Rhino and the server both read, change and write it; a set deleted in the viewer during an export can come back |

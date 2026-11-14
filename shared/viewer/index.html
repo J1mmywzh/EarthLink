@@ -716,7 +716,7 @@
   $("date").oninput=$("hour").oninput=()=>applySun(false);
   $("hourT").onchange=()=>{const m=/^(\d\d):(\d\d)/.exec($("hourT").value);if(m){$("hour").value=+m[1]*60+ +m[2];applySun(false);}};
   $("sunOn").onchange=()=>{saveS({sun_enabled:$("sunOn").checked});applySun(false,true);};
-  $("castShadows").onchange=()=>{saveS({shadows:$("castShadows").checked});applyShadows();};
+  $("castShadows").onchange=()=>{saveS({shadows:$("castShadows").checked});applyShadows();applyLampShadows();};
   $("shadows").onclick=()=>{const open=!$("sunCard").classList.contains("open");closePops("sunCard");$("sunCard").classList.toggle("open",open);};
   if(S.sun_utc)sunFromUtc(S.sun_utc,S.sun_enabled);else applySun(true);
   if(RHINO&&S.sync_sun!==false){const j=await api("/api/sun");if(j?.utc)sunFromUtc(j.utc,j.enabled);}
@@ -1147,7 +1147,7 @@
     sh.uniformMap.u_shT = () => shade.kinds;
   }
   function applyLampShadows() {
-    const on = S.lights !== false && LAMPS.ok, want = [0, 1].map(k => { const l = on && k < LAMPS.shadows ? lamps.list[k] : null; return l && l.casts ? l : null; });
+    const on = S.lights !== false && S.shadows !== false && LAMPS.ok, want = [0, 1].map(k => { const l = on && k < LAMPS.shadows ? lamps.list[k] : null; return l && l.casts ? l : null; });
     const M = frame(), C3 = Cesium.Cartesian3, world = p => Cesium.Matrix4.multiplyByPoint(M, p, new C3());
     const key = JSON.stringify(want.map(l => l && [l.kind, l.pos.x, l.pos.y, l.pos.z, l.dir.x, l.dir.y, l.dir.z, l.cone, l.range])) + lamps.key.length + lamps.key.slice(-80);
     if (key === shade.key) return; shade.key = key;

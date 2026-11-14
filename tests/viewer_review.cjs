@@ -181,6 +181,7 @@ test("Rhino lights: a point light and a spotlight cast the model's shadow, and t
  await set(point,0);const plain=await read();assert.ok(plain[0]>dark[0]+60&&plain[1]>dark[1]+60,'without shadows the light reaches both: '+JSON.stringify([dark,plain]));
  await set(point,2);const cast=await read();assert.ok(Math.abs(cast[0]-dark[0])<12,'behind the tower the roof is as dark as with no light: '+JSON.stringify([dark,cast]));assert.ok(Math.abs(cast[1]-plain[1])<12,'in the open nothing changes: '+JSON.stringify([plain,cast]));
  await set(point,0);assert.deepEqual(await read(),plain,'shadows off again: as before');
+ await set(point,2);await p.locator('#shadows').click();await p.locator('label.switch:has(#castShadows)').click();assert.deepEqual(await read(),plain,'Shadows switched off: the lamp casts none either');await p.locator('label.switch:has(#castShadows)').click();assert.ok(Math.abs((await read())[0]-dark[0])<12,'and on again');
  const spot={id:'s',kind:'spot',pos:[25,50,25],dir:[-0.36,-0.86,-0.36],color:[1,0.9,0.7],intensity:1,att:[1,0,0],angle:0.7,exp:1};
  await set(spot,0);const sPlain=await read();assert.ok(sPlain[0]>dark[0]+40&&sPlain[1]>dark[1]+40,'the spotlight reaches both without shadows: '+JSON.stringify([dark,sPlain]));
  await set(spot,2);const sCast=await read();assert.ok(Math.abs(sCast[0]-dark[0])<12&&Math.abs(sCast[1]-sPlain[1])<12,"the spotlight's shadow: "+JSON.stringify([dark,sPlain,sCast]));
