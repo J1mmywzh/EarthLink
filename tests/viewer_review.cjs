@@ -141,3 +141,31 @@ test('Feedback: the comment, screenshot note and system details go to a filled-i
  assert.match(q.searchParams.get('body'),/second line[\s\S]*Screenshot[\s\S]*EarthLink 0\.2\.0/);
  assert.equal(await p.locator('#feedbackCard').isVisible(),false);
  assert.equal(await p.locator('#fbEmail').evaluate(b=>b.hidden),false,'email is offered');});
+
+// ---- beta.10: the Rhino model's lights
+const pixel=(p,x,y)=>p.evaluate(async([x,y])=>{const s=EL.viewer.scene,frame=()=>new Promise(r=>{const off=s.postRender.addEventListener(()=>{off();r();});s.requestRender();});for(let i=0;i<4;i++)await frame();   // a changed shader is drawn a frame later
+  return await new Promise(r=>{const off=s.postRender.addEventListener(()=>{off();const c=s.canvas,g=s.context._gl,o=new Uint8Array(4);g.readPixels(Math.round(x*c.width/c.clientWidth),c.height-Math.round(y*c.height/c.clientHeight),1,1,g.RGBA,g.UNSIGNED_BYTE,o);r([o[0],o[1],o[2]]);});s.requestRender();});},[x,y]);
+test("Rhino lights: a light brightens the faces turned to it, follows its set and Rhino's fall-off, and goes with the switch",async t=>{const p=await pageFor(t);
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);const d=document.getElementById('date'),h=document.getElementById('hour');if(!document.getElementById('sunOn').checked)document.getElementById('sunOn').click();d.value='2026-06-21';h.value=60;h.dispatchEvent(new Event('input'));});await p.waitForTimeout(700);
+ const at=[[640,580],[450,300]],read=async()=>[await pixel(p,...at[0]),await pixel(p,...at[1])],sum=c=>c[0]+c[1]+c[2];
+ const dark=await read();
+ await p.evaluate(()=>{const b=EL.meta.sets.Main.bbox_m;EL.meta.lights=[{id:'a',kind:'point',pos:[b[0][0]-6,b[0][1]-6,b[1][2]+4],dir:[0,0,-1],color:[1,0.85,0.6],intensity:1,att:[1,0,0]}];EL.applyLights();});
+ const lit=await read();assert.ok(sum(lit[0])>sum(dark[0])+30&&sum(lit[1])>sum(dark[1])+60,'lit '+JSON.stringify([dark,lit]));
+ assert.ok(lit[1][0]>lit[1][2]+40,'a warm light gives a warm face: '+lit[1]);
+ assert.equal(await p.evaluate(()=>EL.lamps.n),1);
+ await p.evaluate(()=>{const l=EL.meta.lights[0];l.intensity=0.4;EL.applyLights();});const dim=await read();assert.ok(sum(dim[1])<sum(lit[1])-25&&sum(dim[1])>sum(dark[1])+15,'intensity scales the light');
+ await p.evaluate(()=>{EL.meta.lights[0].intensity=1;EL.meta.lights[0].att=[0,1000,0];EL.applyLights();});assert.deepEqual(await read(),dark,"Rhino's fall-off is followed: 1/d in millimetres is dark at this distance");
+ await p.evaluate(()=>{EL.meta.lights[0].att=[1,0,0];EL.applyLights();});
+ // the light is nearest to both sets' boxes here; move it with a placement: its position in the site frame follows
+ const before=await p.evaluate(()=>Array.from(EL.lamps.data.slice(0,3)));
+ await p.evaluate(()=>{EL.setPlacement('Main',0,[5,0,0]);EL.setPlacement('Scheme B',0,[5,0,0]);EL.applyLights();});
+ const after=await p.evaluate(()=>Array.from(EL.lamps.data.slice(0,3)));assert.ok(Math.abs(after[0]-before[0]-5)<1e-3&&Math.abs(after[1]-before[1])<1e-3,'the light moved 5 m east with its set: '+before+' -> '+after);
+ await p.evaluate(()=>{EL.setPlacement('Main',0,[0,0,0]);EL.setPlacement('Scheme B',0,[0,0,0]);});await p.waitForTimeout(1500);
+ await p.evaluate(()=>{const b=EL.meta.sets.Main.bbox_m;EL.meta.lights=[{id:'a',kind:'point',pos:[b[0][0]-6,b[0][1]-6,b[1][2]+4],dir:[0,0,-1],color:[1,0.85,0.6],intensity:1,att:[1,0,0]}];EL.applyLights();});   // (the fixture's own meta has no lights)
+ await p.locator('#shadows').click();assert.equal(await p.locator('#lampRow').isVisible(),true);assert.match(await p.locator('#lampCount').innerText(),/1 from Rhino/);
+ await p.locator('label.switch:has(#lampsOn)').click();assert.deepEqual(await read(),dark,'switched off: as before');assert.equal(await p.evaluate(()=>!!EL.models.Main.customShader),false,'and the stock shader is back');
+ await p.locator('label.switch:has(#lampsOn)').click();assert.ok(sum((await read())[1])>sum(dark[1])+60,'switched on again');
+ await p.evaluate(()=>{EL.meta.lights=[{id:'s',kind:'spot',pos:[-8,10,15],dir:[1,0,0],color:[1,1,1],intensity:1,att:[1,0,0],angle:0.05,exp:1},{id:'r',kind:'rect',pos:[-100,-100,-50],length:[2,0,0],width:[0,2,0],dir:[0,0,-1],color:[1,1,1],intensity:1,att:[0,1000,0]},{id:'d',kind:'directional',pos:[0,0,0],dir:[0,0,1],color:[1,1,1],intensity:1,att:[1,0,0]}];EL.applyLights();});
+ assert.equal(await p.evaluate(()=>EL.lamps.n),3,'spot, rectangular and directional lights are all drawn');
+ const kinds=await p.evaluate(()=>[0,1,2].map(i=>EL.lamps.data[i*16+3]));assert.deepEqual(kinds,[1,0,2],'a rectangular light is a point at its centre, as in Rhino');
+ assert.deepEqual(await p.evaluate(()=>Array.from(EL.lamps.data.slice(16,19))),[-99,-99,-50]);});

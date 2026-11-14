@@ -414,7 +414,7 @@ def lights_info(doc):
                     "att_type": str(lg.AttenuationType), "shadow": r(lg.ShadowIntensity)}
             if kind == "spot":
                 item["angle"] = r(lg.SpotAngleRadians)          # half the cone
-                item["hot"] = r(lg.HotSpot)                      # 0..1 of the cone at full strength
+                item["exp"] = r(lg.SpotExponent)                 # the fade from the axis is cos^exp (Rhino's "hot spot")
             if kind in ("rect", "linear"):
                 item["length"] = vector(lg.Length)
                 item["width"] = vector(lg.Width)

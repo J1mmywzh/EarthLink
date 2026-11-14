@@ -477,16 +477,18 @@
   const CUT = { reach: 3, high: 4, fade: 4, under: 0.005, px: 20, max: 2048 };
   let clipKey = "", cut = null, mapShader = null, cutPaused = false, adjustTimer = 0, adjustingNow = false;
   const mapTint = new Cesium.Cartesian3(1, 1, 1);
-  /* Lights from the Rhino model (point, spot, directional, rectangular, linear). Rhino's Rendered mode adds each
-     light's colour x intensity x the cosine of its angle to a surface; so does this, on your model and on the map
-     around it. They cast no shadows here. max: light samples drawn (a rectangular light is 4, a linear light 4);
-     gain: strength against Rhino's Rendered mode; soft: how far the map's bumpy surface is evened out (0..1);
-     reach: on the map, a light with no fall-off in Rhino fades out between 1x and 2x this many times its set's size. */
-  const LAMPS = { max: 32, gain: 1, soft: 0.5, reach: 1, reachMin: 12, ok: !!scene.context.webgl2 };
+  /* Lights from the Rhino model, drawn as Rhino 8's Rendered mode draws them (measured there on a white matte plane):
+     each adds colour x intensity x the cosine of its angle to the surface, with the fall-off chosen in Rhino (none by
+     default); a spotlight is cut off at its cone and fades as cos^exponent from its axis; a rectangular or a linear
+     light acts as a point light at its centre. They light your model and the map around it, and cast no shadows here.
+     max: lights drawn; gain: makes up for the tone curve your model is drawn with (the map has none); soft: how far
+     the map's bumpy surface is evened out (0..1); reach: on the map only, a light with no fall-off fades out between
+     1x and 2x this many times the size of its design set, so that a lamp does not light the whole city. */
+  const LAMPS = { max: 32, gain: 1.08, soft: 0.5, reach: 1, reachMin: 12, ok: !!scene.context.webgl2 };
   const lamps = { key: "", n: 0, data: new Float32Array(4 * 4 * 32), shader: null, inv: Cesium.Matrix4.IDENTITY.clone(), list: [] };
   const lampTexture = () => new Cesium.TextureUniform({ typedArray: lamps.data.slice(), width: 4 * LAMPS.max, height: 1, pixelFormat: Cesium.PixelFormat.RGBA, pixelDatatype: Cesium.PixelDatatype.FLOAT,
     minificationFilter: Cesium.TextureMinificationFilter.NEAREST, magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST, repeat: false });
-  // One texel row: per light, position + kind | direction + cos(cone) | colour + cos(hot spot) | attenuation + reach.
+  // One texel row: per light, position + kind | direction + cos(cone) | colour + spot exponent | attenuation + reach.
   const LAMP_GLSL = onMap => `
         vec3 elLamps(vec3 p, vec3 n) {
           vec3 sum = vec3(0.0);
@@ -496,13 +498,11 @@
             vec4 lp = texelFetch(u_lamps, ivec2(i * 4, 0), 0), ld = texelFetch(u_lamps, ivec2(i * 4 + 1, 0), 0);
             vec4 lc = texelFetch(u_lamps, ivec2(i * 4 + 2, 0), 0), la = texelFetch(u_lamps, ivec2(i * 4 + 3, 0), 0);
             vec3 L = -ld.xyz; float k = 1.0;
-            if (lp.w < 1.5 || lp.w > 2.5) {                       // not a directional light: it has a place
+            if (lp.w < 1.5) {                                     // a point light or a spotlight: it has a place
               vec3 v = lp.xyz - p; float d = max(length(v), 0.01); L = v / d;
               k = min(1.0 / max(la.x + d * (la.y + d * la.z), 0.0001), 8.0);
               ${onMap ? "if (la.w > 0.0) k *= 1.0 - smoothstep(la.w, 2.0 * la.w, d);" : ""}
-              float c = dot(-L, ld.xyz);
-              if (lp.w > 0.5 && lp.w < 1.5) k *= smoothstep(ld.w, max(lc.w, ld.w + 0.0005), c);   // spot: cone edge to hot spot
-              else if (lp.w > 2.5) k *= max(c, 0.0);              // a panel shines from its front
+              if (lp.w > 0.5) { float c = dot(-L, ld.xyz); k *= smoothstep(ld.w - 0.002, ld.w + 0.002, c) * pow(max(c, 0.0), max(lc.w, 1.0)); }
             }
             sum += lc.rgb * k * max(dot(n, L), 0.0);
           }
@@ -1040,7 +1040,6 @@
       },
       fragmentShaderText: LAMP_GLSL(false) + `
         void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-          if (u_lampN < 0.5) return;
           vec3 pE = fsInput.attributes.positionEC;
           #ifdef HAS_NORMALS
           vec3 nE = normalize(fsInput.attributes.normalEC);
@@ -1048,11 +1047,13 @@
           vec3 nE = normalize(cross(dFdx(pE), dFdy(pE)));        // a mesh without normals: the face's own
           #endif
           if (dot(nE, pE) > 0.0) nE = -nE;                       // both faces of a surface are lit, as in Rhino
-          vec3 lit = material.diffuse * elLamps((u_eyeToSite * vec4(pE, 1.0)).xyz, normalize(mat3(u_eyeToSite) * nE)) / max(u_tint, vec3(0.02));   // the time-of-day tint is applied after the lighting
+          vec3 lit = material.diffuse * elLamps((u_eyeToSite * vec4(pE, 1.0)).xyz, normalize(mat3(u_eyeToSite) * nE));
+          // The time of day's tint is applied here, before the lamps are added (a model colour would dim them too).
           #ifdef LIGHTING_PBR
-          material.emissive += lit;
+          material.diffuse *= u_tint; material.specular *= u_tint;
+          material.emissive = material.emissive * u_tint + lit * ${LAMPS.gain.toFixed(3)};
           #else
-          material.diffuse += lit;                               // an unlit material shows its colour as it is
+          material.diffuse = material.diffuse * u_tint + lit;    // an unlit material shows its colour as it is
           #endif
         }`,
     });
@@ -1075,36 +1076,33 @@
       if (sets.length && !owner) continue;
       const P = owner ? placementMatrix(owner) : Cesium.Matrix4.IDENTITY, b = owner && meta.sets[owner].bbox_m;
       const at = a => Cesium.Matrix4.multiplyByPoint(P, new C3(...a), new C3()), dir = a => Cesium.Matrix4.multiplyByPointAsVector(P, new C3(...a), new C3());
-      const rgb = l.color.map(c => Math.pow(Math.max(0, c), 2.2) * (l.intensity ?? 1) * LAMPS.gain);
+      const rgb = l.color.map(c => Math.max(0, c) * (l.intensity ?? 1));   // Rhino adds the colour's numbers as they are
       const a = l.att || [1, 0, 0], fades = a[1] > 0 || a[2] > 0;
       const reach = fades || l.kind === "directional" ? 0 : Math.max(LAMPS.reachMin, LAMPS.reach * (b ? Math.hypot(b[1][0] - b[0][0], b[1][1] - b[0][1], b[1][2] - b[0][2]) / 2 : 30));
       const d = C3.normalize(dir(l.dir || [0, 0, -1]), new C3());
-      const add = (pos, kind, share = 1, cone = -1, hot = -1) => out.push({ pos, kind, dir: d, rgb: rgb.map(v => v * share), cone, hot, att: a, reach });
-      if (l.kind === "point") add(at(l.pos), 0);
-      else if (l.kind === "directional") add(at(l.pos), 2);
-      else if (l.kind === "spot") { const half = Math.min(Math.max(l.angle ?? 0.5, 0.01), 1.55); add(at(l.pos), 1, 1, Math.cos(half), Math.cos(half * Math.min(1, Math.max(0, l.hot ?? 0.5)))); }
-      else if (l.kind === "rect" || l.kind === "linear") {       // a panel or a tube: a few samples spread over it
-        const len = l.length || [0, 0, 0], wid = l.kind === "rect" ? l.width || [0, 0, 0] : [0, 0, 0];
-        const us = l.kind === "rect" ? [0.25, 0.75] : [0.125, 0.375, 0.625, 0.875], vs = l.kind === "rect" ? [0.25, 0.75] : [0];
-        for (const u of us) for (const v of vs) add(at(l.pos.map((p, k) => p + len[k] * u + wid[k] * v)), l.kind === "rect" ? 3 : 0, 1 / (us.length * vs.length));
-      }
+      const add = (pos, kind, cone = -1, exp = 0) => out.push({ pos: at(pos), kind, dir: d, rgb, cone, exp, att: a, reach });
+      if (l.kind === "point") add(l.pos, 0);
+      else if (l.kind === "directional") add(l.pos, 2);
+      else if (l.kind === "spot") add(l.pos, 1, Math.cos(Math.min(Math.max(l.angle ?? 0.5, 0.01), 1.57)), l.exp ?? 1);
+      else if (l.kind === "rect") add(l.pos.map((p, k) => p + ((l.length || [0, 0, 0])[k] + (l.width || [0, 0, 0])[k]) / 2), 0);   // Rhino's Rendered mode: a point at the centre
+      else if (l.kind === "linear") add(l.pos.map((p, k) => p + (l.length || [0, 0, 0])[k] / 2), 0);
     }
     return out.slice(0, LAMPS.max);
   }
   function applyLights() {
     if (!LAMPS.ok || !anchor()) return;
     const M = frame(), list = lampList();
-    const key = JSON.stringify([list.map(l => [l.pos.x, l.pos.y, l.pos.z, l.kind, l.dir.x, l.dir.y, l.dir.z, l.rgb, l.cone, l.hot, l.att, l.reach]), Array.from({ length: 16 }, (_, i) => M[i])]);
+    const key = JSON.stringify([list.map(l => [l.pos.x, l.pos.y, l.pos.z, l.kind, l.dir.x, l.dir.y, l.dir.z, l.rgb, l.cone, l.exp, l.att, l.reach]), Array.from({ length: 16 }, (_, i) => M[i])]);
     if (key !== lamps.key) {
       lamps.key = key; lamps.list = list; lamps.n = list.length; Cesium.Matrix4.inverseTransformation(M, lamps.inv);
       lamps.data.fill(0);
-      list.forEach((l, i) => lamps.data.set([l.pos.x, l.pos.y, l.pos.z, l.kind, l.dir.x, l.dir.y, l.dir.z, l.cone, ...l.rgb, l.hot, ...l.att, l.reach], i * 16));
+      list.forEach((l, i) => lamps.data.set([l.pos.x, l.pos.y, l.pos.z, l.kind, l.dir.x, l.dir.y, l.dir.z, l.cone, ...l.rgb, l.exp, ...l.att, l.reach], i * 16));
       for (const sh of [mapShader, lamps.shader]) if (sh) { if (sh.uniforms.u_lamps) { sh.setUniform("u_lamps", lampTexture()); sh.setUniform("u_lampN", lamps.n); } }
       scene.requestRender();
     }
     const sh = lamps.n ? lampShader() : undefined;            // without lights your model keeps its stock shader
     if (sh && sh.uniforms.u_lampN.value !== lamps.n) { sh.setUniform("u_lamps", lampTexture()); sh.setUniform("u_lampN", lamps.n); }
-    for (const m of Object.values(models)) if (m.customShader !== sh) m.customShader = sh;
+    for (const [n, m] of Object.entries(models)) if (m.customShader !== sh) { m.customShader = sh; styleModel(m, n); }
     const count = (meta?.lights || []).length;
     $("lampRow").classList.toggle("hide", !count); $("lampCount").textContent = count ? `${count} from Rhino` : "";
   }
@@ -1142,7 +1140,8 @@
   // ---------------------------------------------------------------- display style & section
   const hidden = () => new Set(S.hidden_sets || []);
   function styleModel(m, n) {
-    const st = (n && (S.set_styles || {})[n]) || S.style || "materials", t = dayTint;
+    const st = (n && (S.set_styles || {})[n]) || S.style || "materials";
+    const t = m.customShader && st !== "clay" ? Cesium.Color.WHITE : dayTint;   // with Rhino's lights on, the shader tints (see lampShader)
     if (st === "clay") { m.color = new Cesium.Color(0.949 * t.red, 0.945 * t.green, 0.925 * t.blue, 1); m.colorBlendMode = Cesium.ColorBlendMode.REPLACE; }
     else if (st === "ghost") { m.color = t.withAlpha(+(S.ghost ?? 0.45)); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
     else { m.color = t.clone(); m.colorBlendMode = Cesium.ColorBlendMode.HIGHLIGHT; }
