@@ -37,7 +37,7 @@ What you need: Rhino 8, an internet connection (the map and the viewer's 3D engi
 4. If the file has no location, choose **PickOnMap**, click where the model should stand, and apply it to Rhino. The bottom centre of what you sent goes on that spot, wherever the geometry is in the Rhino file (it becomes the EarthAnchorPoint's model base point; a base point you set yourself is kept). To turn a set on the map, use **Edit** on the set (Rhino's north is not changed).
 5. Inspect the model in the browser. Use **Fit** to frame it.
 
-Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Curves and annotations are not exported as surfaces.
+Meshes, surfaces, polysurfaces, extrusions, SubDs, and nested blocks are supported. Hidden objects and objects on layers that are off are left out. Curves and annotations are not exported as surfaces.
 
 After upgrading from 0.1.x, send each set once to generate the geometry needed for precise cutouts and walking on your model.
 
@@ -65,7 +65,7 @@ Each gesture keeps one mode until it ends, including its momentum, and movement 
 
 Rotation turns about what is at the centre of the view when you start, like Rhino's camera target, and keeps that point from one rotation to the next until you pan, zoom or fly (a tree passing in front does not move it). While your model reaches the middle of the view the point stays within the model's depth, even when the exact centre of the view passes it and lands on ground far behind. A trackpad sends small pinches while two fingers scroll or rest, and a burst when they lift: these are dropped, and a pinch zooms once it is clearly meant (about 3 % of spread). When the centre of the view runs to far ground or sky it is your model's depth. A gesture does one thing from start to finish: a pinch that slips into a two-finger rotation is ignored, and the glide after your fingers lift is shortened. You can tilt below the horizon to look up at a facade. The camera passes through trees and buildings on the map, as in Rhino; it only comes to rest when it descends onto a surface from above, and it follows gently rising ground. Nothing lifts the camera by itself.
 
-On a Mac a web page cannot tell a Magic Mouse from the trackpad, so a Magic Mouse swipe rotates like two fingers on the trackpad (in Rhino it zooms). A wheel mouse zooms.
+On a Mac a web page cannot tell a Magic Mouse or a smooth-scrolling mouse from the trackpad, so their scrolling rotates like two fingers on the trackpad (in Rhino it zooms). Choose **Scroll: Zooms** in the compass panel if you use one. A notched wheel mouse zooms. In Safari a trackpad pinch is handled too.
 
 The compass shows north. Click it for **Heading**, **Tilt** and **Sensitivity**, each with a slider and a field you can type in, and **North up**; drag the compass itself to turn (sideways) and tilt (up and down); double-click it for north. **Fit** frames the visible design sets. Click **− / +** for a step, or hold them to zoom continuously. **Lens** (Camera, in the sidebar) is the lens length in millimetres as on a 35 mm camera, like Rhino's: the slider runs from 12 to 200 mm, and any length from 6 to 1200 mm can be typed. The time of day can be typed as well as dragged.
 

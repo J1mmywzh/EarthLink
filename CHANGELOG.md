@@ -3,7 +3,10 @@
 ## 0.2.0-beta.11 — preview, in progress
 - **Map connection**: a guided dialog with links to Cesium ion's sign-up and token pages; a pasted token is checked at once. Reopen it under Site > Map connection or with EarthLinkSettings > ConnectMap. A map that does not open offers "Connect map" instead of a grey globe.
 - **Surroundings to Rhino**: contour lines at your interval (every fifth on its own layer), the height for buildings without one, the storey height, and OpenStreetMap's tags as user text.
-- Safari: a trackpad pinch zooms the map. Ctrl + mouse wheel steps like the wheel (it jumped by 2x).
+- Safari: a trackpad pinch zooms the map. Ctrl + mouse wheel steps like the wheel (it jumped by 2x). On a Mac, **Scroll: Rotates / Zooms** in the compass panel is for a Magic Mouse or a smooth-scrolling mouse, which a web page cannot tell from the trackpad.
+- The dot beside the file's name is green only while Rhino itself is running the link (amber: the viewer is open but Rhino is not linked). EarthLinkViewer does not open a second tab when the viewer is already open; SendToEarth reopens a closed one.
+- Hidden objects and objects on layers that are off are no longer exported; hide or show them and a Live set follows.
+- A new Rhino file keeps the viewer's sunlight on: Rhino's Sun is off by default and used to switch it off on connecting. A Sun that is on in Rhino still sets the viewer's date and time.
 - The viewer draws when something changes instead of continuously, which leaves the graphics card to Rhino while you model.
 - A site is picked on the map itself, not on your model standing on it. Enter on a focused Cancel no longer confirms.
 - Server: set names with accents or non-Latin letters load; file replacement is retried on Windows; a Surroundings import started twice runs once and gives up with a message when Rhino does not answer.
