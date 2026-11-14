@@ -18,7 +18,7 @@ from earthlink import env, geometry, context  # noqa: E402
 import earthlink  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
-                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc", "lights")
+                "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc", "lights", "view")
 VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js")
 
 
@@ -168,16 +168,16 @@ def _context_start(data, build=None):
         _CONTEXT.clear(); _CONTEXT.update(state="error", message=str(e))
         return dict(_CONTEXT)
     job = "context_%d.json" % int(time.time() * 1000)
-    _CONTEXT.clear(); _CONTEXT.update(state="working", message="Starting", job=job)
+    _CONTEXT.clear(); _CONTEXT.update(state="working", message="Starting", job=job, progress=0.02)
     want = {k: data.get(k, True) is not False for k in ("terrain", "buildings", "roads")}
 
     def run():
         try:
             out = (build or context.build)(bounds, meta.get("anchor"), env.load_settings(),
-                                           progress=lambda text: _CONTEXT.update(message=text), **want)
+                                           progress=lambda text, part=None: _CONTEXT.update(message=text, **({"progress": part} if part is not None else {})), **want)
             env.write_json(env.live_file(job), out)
             _queue_for_rhino({"type": "context", "file": job, "project": meta.get("project")})
-            _CONTEXT.update(state="sent", message="Rhino is adding it", counts=out["counts"])
+            _CONTEXT.update(state="sent", message="Rhino is adding it", counts=out["counts"], progress=0.9)
         except context.ContextError as e:
             _CONTEXT.update(state="error", message=str(e))
         except Exception as e:           # never leave the viewer waiting

@@ -102,6 +102,34 @@ def _put(doc, key, value):
     doc.Strings.SetString(SECTION, key, json.dumps(value))
 
 
+# What the viewer shows for this file, kept in the .3dm so that the file reopens as it was left: the site's height
+# offset and ground sample, each set's display and cut-out, the sun, the lights switch, the last camera and lens.
+STATE_KEYS = ("nudge", "ground_h", "clip", "clip_sets", "hidden_sets", "set_styles", "style", "ghost", "shadows",
+              "sun_enabled", "sun_utc", "lights", "view")
+
+
+def save_state(doc):
+    """Copy the viewer's state for this file into the document (only when it changed). Returns True when written."""
+    s = env.load_settings()
+    state = {k: s.get(k) for k in STATE_KEYS if k in s}
+    view = state.get("view")
+    if isinstance(view, dict) and view.get("project") != project_id(doc):
+        state.pop("view")                                   # another file's camera
+    if state == _get(doc, "viewer_state"):
+        return False
+    _put(doc, "viewer_state", state)
+    return True
+
+
+def restore_state(doc):
+    """Give the viewer this file's saved state (called when the file takes over the viewer)."""
+    state = _get(doc, "viewer_state")
+    if not isinstance(state, dict):
+        return False
+    env.save_settings({k: v for k, v in state.items() if k in STATE_KEYS})
+    return True
+
+
 def project_id(doc):
     pid = _get(doc, "project_id")
     if not pid:
@@ -611,8 +639,9 @@ def send_set(doc, name, to_earthpro=False):
     live = env.live_dir()
     pid = project_id(doc)
     meta = load_meta()
-    if meta.get("project") != pid:          # another file was showing: start fresh
+    if meta.get("project") != pid:          # another file was showing: start fresh, as this file was left
         meta = {"version": meta.get("version", 0), "sets": {}}
+        restore_state(doc)
     version = int(meta.get("version", 0)) + 1
     sd = _set_dir(name)
     vd_rel = "%s/v%05d" % (sd, version)

@@ -22,6 +22,8 @@ DEFAULTS = {
     "style": "materials", "ghost": 0.45, "hidden_sets": [], "set_styles": {},
     # the Rhino model's lights are shown in the viewer
     "lights": True,
+    # the last camera of the file being shown: {"project": id, "cam": camera}; kept in the .3dm by core.save_state
+    "view": None,
 }
 
 

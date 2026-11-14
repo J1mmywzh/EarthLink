@@ -382,7 +382,7 @@ def fetch_osm(b, buildings, roads, fetch=http_get):
     raise ContextError("OpenStreetMap could not be reached (%s). Try again in a minute." % (last,))
 
 
-def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text: None):
+def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text, part=None: None):
     """The context inside `bounds`, in metres east/north/up of the model base point.
 
     anchor: the published EarthAnchorPoint (lat, lon, elev, zero). settings: ground_h, nudge, geoid_offset."""
@@ -392,7 +392,7 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
     lat0, lon0 = float(anchor["lat"]), float(anchor["lon"])
     w, h = side_lengths(b)
     cell = max(max(w, h) / GRID, 1.0)
-    progress("Reading the terrain")
+    progress("Terrain", 0.05)
     dem = Elevation(zoom_for((b["south"] + b["north"]) / 2.0, cell), lambda url: fetch(url))
     try:
         dem0 = dem.at(lat0, lon0)
@@ -417,13 +417,16 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
         nx, ny = max(2, int(round(w / cell)) + 1), max(2, int(round(h / cell)) + 1)
         pts = []
         for j in range(ny):
+            if j % 8 == 0:
+                progress("Terrain", 0.08 + 0.42 * j / ny)
             la = b["south"] + (b["north"] - b["south"]) * j / (ny - 1)
             for i in range(nx):
                 pts.append(point(la, b["west"] + (b["east"] - b["west"]) * i / (nx - 1)))
         out["terrain"] = {"nx": nx, "ny": ny, "points": pts, "cell": round(cell, 2)}
     if buildings or roads:
-        progress("Reading OpenStreetMap")
+        progress("Buildings and roads", 0.55 if terrain else 0.1)
         found, ways = parse_osm(fetch_osm(b, buildings, roads, fetch))
+        progress("Buildings and roads", 0.8)
         for f in (found if buildings else []):
             c = [sum(p[k] for p in f["outer"]) / len(f["outer"]) for k in (0, 1)]
             if not (b["south"] <= c[0] <= b["north"] and b["west"] <= c[1] <= b["east"]):

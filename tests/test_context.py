@@ -94,7 +94,7 @@ def test_server_runs_the_import_and_hands_it_to_rhino(tmp_path,monkeypatch):
     reqs=os.listdir(env.live_file('requests'));req=env.read_json(os.path.join(env.live_file('requests'),reqs[0]))
     assert req['type']=='context' and req['project']=='p1' and os.path.exists(env.live_file(req['file']))
     env.write_json(env.live_file('context_result.json'),{'file':req['file'],'ok':True,'message':'Rhino added terrain.'})
-    assert server._context_status()=={'state':'done','message':'Rhino added terrain.','job':req['file'],'counts':st['counts']}
+    assert server._context_status()=={'state':'done','message':'Rhino added terrain.','job':req['file'],'counts':st['counts'],'progress':0.9}
 
 
 def osm_map(limit=None):

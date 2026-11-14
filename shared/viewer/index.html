@@ -49,7 +49,7 @@
   #sidebar.hidden { transform: translateX(-330px); opacity: 0; pointer-events: none; }
   #sideHead { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: center; }
   #modelName { font-size: 17px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #status { color: var(--fg2); font-size: 12px; }
+  #status { color: var(--fg2); font-size: 12px; } #status:empty { display: none; }
   #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); flex: none; margin-top: 2px; }
   #dot.live { background: var(--green); } #dot.flash { background: var(--orange); }
   #sideBody { overflow-y: auto; padding: 0 10px 12px; flex: 1; }
@@ -103,21 +103,27 @@
   .switch input:checked + span { background: var(--green); }
   .switch input:checked + span::after { transform: translateX(17px); }
 
-  #controls { position: absolute; top: 12px; right: 12px; z-index: 6; display: flex; flex-direction: column; gap: 10px; }
-  .stack { border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+  #controls { position: absolute; top: 12px; right: 12px; z-index: 6; }
+  .stack { border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
   .stack button { width: 40px; height: 40px; display: grid; place-items: center; color: var(--fg); }
-  .stack button + button { border-top: .5px solid var(--sep); }
+  .stack button + button, #tools, #toolsFold { border-top: .5px solid var(--sep); }
+  #tools { display: flex; flex-direction: column; }
+  #controls.folded #tools { display: none; }
+  #toolsFold { height: 22px; color: var(--fg2); } #toolsFold .i { width: 14px; height: 14px; transition: transform .15s; }
+  #controls.folded #toolsFold .i { transform: rotate(180deg); }
+  .num { width: 64px !important; text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; margin: 12px 0 6px; } .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width .35s ease; }
   .stack button:hover { background: var(--fill); }
   .stack button.on { color: var(--accent); }
 
-  #hourLbl { min-width: 44px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  input[type=time] { font: inherit; color: var(--fg); background: var(--fill); border: 0; border-radius: 7px; padding: 3px 8px; outline: none; font-variant-numeric: tabular-nums; }
 
   .pop { position: absolute; top: 12px; right: 64px; width: 320px; border-radius: 14px; z-index: 7; padding: 14px 16px 16px; display: none; max-height: calc(100% - 24px); overflow-y: auto; }
   .pop.open { display: block; }
   #feedbackCard textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; padding: 8px 10px; border-radius: 9px; border: .5px solid var(--sep); background: var(--field, rgba(120,120,128,.12)); color: inherit; }
   #fbThumb { display: none; width: 100%; margin-top: 8px; border-radius: 8px; border: .5px solid var(--sep); }
   #fbThumb.on { display: block; }
-  .cxSize { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+  .cxSize { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; } .cxSize.none { font-weight: 400; color: var(--fg2); font-size: 13px; }
   .cxSize .s { display: block; font-size: 12px; font-weight: 400; color: var(--fg2); }
   #cxStatus.bad { color: var(--red); }
   .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
@@ -134,6 +140,7 @@
   #navDock button.on {color:var(--accent);background:var(--fill);}
   #navDock .divider {height:22px;width:1px;background:var(--sep);margin:0 3px;}
   .navLabel {display:flex;justify-content:space-between;margin:12px 0 7px;}
+  #navCard { top: auto; right: 14px; bottom: 96px; width: 250px; } #navCard .item { padding: 8px 0 6px; } #navCard h3 .link { font-weight: 500; font-size: 13px; }
   #frame { position: absolute; border: 1.5px solid var(--accent); border-radius: 2px; box-shadow: 0 0 0 9999px rgba(0,0,0,.28); pointer-events: none; display: none; z-index: 3; }
   #toast { position: absolute; left: 50%; top: 14px; transform: translate(-50%, -8px); z-index: 30; border-radius: 999px; padding: 8px 16px; max-width: min(640px, calc(100% - 120px)); font-weight: 500; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; text-align: center; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -149,8 +156,11 @@
   .sheet label { display: block; font-size: 12px; color: var(--fg2); margin: 10px 0 5px; }
   .sheet input[type=text] { width: 100%; }
   #measureLbl { position: absolute; z-index: 8; pointer-events: none; border-radius: 8px; padding: 4px 8px; font-weight: 600; font-variant-numeric: tabular-nums; display: none; }
-  .cesium-viewer-bottom { left: auto !important; right: 12px !important; bottom: 6px !important; }
-  .cesium-widget-credits { left: auto !important; right: 12px !important; bottom: 6px !important; }
+  .cesium-viewer-bottom { left: auto !important; right: 14px !important; bottom: 4px !important; }
+  .cesium-widget-credits { left: auto !important; right: 14px !important; bottom: 4px !important; font-size: 9px !important; opacity: .72; line-height: 1; }
+  .cesium-widget-credits img { height: 13px !important; width: auto !important; vertical-align: middle; }
+  .cesium-widget-credits a { font-size: 9px !important; }
+  .cesium-widget-credits:hover { opacity: 1; }
   body.picking .cesium-widget canvas { cursor: crosshair; }
   body.measuring .cesium-widget canvas, body.cropping .cesium-widget canvas { cursor: crosshair; }
   @media (max-width: 760px) { #sidebar, #searchBar { width: calc(100% - 76px); } .pop { right: 12px; top: 64px; width: calc(100% - 24px); } }
@@ -181,6 +191,7 @@
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8 8.2 8.2 0 00-6 2.6"/><path d="M4 4v4h4M12 8v4.5l3 2"/></symbol>
   <symbol id="i-import" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" stroke-dasharray="3 3"/><path d="M12 8v8M8.5 12.5L12 16l3.5-3.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6"/></symbol>
 </svg>
@@ -196,7 +207,7 @@
   <div id="results" class="glass"></div>
 </form>
 <aside id="sidebar" class="glass">
-  <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status">Waiting for Rhino…</div></div></div>
+  <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status"></div></div></div>
   <div id="sideBody">
     <div class="group" id="setsGroup">
       <div class="ghead">Design Sets <button id="flipSets" class="link" title="Show one set at a time, in turn">Compare</button></div>
@@ -219,8 +230,8 @@
       <div class="ghead">Camera</div>
       <div class="card">
         <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
-        <div class="item" id="fovRow"><span class="grow">Lens</span><span class="val" id="fovLbl"></span></div>
-        <div class="item" id="fovSlider"><input type="range" id="fov" min="15" max="100" step="1"></div>
+        <div class="item" id="fovRow"><span class="grow">Lens</span><input type="number" id="lensMm" class="num" min="6" max="1200" step="1" aria-label="Lens length in millimetres"><span class="val">mm</span></div>
+        <div class="item" id="fovSlider"><input type="range" id="fov" min="0" max="1000" step="1" aria-label="Lens length"></div>
         <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino's viewport</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
         
       </div>
@@ -233,59 +244,56 @@
         <div class="item"><button class="link" id="resample" title="Measure the map's ground height at the site again">Re-sample ground</button></div>
       </div>
     </div>
-    <div class="group">
-      <div class="ghead">Navigation</div>
-      <div class="card">
-        <div class="item"><span class="grow">Sensitivity</span><span class="val" id="sensValue"></span></div>
-        <div class="item"><input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100" style="width:100%"></div>
-        <div class="item"><details id="navHelp" style="width:100%"><summary>Controls</summary><dl class="keys" id="navKeys"></dl>
-          <button class="link" id="recInput" title="Records what your trackpad or mouse sends for 10 seconds and saves it as a file, to report a navigation problem">Record input for 10 s</button></details></div>
-      </div>
-    </div>
   </div>
 </aside>
 
-<div id="controls">
-  <div class="stack glass"><button id="toggleSide" title="Show or hide the sidebar"><svg class="i"><use href="#i-side"/></svg></button></div>
-  <div class="stack glass">
+<div id="controls" class="stack glass">
+  <button id="toggleSide" title="Sidebar" aria-label="Sidebar"><svg class="i"><use href="#i-side"/></svg></button>
+  <div id="tools">
+    <button id="captureBtn" title="Capture" aria-label="Capture"><svg class="i"><use href="#i-cam"/></svg></button>
     <button id="shadows" title="Sun" aria-label="Sun"><svg class="i"><use href="#i-sun"/></svg></button>
-    <button id="measureBtn" title="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
+    <button id="contextBtn" class="rhinoOnly" title="Surroundings to Rhino" aria-label="Bring the surroundings into Rhino"><svg class="i"><use href="#i-import"/></svg></button>
+    <button id="measureBtn" title="Measure" aria-label="Measure"><svg class="i"><use href="#i-ruler"/></svg></button>
+    <button id="feedbackBtn" title="Feedback" aria-label="Send feedback"><svg class="i"><use href="#i-chat"/></svg></button>
   </div>
-  <div class="stack glass"><button id="captureBtn" title="Capture"><svg class="i"><use href="#i-cam"/></svg></button></div>
-  <div class="stack glass rhinoOnly"><button id="contextBtn" title="Bring the surroundings into Rhino" aria-label="Bring the surroundings into Rhino"><svg class="i"><use href="#i-import"/></svg></button></div>
-  <div class="stack glass"><button id="feedbackBtn" title="Send feedback" aria-label="Send feedback"><svg class="i"><use href="#i-chat"/></svg></button></div>
+  <button id="toolsFold" title="Hide tools" aria-label="Show or hide the tools" aria-expanded="true"><svg class="i"><use href="#i-chev"/></svg></button>
 </div>
 
 <div id="peg" hidden aria-hidden="true"><svg class="i"><use href="#i-person"/></svg><span></span></div>
 <div id="navDock" class="glass">
   <button id="walkBtn" title="Walk: drag onto the map, or click" aria-label="Walk"><svg class="i"><use href="#i-person"/></svg></button>
-  <button id="northBtn" title="North up · drag to turn and tilt" aria-label="North up"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
+  <button id="northBtn" title="Compass" aria-label="Compass"><svg class="i" id="navNeedle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 4.5l2.6 7.5h-5.2z" fill="var(--red)" stroke="none"/><path d="M12 19.5l-2.6-7.5h5.2z" fill="currentColor" stroke="none" opacity=".45"/></svg></button>
   <button id="fly" title="Fit model" aria-label="Fit model"><svg class="i"><use href="#i-fit"/></svg></button>
   <span class="divider"></span>
   <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button><button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
 </div>
+<div id="navCard" class="glass pop">
+  <h3>Compass <button class="link" id="northUp">North up</button></h3>
+  <div class="item"><span class="grow">Heading</span><input type="number" id="headingN" class="num" min="0" max="359" step="1" aria-label="Heading in degrees"><span class="val">°</span></div>
+  <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.5" value="0" step="0.5">
+  <div class="item"><span class="grow" id="tiltTitle">Tilt</span><input type="number" id="tiltN" class="num" step="1" aria-label="Tilt in degrees"><span class="val">°</span></div>
+  <input id="navTilt" aria-label="Tilt" type="range" min="0" max="175" value="45" step="0.5">
+  <div class="item"><span class="grow">Sensitivity</span><input type="number" id="sensN" class="num" min="25" max="200" step="5" aria-label="Sensitivity in percent"><span class="val">%</span></div>
+  <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
+</div>
 <div id="feedbackCard" class="glass pop">
   <h3>Feedback <button class="mini" data-close="feedbackCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <textarea id="fbText" rows="5" aria-label="Your feedback" placeholder="What went wrong, or what would you like EarthLink to do?"></textarea>
-  <label class="chip" style="margin-top:8px"><input type="checkbox" id="fbShot" checked>Screenshot of this view</label>
+  <textarea id="fbText" rows="5" aria-label="Your feedback" placeholder="What should change?"></textarea>
+  <label class="chip" style="margin-top:8px"><input type="checkbox" id="fbShot" checked>Screenshot</label>
   <img id="fbThumb" alt="Screenshot that will be shared">
   <label class="chip" style="margin-top:8px"><input type="checkbox" id="fbSys" checked>System details</label>
-  <p class="hint" id="fbInfo"></p>
-  <p class="hint">Nothing is sent until you choose below. The screenshot shows your site and model; system details hold no location.</p>
   <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="pill" id="fbEmail" title="Opens your mail app with the message filled in">Email</button><button class="primary" id="fbGithub" title="Opens a filled-in issue on GitHub; you need a GitHub account">Open on GitHub</button></div>
 </div>
 <div id="contextCard" class="glass pop">
   <h3>Surroundings to Rhino <button class="mini" data-close="contextCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <p class="hint" id="cxHint">Drag a rectangle on the map around the area you want in Rhino.</p>
-  <div class="cxSize" id="cxSize" hidden></div>
-  <div class="row" style="margin-top:8px">
+  <div class="cxSize" id="cxSize">Drag a rectangle on the map</div>
+  <div class="row" style="margin-top:10px">
     <label class="chip"><input type="checkbox" id="cxTerrain" checked>Terrain</label>
     <label class="chip"><input type="checkbox" id="cxBuildings" checked>Buildings</label>
     <label class="chip"><input type="checkbox" id="cxRoads" checked>Roads</label>
   </div>
-  <p class="hint" style="margin-top:10px">Rhino receives open data, not Google's map, which may not be exported: buildings and roads from OpenStreetMap, terrain from Terrain Tiles on AWS. Pressing Import sends the rectangle's coordinates to those two services. Where OpenStreetMap has no height for a building, 7 m is assumed and it goes on its own layer.</p>
-  <p class="hint" id="cxStatus" role="status"></p>
-  <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="primary" id="cxImport" disabled>Import to Rhino</button></div>
+  <div class="bar" id="cxBar" hidden><i></i></div>
+  <div class="row" style="margin-top:12px; justify-content:space-between; align-items:center"><span class="hint" id="cxStatus" role="status" style="margin:0"></span><button class="primary" id="cxImport" disabled>Import</button></div>
 </div>
 <div id="captureCard" class="glass pop">
   <h3>Capture <button class="mini" data-close="captureCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
@@ -348,11 +356,11 @@
   <div class="item"><span class="grow">Sunlight</span><label class="switch"><input id="sunOn" type="checkbox" aria-label="Sunlight"><span></span></label></div>
   <div id="sunControls">
     <label class="navLabel" for="date">Date</label><input type="date" id="date" aria-label="Date" style="width:100%">
-    <label class="navLabel" for="hour">Time <span class="val" id="hourLbl"></span></label><input type="range" id="hour" aria-label="Time" min="0" max="1439" step="1" style="width:100%">
+    <label class="navLabel" for="hourT">Time <input type="time" id="hourT" aria-label="Time of day"></label><input type="range" id="hour" aria-label="Time" min="0" max="1439" step="1" style="width:100%">
     <div class="item"><span class="grow">Shadows</span><label class="switch"><input id="castShadows" type="checkbox" aria-label="Shadows"><span></span></label></div>
   </div>
   <div class="item rhinoOnly"><span class="grow">Sync with Rhino</span><label class="switch"><input type="checkbox" id="syncSun" aria-label="Sync sun with Rhino"><span></span></label></div>
-  <div class="item hide" id="lampRow" title="The lights of your Rhino model: point, spot, directional, rectangular and linear"><span class="grow">Lights <span class="val" id="lampCount"></span></span><label class="switch"><input type="checkbox" id="lampsOn" aria-label="Lights from Rhino"><span></span></label></div>
+  <div class="item hide" id="lampRow"><span class="grow">Rhino lights <span class="val" id="lampCount"></span></span><label class="switch"><input type="checkbox" id="lampsOn" aria-label="Lights from Rhino"><span></span></label></div>
 </div>
 
 <div id="toast" class="glass"></div>
@@ -481,16 +489,23 @@
      each adds colour x intensity x the cosine of its angle to the surface, with the fall-off chosen in Rhino (none by
      default); a spotlight is cut off at its cone and fades as cos^exponent from its axis; a rectangular or a linear
      light acts as a point light at its centre. They light your model and the map around it, and cast no shadows here.
+     Two things are gentler than Rhino's display, so that a lamp reads as light and not as a white shape: a spotlight's
+     hard cone edge fades in over the outer part of the cone (edge: the share of the way from the edge to the axis, by
+     cosine), and light stronger than knee levels off towards full brightness instead of clipping.
      On the same house in both (Mac GPU), lit plaster reads within about 5 % of Rhino's.
      max: lights drawn; gain: strength against Rhino's; toe: see lampShader; soft: how far the map's bumpy surface
      is evened out (0..1); reach: on the map only, a light with no fall-off fades out between 1x and 2x this many
      times the size of its design set (at least reachMin metres), so that a lamp does not light the whole city. */
-  const LAMPS = { max: 32, gain: 1, toe: 0.04, soft: 0.5, reach: 1, reachMin: 12, ok: !!scene.context.webgl2 };
+  const LAMPS = { max: 32, gain: 1, toe: 0.04, soft: 0.5, reach: 1, reachMin: 12, edge: 0.3, knee: 0.6, ok: !!scene.context.webgl2 };
   const lamps = { key: "", n: 0, data: new Float32Array(4 * 4 * 32), shader: null, inv: Cesium.Matrix4.IDENTITY.clone(), list: [] };
   const lampTexture = () => new Cesium.TextureUniform({ typedArray: lamps.data.slice(), width: 4 * LAMPS.max, height: 1, pixelFormat: Cesium.PixelFormat.RGBA, pixelDatatype: Cesium.PixelDatatype.FLOAT,
     minificationFilter: Cesium.TextureMinificationFilter.NEAREST, magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST, repeat: false });
   // One texel row: per light, position + kind | direction + cos(cone) | colour + spot exponent | attenuation + reach.
   const LAMP_GLSL = onMap => `
+        vec3 elSoft(vec3 v) {                                   // as it is up to LAMPS.knee, then levelling off towards 1
+          vec3 over = max(v - ${LAMPS.knee.toFixed(3)}, 0.0);
+          return min(v, vec3(${LAMPS.knee.toFixed(3)})) + ${(1 - LAMPS.knee).toFixed(3)} * (1.0 - exp(-over / ${(1 - LAMPS.knee).toFixed(3)}));
+        }
         vec3 elLamps(vec3 p, vec3 n) {
           vec3 sum = vec3(0.0);
           int count = int(u_lampN + 0.5);
@@ -503,11 +518,11 @@
               vec3 v = lp.xyz - p; float d = max(length(v), 0.01); L = v / d;
               k = min(1.0 / max(la.x + d * (la.y + d * la.z), 0.0001), 8.0);
               ${onMap ? "if (la.w > 0.0) k *= 1.0 - smoothstep(la.w, 2.0 * la.w, d);" : ""}
-              if (lp.w > 0.5) { float c = dot(-L, ld.xyz); k *= smoothstep(ld.w - 0.002, ld.w + 0.002, c) * pow(max(c, 0.0), max(lc.w, 1.0)); }
+              if (lp.w > 0.5) { float c = dot(-L, ld.xyz); k *= smoothstep(ld.w, mix(ld.w, 1.0, ${LAMPS.edge.toFixed(3)}), c) * pow(max(c, 0.0), max(lc.w, 1.0)); }
             }
             sum += lc.rgb * k * max(dot(n, L), 0.0);
           }
-          return sum;
+          return elSoft(sum);
         }`;
   // If a graphics driver cannot draw the map with that shader, reload once without it (no cut-out, no night tint).
   const NO_MAP_SHADER = (() => { try { return sessionStorage.getItem("earthlink:noMapShader") === "1"; } catch { return false; } })();
@@ -607,7 +622,7 @@
   function applySun(fromRhino=false,postEnabled=false){
     clearTimeout(sunPost);sunPost=null;
     const m=+$("hour").value,hh=String(Math.floor(m/60)).padStart(2,"0"),mm=String(m%60).padStart(2,"0");
-    $("hourLbl").textContent=`${hh}:${mm}`;
+    if(document.activeElement!==$("hourT"))$("hourT").value=`${hh}:${mm}`;
     const d=new Date(`${$("date").value}T${hh}:${mm}:00`);if(isNaN(d))return;
     const utc=d.toISOString().slice(0,19)+"Z";
     if(S.sun_enabled!==false)viewer.clock.currentTime=Cesium.JulianDate.fromDate(d);
@@ -623,6 +638,7 @@
     applySun(true);
   }
   $("date").oninput=$("hour").oninput=()=>applySun(false);
+  $("hourT").onchange=()=>{const m=/^(\d\d):(\d\d)/.exec($("hourT").value);if(m){$("hour").value=+m[1]*60+ +m[2];applySun(false);}};
   $("sunOn").onchange=()=>{saveS({sun_enabled:$("sunOn").checked});applySun(false,true);};
   $("castShadows").onchange=()=>{saveS({shadows:$("castShadows").checked});applyShadows();};
   $("shadows").onclick=()=>{const open=!$("sunCard").classList.contains("open");closePops("sunCard");$("sunCard").classList.toggle("open",open);};
@@ -643,6 +659,9 @@
     dayTint=new Cesium.Color(...L.tint.map(v=>Math.pow(v,1/2.2)),1);   // your model takes the same tint as the map (a model colour is given in display values)
     for(const n of Object.keys(models))styleModel(models[n],n);
     scene.backgroundColor=new Cesium.Color(...L.sky,1);
+    // The sky's own glow follows the time of day: Cesium keeps a bright blue band at the horizon all night otherwise.
+    if(scene.skyAtmosphere){const a=scene.skyAtmosphere;a.show=L.night<0.97;a.brightnessShift=-0.92*L.night;a.saturationShift=-0.3*L.night;}
+    if(scene.fog)scene.fog.enabled=L.night<0.5;
     if(scene.skyBox)scene.skyBox.show=L.night>0.5;
     if(scene.moon)scene.moon.show=L.night>0.5;
     viewer.shadows=cast;viewer.shadowMap.darkness=LIGHT.shadow+(1-LIGHT.shadow)*(1-L.shadow);
@@ -750,14 +769,18 @@
       c.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: 0, roll: 0 } });
     }
   });
+  /* Lens length as on a 35 mm camera (24 mm frame height), like Rhino's. The slider runs from 12 to 200 mm, each
+     step the same ratio; any length from 6 to 1200 mm can be typed. */
+  const LENS = { min: 12, max: 200 }, mmOf = v => 12 / Math.tan(v / 2), vfovOf = mm => 2 * Math.atan(12 / mm);
   function showFov() {
     $("fovRow").classList.toggle("hide", isOrtho()); $("fovSlider").classList.toggle("hide", isOrtho());
     if (isOrtho()) return;
-    const v = vfov(), deg = Cesium.Math.toDegrees(v);
-    $("fov").value = Math.round(deg);
-    $("fovLbl").textContent = `${(12 / Math.tan(v / 2)).toFixed(0)} mm`;   // 35 mm equivalent (24 mm frame height)
+    const mm = mmOf(vfov());
+    $("fov").value = Math.round(1000 * Math.log(Math.min(LENS.max, Math.max(LENS.min, mm)) / LENS.min) / Math.log(LENS.max / LENS.min));
+    if (document.activeElement !== $("lensMm")) $("lensMm").value = Math.round(mm);
   }
-  $("fov").oninput = () => setVfov(Cesium.Math.toRadians(+$("fov").value));
+  $("fov").oninput = () => setVfov(vfovOf(LENS.min * Math.pow(LENS.max / LENS.min, +$("fov").value / 1000)));
+  $("lensMm").onchange = () => { const mm = +$("lensMm").value; if (mm >= 6 && mm <= 1200) setVfov(vfovOf(mm)); showFov(); };
   let keepL = null;
   window.addEventListener("resize", () => { keepL = keepL ?? getLens(); setTimeout(() => { setLens(keepL); keepL = null; drawFrame(); }, 60); });
 
@@ -1225,7 +1248,17 @@
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n); styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
-    if (first || projectChanged) { if (!restoreCamera() || projectChanged) flyTo(0); sampleGround(false); refreshViews(); }
+    if (first || projectChanged) {
+      if (projectChanged && RHINO) {                         // another Rhino file: show it as that file was left
+        try { Object.assign(S, await api("/api/settings")); } catch { /* keep what is shown */ }
+        if (generation !== modelGeneration) return;
+        for (const n of Object.keys(models)) { models[n].show = !hidden().has(n); styleModel(models[n], n); }
+        renderSets(); placeModels(); showSite(); restyle(); if (S.sun_utc) sunFromUtc(S.sun_utc, S.sun_enabled);
+      }
+      const left = S.view && S.view.project === m.project && S.view.cam;
+      if (left) applyView(left, 0); else if (!restoreCamera() || projectChanged) flyTo(0);
+      sampleGround(false); refreshViews();
+    }
     setTimeout(() => {if(generation===modelGeneration)$("dot").className = "live";}, 400);
   }
   function renderSets() {
@@ -1283,9 +1316,17 @@
     viewer.camera.setView({ destination: new Cesium.Cartesian3(c.x, c.y, c.z), orientation: { heading: c.h, pitch: c.p, roll: c.r } });
     return true;
   }
+  let viewSave = 0;
   viewer.camera.moveEnd.addEventListener(() => {
     const p = viewer.camera.positionWC;
     store.set("camera", { x: p.x, y: p.y, z: p.z, h: viewer.camera.heading, p: viewer.camera.pitch, r: viewer.camera.roll });
+    // Rhino keeps the last camera and lens in the file (with the other settings), so the file reopens as it was left.
+    clearTimeout(viewSave);
+    if (RHINO && meta?.project && anchor() && !walk) viewSave = setTimeout(() => {
+      if (!meta?.project || walk || $("follow").checked) return;
+      const c = captureCamera(""), cam = { projection: c.projection, pos: c.pos, dir: c.dir, up: c.up, vfov: c.vfov, shift: c.shift, half_height: c.half_height };
+      saveS({ view: { project: meta.project, cam } });
+    }, 4000);
   });
 
   // ---------------------------------------------------------------- named views
@@ -1743,7 +1784,7 @@
 
   // ---------------------------------------------------------------- panels, toggles
   const cx = { a: null, b: null, ent: null, drag: false, timer: 0, busy: false };   // the rectangle of "Surroundings to Rhino"
-  const closePops = except => { document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); }); if (except !== "contextCard") cxLeave(); };
+  const closePops = except => { document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); }); if (except !== "navCard") $("northBtn").classList.remove("on"); if (except !== "contextCard") cxLeave(); };
   const toggleCapture = open => { closePops("captureCard"); $("captureCard").classList.toggle("open", open); $("captureBtn").classList.toggle("on", open); if (!open) { $("showFrame").checked = false; drawFrame(); } };
   $("captureBtn").onclick = () => toggleCapture(!$("captureCard").classList.contains("open"));
 
@@ -1774,7 +1815,6 @@
   }
   const fbSync = () => {
     $("fbThumb").classList.toggle("on", $("fbShot").checked && !!fbBlob);
-    $("fbInfo").textContent = $("fbSys").checked ? fbDetails() : ""; $("fbInfo").style.whiteSpace = "pre-line";
     $("fbEmail").hidden = !FEEDBACK.email;
     $("fbGithub").disabled = $("fbEmail").disabled = !$("fbText").value.trim();
   };
@@ -1840,13 +1880,13 @@
   function cxSync(status, bad) {
     const b = cxBounds(), size = b && cxSize(b), ft = m => Math.round(m / 0.3048).toLocaleString();
     const big = size && Math.max(...size) > CX.max, small = size && Math.min(...size) < CX.min;
-    $("cxSize").hidden = !size;
-    if (size) $("cxSize").innerHTML = `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
-    $("cxHint").textContent = !size ? "Drag a rectangle on the map around the area you want in Rhino."
-      : big ? `Too large: the limit is ${CX.max / 1000} km a side. Drag a smaller rectangle.` : small ? `Too small: at least ${CX.min} m a side.` : "Drag again to change the rectangle.";
+    $("cxSize").classList.toggle("none", !size || big || small);
+    $("cxSize").innerHTML = !size ? "Drag a rectangle on the map" : big ? `Too large (limit ${CX.max / 1000} km a side)` : small ? `Too small (at least ${CX.min} m a side)`
+      : `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
     const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked;
     $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
     if (status !== undefined) { $("cxStatus").textContent = status; $("cxStatus").classList.toggle("bad", !!bad); }
+    $("cxBar").hidden = !cx.busy;
   }
   function cxLeave() {                                        // the tool is put away; a running import carries on in Rhino
     document.body.classList.remove("cropping"); $("contextBtn").classList.remove("on");
@@ -1884,9 +1924,11 @@
     clearTimeout(cx.timer);
     let r; try { r = await api("/api/context"); } catch { r = { state: "error", message: "Rhino is not answering." }; }
     if (r.state === "working" || r.state === "sent") {
-      cxSync(r.state === "sent" ? `Rhino is adding ${cxWords(r.counts) || "it"}…` : (r.message || "Working") + "…");
-      cx.timer = setTimeout(cxWatch, 700); return;
+      $("cxBar").firstElementChild.style.width = Math.round(100 * Math.max(0.03, Math.min(1, r.progress ?? (r.state === "sent" ? 0.9 : 0.1)))) + "%";
+      cxSync(r.state === "sent" ? "Adding to Rhino" : r.message || "Working");
+      cx.timer = setTimeout(cxWatch, 400); return;
     }
+    $("cxBar").firstElementChild.style.width = "100%";
     cx.busy = false;
     const text = r.state === "done" ? r.message || "Rhino added it." : r.message || "The import did not finish.";
     cxSync(text, r.state !== "done");
@@ -1894,7 +1936,7 @@
   }
   $("cxImport").onclick = async () => {
     const b = cxBounds(); if (!b || cx.busy) return;
-    cx.busy = true; cxSync("Starting…");
+    cx.busy = true; $("cxBar").firstElementChild.style.width = "3%"; cxSync("Starting");
     let r; try { r = await api("/api/context", { bounds: b, terrain: $("cxTerrain").checked, buildings: $("cxBuildings").checked, roads: $("cxRoads").checked }); } catch { r = { state: "error", message: "Rhino is not answering." }; }
     if (r.state === "error") { cx.busy = false; return cxSync(r.message || "The import could not start.", true); }
     cxWatch();
@@ -1903,6 +1945,9 @@
   const setSide = h => { $("sidebar").classList.toggle("hidden", h); $("toggleSide").classList.toggle("on", !h); store.set("sideHidden", h); };
   $("toggleSide").onclick = () => setSide(!$("sidebar").classList.contains("hidden"));
   setSide(!!store.get("sideHidden"));
+  const foldTools = f => { $("controls").classList.toggle("folded", f); $("toolsFold").setAttribute("aria-expanded", String(!f)); $("toolsFold").title = f ? "Show tools" : "Hide tools"; store.set("toolsFolded", f); if (f) closePops(); };
+  $("toolsFold").onclick = () => foldTools(!$("controls").classList.contains("folded"));
+  foldTools(!!store.get("toolsFolded"));
   $("fly").onclick = () => flyTo();
   $("resample").onclick = () => { if (walk) walk.exit(); sampleGround(true); };
   $("nudge").oninput = () => { const v = +$("nudge").value; if (!Number.isFinite(v) || Math.abs(v) > 1000) return; saveS({ nudge: Math.round(v * 100) / 100 }); placeModels(); };
@@ -2056,21 +2101,33 @@
     const h = walk?.body ? walk.heading : Cesium.Math.toDegrees(viewer.camera.heading);
     $("navNeedle").style.transform = `rotate(${-h}deg)`;
   });
-  $("navKeys").innerHTML = (MAC_NAV ? [
-    ["Two fingers", "Rotate (pan in Parallel)"], ["Shift + two fingers", "Pan"], ["Pinch", "Zoom"],
-    ["Right-drag", "Rotate"], ["Shift + right-drag", "Pan"], ["⌘ + right-drag, wheel", "Zoom"], ["Option + right-drag", "Move in / out"],
-    ["Arrow keys", "Rotate"], ["Page Up / Down", "Zoom"],
-  ] : [
-    ["Right-drag", "Rotate (pan in Parallel)"], ["Shift + right-drag", "Pan"], ["Wheel, two-finger scroll, pinch", "Zoom"],
-    ["Ctrl + right-drag", "Zoom"], ["Alt + right-drag", "Move in / out"], ["Arrow keys", "Rotate"], ["Page Up / Down", "Zoom"],
-  ]).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
-  // The compass: click for north up; drag it to turn (sideways) and tilt (up and down).
+  // The compass: click it for heading, tilt and sensitivity (dragged or typed); drag it to turn and tilt.
   const north = () => {
     if (!walk?.body) return nav.north();
     const from = walk.heading, d = -turn(from); let t = 0;
     const step = () => { t = Math.min(1, t + 1 / 20); walk.heading = (from + d * (1 - Math.pow(1 - t, 3)) + 360) % 360; if (t < 1 && walk?.body) requestAnimationFrame(step); };
     step();
   };
+  function navLabels() {
+    const two = projection === "two_point", w = !!walk?.body, quiet = id => document.activeElement !== $(id);
+    const ht = w ? { heading: walk.heading, tilt: walk.pitch } : nav.headingTilt();
+    $("tiltTitle").textContent = w ? "Look" : "Tilt";
+    const lo = w ? -85 : two ? 25 : 0, hi = w ? 85 : two ? 155 : 175;      // over 90: looking up
+    for (const id of ["navTilt", "tiltN"]) { $(id).min = lo; $(id).max = hi; }
+    if (quiet("navTilt")) $("navTilt").value = ht.tilt; if (quiet("tiltN")) $("tiltN").value = Math.round(ht.tilt);
+    if (quiet("navHeading")) $("navHeading").value = ht.heading; if (quiet("headingN")) $("headingN").value = Math.round(ht.heading) % 360;
+    if (quiet("sens")) $("sens").value = Math.round(sensitivity() * 100); if (quiet("sensN")) $("sensN").value = Math.round(sensitivity() * 100);
+  }
+  const toggleNav = on => { closePops("navCard"); $("navCard").classList.toggle("open", on); $("northBtn").classList.toggle("on", on); if (on) navLabels(); };
+  const setHeading = v => { if (!Number.isFinite(v)) return; if (walk?.body) walk.heading = ((v % 360) + 360) % 360; else nav.turn(turn(v - nav.headingTilt().heading), 0, true); scene.requestRender(); };
+  const setTilt = v => { if (!Number.isFinite(v)) return; if (walk?.body) walk.pitch = Math.max(-85, Math.min(85, v)); else nav.turn(0, v - nav.headingTilt().tilt, true); scene.requestRender(); };
+  $("navHeading").oninput = () => setHeading(+$("navHeading").value); $("headingN").onchange = () => { setHeading(+$("headingN").value); navLabels(); };
+  $("navTilt").oninput = () => setTilt(+$("navTilt").value); $("tiltN").onchange = () => { setTilt(+$("tiltN").value); navLabels(); };
+  const setSens = v => { if (!(v >= 25 && v <= 200)) return; store.set("sensitivity", Math.round(v)); };
+  $("sens").oninput = () => { setSens(+$("sens").value); navLabels(); }; $("sensN").onchange = () => { setSens(+$("sensN").value); navLabels(); };
+  $("northUp").onclick = north;
+  let labelsAt = 0;
+  scene.postRender.addEventListener(() => { const now = performance.now(); if ($("navCard").classList.contains("open") && now - labelsAt > 150) { labelsAt = now; navLabels(); } });
   (() => {
     const b = $("northBtn"); let drag = null;
     b.addEventListener("pointerdown", e => { if (e.button) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }; b.setPointerCapture(e.pointerId); });
@@ -2083,19 +2140,11 @@
       if (walk?.body) { walk.heading = (walk.heading + dx * 0.5 + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch - dy * 0.3)); }
       else nav.turn(dx * 0.5, -dy * 0.3);
     });
-    const end = e => { if (!drag || e.pointerId !== drag.id) return; const moved = drag.moved; drag = null; if (!moved && e.type === "pointerup") north(); };
+    const end = e => { if (!drag || e.pointerId !== drag.id) return; const moved = drag.moved; drag = null; if (!moved && e.type === "pointerup") toggleNav(!$("navCard").classList.contains("open")); };
     b.addEventListener("pointerup", end); b.addEventListener("pointercancel", end);
-    b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); north(); } });
+    b.addEventListener("dblclick", north);
+    b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNav(!$("navCard").classList.contains("open")); } });
   })();
-  const showSens = () => { $("sensValue").textContent = `${Math.round(sensitivity() * 100)} %`; };
-  $("sens").value = Math.round(sensitivity() * 100); showSens();
-  $("sens").oninput = () => { store.set("sensitivity", +$("sens").value); showSens(); };
-  $("recInput").onclick = async () => {
-    msg("Recording input for 10 seconds: navigate as usual.", 10000);
-    const data = await nav.record(10000), a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" })); a.download = "earthlink-input.json"; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000); msg(`Saved earthlink-input.json (${data.events.length} events).`, 4000);
-  };
   for (const [id, sign] of [["zoomIn", -1], ["zoomOut", 1]]) {   // click: one smooth step; hold: continuous
     const b = $(id); let timer = 0, held = false;
     const up = () => { clearTimeout(timer); if (held) nav.release(); else if (timer) nav.zoomStep(sign); timer = 0; held = false; };
@@ -2353,12 +2402,12 @@
     });
     es.addEventListener("sun", e => { const j = JSON.parse(e.data); if (j.source === "rhino" && S.sync_sun !== false) sunFromUtc(j.utc,j.enabled); });
     es.addEventListener("pick", e => { pickReq = JSON.parse(e.data) || {}; if (pickReq.project) openSite(true); });
-    es.onopen = () => { $("dot").className = "live"; if (!meta) $("status").textContent = "Send a model to begin."; };
-    es.onerror = () => { $("dot").className = ""; $("status").textContent = "Open EarthLinkViewer in Rhino."; };
+    es.onopen = () => { $("dot").className = "live"; $("dot").title = "Linked to Rhino"; };
+    es.onerror = () => { $("dot").className = ""; $("dot").title = "Rhino is not linked: run EarthLinkViewer in Rhino"; };
     if (pickReq && pickReq.project) openSite(true);
     else if (!(await api("/api/meta")).sets) refreshViews();
   } else {
-    $("status").textContent = "Shared view";
+    $("dot").title = "Shared copy";
     const m = await api("/api/meta"); if (m.sets) loadMeta(m);
   }
 })();
