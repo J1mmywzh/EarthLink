@@ -442,6 +442,13 @@ def serve(viewer_dir, port):
                 self._json({"ok": True})
             elif path == "/api/context":
                 self._json(_context_start(data))
+            elif path == "/api/record":                      # a navigation recording (?record in the viewer): kept on this computer only
+                d = os.path.join(env.data_dir(), "recordings")
+                os.makedirs(d, exist_ok=True)
+                name = time.strftime("nav-%Y%m%d-%H%M%S.json")
+                with open(os.path.join(d, name), "w") as fh:
+                    json.dump(data, fh)
+                self._json({"ok": True, "file": name})
             elif path == "/api/views":
                 name = env.current_project()
                 if data.get("op") == "put" and isinstance(data.get("view"), dict) and data["view"].get("name"):

@@ -2312,6 +2312,31 @@
     walking: () => !!walk?.body,
     look: (dh, dp) => { walk.heading = (walk.heading + dh + 360) % 360; walk.pitch = Math.max(-85, Math.min(85, walk.pitch + dp)); },
   });
+  // ?record[=seconds]: record the trackpad and what the camera does, then keep it on this computer (data folder,
+  // recordings/) for working on navigation. Starts at the first gesture; nothing is sent anywhere else.
+  { const q = new URLSearchParams(location.search); if (q.has("record") && RHINO) {
+    const LIMIT = 1000 * Math.min(300, Math.max(10, +q.get("record") || 60)), C = Cesium, cam = viewer.camera, R = { ev: [], fr: [], t0: 0, on: false, done: false, n: 0 };
+    const finish = async () => {
+      if (R.done) return; R.done = true;
+      const r = await api("/api/record", { ua: navigator.userAgent, dpr: devicePixelRatio, size: [innerWidth, innerHeight], sensitivity: sensitivity(),
+        mac: MAC_NAV, version: (await fetch("/api/ping").then(x => x.json()).catch(() => ({}))).version, events: R.ev, frames: R.fr }).catch(() => ({}));
+      msg(r.file ? "Recording saved." : "The recording could not be saved.", 6000);
+    };
+    msg(`Recording: starts with your first gesture, ${LIMIT / 1000} s.`, 8000);
+    scene.canvas.addEventListener("wheel", e => {
+      if (R.done) return; if (!R.on) { R.on = true; R.t0 = e.timeStamp; setTimeout(finish, LIMIT); msg("Recording…", 3000); }
+      R.ev.push([Math.round(e.timeStamp - R.t0), e.deltaX, e.deltaY, e.deltaMode, e.wheelDeltaY ?? 0, +e.ctrlKey, +e.shiftKey]);
+    }, { capture: true, passive: true });
+    for (const n of ["gesturestart", "gesturechange", "gestureend"]) scene.canvas.addEventListener(n, e => { if (R.on && !R.done) R.ev.push([Math.round(e.timeStamp - R.t0), n, e.scale ?? 1]); }, { capture: true, passive: true });
+    scene.postRender.addEventListener(() => {
+      if (!R.on || R.done) return;
+      const p = cam.positionWC, c = C.Cartographic.fromCartesian(p), pv = nav.pivot;
+      let pick = null; if (R.n++ % 2 === 0) { try { pick = surfaceHit(new C.Ray(p, cam.directionWC)); } catch { pick = -2; } }
+      R.fr.push([Math.round(performance.now() - R.t0), +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +c.height.toFixed(2), +C.Math.toDegrees(cam.pitch).toFixed(3), +C.Math.toDegrees(cam.heading).toFixed(3),
+        pv ? +C.Cartesian3.distance(pv, p).toFixed(2) : -1, pick == null ? -1 : +(+pick).toFixed(2), pv ? +C.Cartographic.fromCartesian(pv).height.toFixed(2) : -1]);
+    });
+    addEventListener("pagehide", finish);
+  } }
   const turn = d => ((d % 360) + 540) % 360 - 180;
   scene.postRender.addEventListener(() => {   // the compass follows the heading
     const h = walk?.body ? walk.heading : Cesium.Math.toDegrees(viewer.camera.heading);
