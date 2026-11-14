@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-beta.11 — preview, in progress
+- **Map connection**: a guided dialog with links to Cesium ion's sign-up and token pages; a pasted token is checked at once. Reopen it under Site > Map connection or with EarthLinkSettings > ConnectMap. A map that does not open offers "Connect map" instead of a grey globe.
+- **Surroundings to Rhino**: contour lines at your interval (every fifth on its own layer), the height for buildings without one, the storey height, and OpenStreetMap's tags as user text.
+- Safari: a trackpad pinch zooms the map. Ctrl + mouse wheel steps like the wheel (it jumped by 2x).
+- The viewer draws when something changes instead of continuously, which leaves the graphics card to Rhino while you model.
+- A site is picked on the map itself, not on your model standing on it. Enter on a focused Cancel no longer confirms.
+- Server: set names with accents or non-Latin letters load; file replacement is retried on Windows; a Surroundings import started twice runs once and gives up with a message when Rhino does not answer.
+
 ## 0.2.0-beta.10 — preview, 2026-11-13
 New
 - **Lights from Rhino.** The model's point, spot, directional, rectangular and linear lights light the model and the map, as Rhino's Rendered mode draws them (measured there): colour x intensity x the angle to the surface, Rhino's fall-off, a spotlight's cone and hot spot (its edge softened, and strong light levelling off instead of clipping, so a lamp does not read as a white disc), rectangular and linear lights as a point at their centre. Changing a light in Rhino updates the viewer within a second without a resend; a light follows its design set's placement and visibility. **Lights** in the Sun panel switches them off. They cast no shadows yet (Rhino's point, spot and directional lights do), and on the map a light without fall-off fades out one to two set-sizes away.

@@ -1,14 +1,33 @@
 # EarthLink
 
-EarthLink connects Rhino to an interactive browser viewer on Google Photorealistic 3D Tiles. Send selected geometry to its real-world location, then see design changes update live. Synchronize named views and sun settings, capture images, and optionally export to Google Earth Pro.
+**Your Rhino 8 model on Google's photorealistic 3D map, live, in the browser.** Free, for Mac and Windows.
 
-**Preview: 0.2.0-beta.10** (a pre-release in PackageManager: tick *Include pre-releases*). The stable release is 0.1.1.
+Send geometry from Rhino and it stands on the real site. Change it in Rhino and it updates. Move the sun, go to night with your model's lights, save views that Rhino shares, capture images, walk around at eye level, and bring the surrounding terrain, buildings and roads back into Rhino as geometry.
 
-## Install
+**Preview: 0.2.0-beta.11** (a pre-release in Package Manager: tick *Include pre-releases*). The stable release is 0.1.1.
 
-In Rhino 8, run **PackageManager**, search **EarthLink** (tick *Include pre-releases* for this beta), and install. Restart Rhino when ready.
+## Quick start
 
-You need your own Cesium ion token or Google Maps Platform key with Map Tiles API access. Enter it in **EarthLinkSettings** or the viewer's connection dialog. Google Earth Pro is optional.
+1. **Install.** In Rhino 8, run `PackageManager`, tick *Include pre-releases*, search **EarthLink**, install, restart Rhino. The commands are typed (there is no toolbar): `SendToEarth`, `EarthLinkViewer`, `EarthLinkSync`, `EarthLinkSettings`.
+2. **Connect the map** (once, about two minutes, free). Run `EarthLinkViewer`. The viewer opens in your browser with a dialog:
+   - *Create a free Cesium ion account* opens [ion.cesium.com/signup](https://ion.cesium.com/signup).
+   - *Open your access tokens* opens [ion.cesium.com/tokens](https://ion.cesium.com/tokens): copy the **Default Token**.
+   - Paste it. EarthLink checks it with Cesium at once and says so if it is wrong. Press **Connect**.
+
+   A Google Maps Platform key with the Map Tiles API works too (*Use a Google Maps key instead*). Change it later under **Site > Map connection**, or with `EarthLinkSettings > ConnectMap`.
+3. **Send a model.** Select geometry, run `SendToEarth`, choose **PickOnMap** and click where it should stand. That is all: the model is on the site.
+
+What you need: Rhino 8, an internet connection (the map and the viewer's 3D engine are loaded from the web), and a current Chrome, Edge, Safari or Firefox. The viewer runs on your own computer at `127.0.0.1:8765`; your model is not uploaded anywhere.
+
+| Then try | Where |
+| --- | --- |
+| Update while you model | `SendToEarth` with **Live**, or **Edit** on a set |
+| Clear the site under the model | the dashed square beside a set's eye |
+| Sun, shadows, night with your Rhino lights | the sun button |
+| Views shared with Rhino's Named Views | **Save View** |
+| Images of every saved view | the camera button |
+| Terrain, buildings, roads and contours into Rhino | the dashed square with an arrow |
+| Walk at eye level | the person, bottom right |
 
 ## Send a model
 
@@ -84,18 +103,21 @@ Save named views in Rhino or the viewer: they are always the same in both. A vie
 - Send selections as separate named sets; show, hide, compare, or style them independently.
 - Materials, Clay, and Ghost control model display. Materials shows your Rhino render materials lit like Rhino's Rendered mode (measured on the same colour swatches): colours, image and procedural textures with their box or planar mapping, glass and other see-through materials, emission. It is a real-time picture: there are no ray-traced reflections or refraction, and polished metal shows mostly its own colour.
 - **Edit** a set (select its name) to place it on the site: drag it on the map (**Move on map**), type its East / North / Up offset in metres, or rotate it about the centre of its base with the slider or an exact angle. The same card has **Update when it changes in Rhino** (SendToEarth's Live option) and **Update now**, so you do not need Rhino's command line to refresh a set. Changes show at once and are saved automatically; there is no Apply step and nothing is exported again. Placement is an EarthLink layer kept with the set in your Rhino file: your Rhino geometry never moves, so you can keep modelling on Rhino's own grid. **Original position** puts the set back where it is in Rhino. While you drag or rotate, **Hide map underneath** pauses and returns when you stop.
-- **Hide map underneath** is set for each design set (the scissors next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved. Ground is removed as well as buildings and vegetation. Around the base, within 3 m, the map's own ground is graded to the base's level, so the map meets the model with no gap and no separate patch; trees and buildings more than about 4 m above or below the base keep their height. The grading is a presentation fill, not survey data. Sets more than about 400 m apart share one cut-out and its edge gets coarser.
+- **Hide map underneath** is set for each design set (the dashed square next to its eye). It removes Google content only where the set meets the ground: the outline of the set's lowest surfaces, within 1 cm of its lowest point. An overhang, a cantilever or a set that widens upward keeps the map beneath it. Concave edges, separate pieces and courtyards over 1 m² are preserved. Ground is removed as well as buildings and vegetation. Around the base, within 3 m, the map's own ground is graded to the base's level, so the map meets the model with no gap and no separate patch; trees and buildings more than about 4 m above or below the base keep their height. The grading is a presentation fill, not survey data. Sets more than about 400 m apart share one cut-out and its edge gets coarser.
 - **Section cut** clips the uploaded model. **Measure** uses two clicked points; Esc clears the measurement.
 
 ## Bring the surroundings into Rhino
 
-**Surroundings to Rhino** (the dashed square with an arrow, right-hand tools) brings the area around your site into the Rhino file as geometry you can model against. Drag a rectangle on the map (20 m to 3 km a side), choose **Terrain**, **Buildings** and **Roads**, and press **Import**; a bar shows the progress. Rhino adds, on layer **EarthLink Context**, in place and as one Undo step:
+**Surroundings to Rhino** (the dashed square with an arrow, right-hand tools) brings the area around your site into the Rhino file as geometry you can model against. Drag a rectangle on the map (20 m to 3 km a side), choose **Terrain**, **Buildings**, **Roads** and **Contours**, and press **Import**; a bar shows the progress. **Options** holds the contour interval, the height given to buildings OpenStreetMap has no height for (7 m unless you change it) and the storey height used when it gives storeys. Rhino adds, on layer **EarthLink Context**, in place and as one Undo step:
 
 - **Terrain**: a mesh of the ground (cells of 1 m, coarser for areas over 200 m a side), placed so that it passes through the map's ground at your site.
 - **Buildings**: closed solids from each building's outline, standing on the terrain. The height comes from OpenStreetMap (its height, or 3.2 m per storey); where it has none, 7 m is assumed and the building goes on its own layer, **Buildings (height assumed)**. Whole buildings only: those centred in the rectangle.
 - **Roads**: centre lines draped on the terrain, cut at the rectangle, named and tagged with their kind.
+- **Contours**: lines at round heights above sea level at your interval, every fifth on its own layer, each named with its height.
 
-This is open data, not Google's map, which its terms do not allow to be exported: buildings and roads © OpenStreetMap contributors (ODbL), terrain from Terrain Tiles on AWS Open Data. Pressing Import sends the rectangle's coordinates to those two services, and nothing before that. It is massing and context, not a survey: outlines are as accurate as OpenStreetMap is there, usually a metre or two.
+Everything OpenStreetMap records about a building or road (use, storeys, material, name) is in the object's user text, as `osm:` keys.
+
+This is open data, not Google's map, which its terms do not allow to be exported: buildings and roads © OpenStreetMap contributors (ODbL), terrain from Terrain Tiles on AWS Open Data. Pressing Import sends the rectangle (with 200 m around it) to OpenStreetMap's servers and the terrain tiles' server, and nothing before that. It is massing and context, not a survey: outlines are as accurate as OpenStreetMap is there, usually a metre or two.
 
 ## The file remembers
 
@@ -117,8 +139,8 @@ Open **Capture** to choose image size, detail, and full/context/model passes. Th
 | --- | --- |
 | `SendToEarth` | Send selected geometry, choose sets and Live behavior |
 | `EarthLinkViewer` | Open the viewer |
-| `EarthLinkSync` | Configure views, viewport following, and sun sync |
-| `EarthLinkSettings` | Set map credentials, capture folder, and Earth Pro options |
+| `EarthLinkSync` | Viewport following and sun sync |
+| `EarthLinkSettings` | Map connection, capture folder, Earth Pro, sets, stop the viewer's server |
 
 ## Manuals and development
 
@@ -127,6 +149,6 @@ Open **Capture** to choose image size, detail, and full/context/model passes. Th
 - [Architecture](docs/ARCHITECTURE.md) and [development](docs/DEVELOPMENT.md): source structure, tests, builds, and releases.
 - [Third-party services and licenses](docs/THIRD_PARTY.md).
 
-EarthLink uses Rhino 8 Python, a separate local Python server, CesiumJS 1.140, and a browser viewer with no frontend build step. Original EarthLink code is MIT licensed; bundled dependencies retain their own licenses.
+EarthLink uses Rhino 8 Python, a separate local Python server, CesiumJS 1.140, and a browser viewer with no frontend build step. Original EarthLink code is MIT licensed; CesiumJS is loaded from a CDN under its own license.
 
 This preview has unit, API and browser tests and was checked on a Mac GPU over Google's tiles. Windows integration still needs a separate check. Map content is visual context, not survey data. Known issues are listed in the user manual.
