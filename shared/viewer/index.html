@@ -481,10 +481,11 @@
      each adds colour x intensity x the cosine of its angle to the surface, with the fall-off chosen in Rhino (none by
      default); a spotlight is cut off at its cone and fades as cos^exponent from its axis; a rectangular or a linear
      light acts as a point light at its centre. They light your model and the map around it, and cast no shadows here.
-     max: lights drawn; gain: makes up for the tone curve your model is drawn with (the map has none); soft: how far
-     the map's bumpy surface is evened out (0..1); reach: on the map only, a light with no fall-off fades out between
-     1x and 2x this many times the size of its design set, so that a lamp does not light the whole city. */
-  const LAMPS = { max: 32, gain: 1.08, soft: 0.5, reach: 1, reachMin: 12, ok: !!scene.context.webgl2 };
+     On the same house in both (Mac GPU), lit plaster reads within about 5 % of Rhino's.
+     max: lights drawn; gain: strength against Rhino's; toe: see lampShader; soft: how far the map's bumpy surface
+     is evened out (0..1); reach: on the map only, a light with no fall-off fades out between 1x and 2x this many
+     times the size of its design set (at least reachMin metres), so that a lamp does not light the whole city. */
+  const LAMPS = { max: 32, gain: 1, toe: 0.04, soft: 0.5, reach: 1, reachMin: 12, ok: !!scene.context.webgl2 };
   const lamps = { key: "", n: 0, data: new Float32Array(4 * 4 * 32), shader: null, inv: Cesium.Matrix4.IDENTITY.clone(), list: [] };
   const lampTexture = () => new Cesium.TextureUniform({ typedArray: lamps.data.slice(), width: 4 * LAMPS.max, height: 1, pixelFormat: Cesium.PixelFormat.RGBA, pixelDatatype: Cesium.PixelDatatype.FLOAT,
     minificationFilter: Cesium.TextureMinificationFilter.NEAREST, magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST, repeat: false });
@@ -1049,9 +1050,11 @@
           if (dot(nE, pE) > 0.0) nE = -nE;                       // both faces of a surface are lit, as in Rhino
           vec3 lit = material.diffuse * elLamps((u_eyeToSite * vec4(pE, 1.0)).xyz, normalize(mat3(u_eyeToSite) * nE));
           // The time of day's tint is applied here, before the lamps are added (a model colour would dim them too).
+          // Cesium's tone curve takes about 0.04 off every colour; a tinted colour would lose it whole, and the model
+          // would turn darker the moment a light is switched on. LAMPS.toe gives it back in proportion.
           #ifdef LIGHTING_PBR
           material.diffuse *= u_tint; material.specular *= u_tint;
-          material.emissive = material.emissive * u_tint + lit * ${LAMPS.gain.toFixed(3)};
+          material.emissive = material.emissive * u_tint + ${LAMPS.toe.toFixed(3)} * (vec3(1.0) - u_tint) + lit * ${LAMPS.gain.toFixed(3)};
           #else
           material.diffuse = material.diffuse * u_tint + lit;    // an unlit material shows its colour as it is
           #endif
