@@ -1,32 +1,29 @@
 # Roadmap
 
-What is planned after 0.2.0-beta.11, most valuable first. Each item is small enough to ship by itself. The list comes from the author's requests and from an independent code review of beta.10 (2026-11-14).
+What comes after 1.0, most useful first. Each item can ship on its own.
 
 ## Next
 
 | Item | Why |
 | --- | --- |
-| Shadows from more Rhino lights | Two point lights or spotlights cast shadows (beta.11); Rhino casts them from every point, spot and directional light, so a third lamp in a room still lights the ground outside the wall |
-| Sun time in the site's time zone | The time slider uses the computer's time zone; a site in another zone shows the sun of the wrong hour |
-| One writer for `meta.json` | Rhino and the server both read, change and write it; a set deleted in the viewer during an export can come back |
-| Sign in with Cesium ion | One click instead of copying a token (OAuth with PKCE); needs EarthLink registered with Cesium and a check that ion accepts a redirect to the local viewer |
-| The 3D engine bundled with the plugin | CesiumJS is loaded from a CDN: no internet or a firewall means a blank page. Bundle it and say so when it fails |
-| A secret for the local server | Any program on the same computer can read the map token from the local server; hand the page a per-launch secret |
-| Copies: the last corners | A copy that is never saved (or is opened read-only) becomes a new project at each opening; a file used from two computers with different paths rewrites its stored path each time |
-| Shadows from lights outside the view | A lamp's shadow map is filled from what the camera sees, so a caster behind the camera may cast no shadow: to be checked and, if so, drawn separately |
-| Progress and Esc for sends and imports | A large send or a 3 km import blocks Rhino with no bar and no way out |
-| Surroundings: roof shapes, road widths, water and green areas | OpenStreetMap has them; today buildings are flat-topped and roads are centre lines |
+| Bundle the 3D engine | The viewer loads CesiumJS from the internet; behind a firewall the page stays blank |
+| Shadows from every Rhino light | Only the two brightest point lights or spotlights cast shadows today |
+| Sun time in the site's time zone | The time follows the computer's time zone, which is wrong for a site in another zone |
+| Progress and cancel for large sends | A large export blocks Rhino with no progress bar |
+| Parcels beyond New York State | Parcel data is published county by county; add more public sources |
+| Roof shapes for imported buildings | OpenStreetMap records many roof shapes; imported buildings are flat-topped |
+| One-click map sign-in | Sign in to Cesium ion instead of copying a token |
+| A per-launch secret for the local server | Other programs on the same computer can read the map key from it |
+| One writer for `meta.json` | Rhino and the server both write it; a set removed during an export can come back |
 
 ## Ideas
 
-- A toolbar with the four commands, and a first-run guide.
-- Capture: restore the camera and the sun after **All Saved Views**; warn when the map had not finished loading.
-- "Solo next" instead of "Compare" for stepping through sets.
-- Replace or add when SendToEarth is run on an existing set with another selection.
-- Wheel zoom in equal steps per notch on every platform.
-- A demo video and a short guide for the Cesium ion token (see the demo plan).
+- A toolbar for the four commands and a first-run guide.
+- Restore the camera and sun after capturing all saved views; warn when the map had not finished loading.
+- Step through sets one at a time ("solo next").
+- Parks and green areas in **Surroundings to Rhino**.
 
 ## Not planned
 
-- Exporting Google's map to Rhino: its terms forbid it. **Surroundings to Rhino** uses open data instead.
-- Removing the map credits: Google's and Cesium's terms require them.
+- Exporting the photorealistic map to Rhino: its terms do not allow it. **Surroundings to Rhino** uses open data instead.
+- Removing the map credits: the providers' terms require them.

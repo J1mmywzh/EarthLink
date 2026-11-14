@@ -42,7 +42,7 @@
     look: 0.072, lookMouse: 0.135,     // walking
   };
   /* How far the view may tilt from straight down at a height (m): freely near the ground, less and less higher up,
-     not at all from space (as in Apple Maps and Google Earth: the globe stays on the screen). */
+     not at all from space (the globe stays on the screen). */
   const GLOBE = { low: 30e3, high: 2500e3, spin: 600e3 };   // spin: above it two fingers (or a drag) turn the globe instead of orbiting
   function maxTilt(h) {
     if (!(h > GLOBE.low)) return 180;
@@ -433,7 +433,7 @@
       }
       setPose(pos, dir, up); keep();
     }
-    // From space a pan turns the globe about its own axis, as Apple Maps and Google Earth do: sideways along the
+    // From space a pan turns the globe about its own axis: sideways along the
     // parallels, up and down along the meridians, north stays where it is and the poles are not crossed. (Moving
     // the camera along great circles instead, as near the ground, slid the globe diagonally and turned it.)
     function globePan(fx, fy) {

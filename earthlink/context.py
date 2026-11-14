@@ -1,5 +1,5 @@
 """Site context from open data, for Rhino: terrain, contours, building massing, roads, paths, railways and water inside a
-rectangle, much as CADMapper offers it (roads as centrelines, outlines or surfaces).
+rectangle (roads as centrelines, outlines or surfaces).
 
 Pure Python, run by the local server (never inside Rhino's interface thread). Sources, both free to export:
   * OpenStreetMap (buildings, roads): the map download openstreetmap.org's own Export uses, one request for a
@@ -33,7 +33,7 @@ LEVEL, DEFAULT_HEIGHT = 3.2, 7.0           # metres per storey; height of a buil
 A, E2 = 6378137.0, 6.69437999014e-3        # WGS84
 
 # What an OpenStreetMap line is drawn as. highway value -> (layer, usual width kerb to kerb in metres); a way's own
-# width or lanes tag wins over the usual width. Layers as CADMapper has them: major roads, minor roads and paths.
+# width or lanes tag wins over the usual width. Three layers: major roads, minor roads and paths.
 ROADS = {"motorway": ("major", 14.0), "trunk": ("major", 12.0), "primary": ("major", 11.0), "secondary": ("major", 10.0),
          "motorway_link": ("major", 6.0), "trunk_link": ("major", 6.0), "primary_link": ("major", 6.0), "secondary_link": ("major", 6.0),
          "tertiary": ("minor", 8.0), "tertiary_link": ("minor", 6.0), "residential": ("minor", 7.0), "unclassified": ("minor", 6.0),

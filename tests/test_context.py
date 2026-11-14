@@ -212,7 +212,7 @@ def lines_world(slope=0.0, extra=()):
         return json.dumps({'elements':els}).encode()
     return fetch,calls
 
-def test_roads_are_sorted_like_cadmapper_with_their_widths_and_rails_and_water_on_their_own():
+def test_roads_are_sorted_into_layers_with_their_widths_and_rails_and_water_on_their_own():
     fetch,calls=lines_world()
     out=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False)
     by={r['kind']:r for r in out['roads']}

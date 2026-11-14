@@ -1,218 +1,243 @@
 # EarthLink user manual
 
-For EarthLink 0.2.0-beta.13, a preview for Rhino 8 (a PackageManager pre-release). The stable release is 0.1.1. Read the limitations below before relying on a result. Windows integration testing is pending.
+EarthLink shows your Rhino 8 model on a photorealistic 3D map of its real site, in your browser. Rhino stays the owner of the model: the viewer never changes your geometry.
 
-## 1. What EarthLink does
+**Contents**
 
-EarthLink sends selected Rhino geometry to a browser viewer and places it using the Rhino file's EarthAnchorPoint. The viewer combines your design with Google Photorealistic 3D Tiles through CesiumJS. It can also export a live link for Google Earth Pro.
+1. [Install](#1-install)
+2. [Connect the map](#2-connect-the-map)
+3. [Place your model](#3-place-your-model)
+4. [Design sets](#4-design-sets)
+5. [Navigate](#5-navigate)
+6. [Walk and fly](#6-walk-and-fly)
+7. [Views, sun and lights](#7-views-sun-and-lights)
+8. [Display, section and measure](#8-display-section-and-measure)
+9. [Surroundings to Rhino](#9-surroundings-to-rhino)
+10. [Capture and share](#10-capture-and-share)
+11. [Your files and privacy](#11-your-files-and-privacy)
+12. [Troubleshooting](#12-troubleshooting)
 
-Rhino is the owner of the model. The browser is a viewing and coordination tool. Placing a design set in the viewer never changes Rhino geometry; the placement is two numbers (a rotation and an offset) stored with the set and applied by the viewer on top of the exported geometry. Removing a set removes its EarthLink association, not the source geometry.
+## 1. Install
 
-## 2. Install
+1. In Rhino 8, run `PackageManager`, search for **EarthLink** and install it.
+2. Restart Rhino.
 
-You need Rhino 8, an internet-connected browser for map context, and your own map-access credentials. Google Earth Pro is optional.
+EarthLink adds four commands:
 
-Run `PackageManager` in Rhino, search **EarthLink**, install it, and restart Rhino when convenient. For this beta, tick *Include pre-releases*. McNeel's Yak command-line tool supports `yak install /absolute/path/to/file.yak`; see the [official CLI reference](https://developer.rhino3d.com/guides/yak/yak-cli-reference/).
-
-After loading the plugin, the commands are:
-
-| Command | Purpose |
+| Command | What it does |
 | --- | --- |
-| `SendToEarth` | Select and send geometry; choose a design set and live behavior |
-| `EarthLinkViewer` | Start the local server if needed and open the browser viewer |
-| `EarthLinkSync` | Configure follow viewport and sun sync (named views are always shared) |
-| `EarthLinkSettings` | Enter map credentials, manage sets, choose capture folder, or stop the viewer server |
+| `SendToEarth` | Send the selected geometry to the viewer as a design set |
+| `EarthLinkViewer` | Open the viewer (it starts the local server if needed) |
+| `EarthLinkSync` | Follow Rhino's viewport; sync the sun |
+| `EarthLinkSettings` | Map connection, capture folder, design sets, stop the viewer's server |
 
-If commands are missing, confirm the package is installed for the Rhino version you are running and that Rhino has been restarted since installation. Running scripts from the source tree is a development workflow and does not verify the installed package.
+## 2. Connect the map
 
-## 3. Connect the map
+The photorealistic map needs a free access key, entered once.
 
-Open the viewer or run `EarthLinkSettings`. Enter either your Cesium ion access token or a Google Maps Platform API key with Map Tiles API access. The viewer prompts for credentials if none are configured. You can choose **Not Now** to work without photorealistic context.
+1. Run `EarthLinkViewer`. The viewer opens with a **Connect map** dialog.
+2. **Create a free Cesium ion account**, then **Open your access tokens** and copy the **Default Token**.
+3. Paste it and press **Connect**. EarthLink checks the token at once.
 
-EarthLink stores credentials in local application data, not in the Rhino model. The browser uses them to request the external map services. Do not paste credentials into public issues, source files, screenshots, or a shared viewer. Sharing with an embedded token is an explicit option; use an appropriately restricted token if you choose it.
+A Google Maps Platform key with the Map Tiles API also works (**Use a Google Maps key instead**). Change the connection later under **Site > Map connection** or with `EarthLinkSettings > ConnectMap`. **Not now** opens the viewer without the map.
 
-## 4. Place your first model
+The key is kept on your computer, never in the Rhino file. Do not paste it into issues, screenshots or shared viewers.
 
-1. Save your Rhino file and check its model units.
-2. Select exportable geometry. Meshes, surfaces, polysurfaces, extrusions, SubDs, and blocks containing those objects are handled. Curves, annotations, and other unsupported object types do not become visible geometry.
-3. Run `SendToEarth`. For a first send, use `Set=Main`, `Viewer=On`, `EarthPro=Off`. Choose `Live=On` if you want edits watched automatically.
-4. If the file already has an EarthAnchorPoint, the model is sent at that anchor. Check the latitude, longitude, model base point, north, elevation, and elevation reference first.
-5. If the file has no anchor, SendToEarth asks for a **base point**, as the Block command does: click the point of the model that should sit on the site (object snaps work), or press Enter for the bottom centre of what you selected; Esc cancels. The viewer then opens on **Place**: find the site with the search field (or type exact `latitude, longitude`), click where the base point goes (the model itself appears there with that point on the blue dot; click again to move it), then choose **Apply to Rhino**. The base point becomes the EarthAnchorPoint's model base point, wherever the geometry is in the Rhino file (later sends and site moves do not change it). Sets sent from the same file afterwards are not asked anything: they keep the position they have in Rhino relative to the first. To type the location in Rhino instead, cancel and run EarthAnchorPoint first. The model is shown at the new site at once and stays there while Rhino takes it over. The site does not rotate the model: Rhino's north (EarthAnchorPoint) is left as it is; turn a set with **Edit**. The selected design set is sent after Rhino applies the anchor.
-6. Check orientation, scale, and height against a known reference. Use **Fit** to frame the design.
+## 3. Place your model
 
-A new picked anchor uses GroundLevel at zero elevation. Editing an existing anchor preserves its elevation and reference. Clicking an elevated surface can pick a roof or tree; inspect the chosen height. **Height offset** (metres, in **Site**) raises or lowers the whole model. The ground height is kept together with the place it was measured at: when the site is moved in Rhino (EarthAnchorPoint), or a file comes from before this was recorded, the ground is measured again by itself, so the model is not left under the map or above it. **Re-sample ground** measures it again on request; use the height controls to inspect placement. The browser height adjustment changes viewer placement only; it does not write a new Rhino EarthAnchorPoint elevation.
+1. Save the Rhino file and check its units.
+2. Select the geometry to show: meshes, surfaces, polysurfaces, extrusions, SubDs and blocks of these. Curves and annotations are not shown.
+3. Run `SendToEarth` and choose a design set name (for example `Main`).
+4. The first time, EarthLink asks for a **base point**, the point of your model that sits on the site. Object snaps work; Enter takes the bottom centre of the selection.
+5. In the viewer, search for the site (an address, a place or `latitude, longitude`), click where the base point goes, and press **Apply to Rhino**.
 
-For site edits later, use Rhino's `EarthAnchorPoint` command or the viewer's **Site → Edit**. Latitude, longitude, and rotation changes applied from the viewer reach Rhino, and anchor edits in Rhino trigger re-export while sync is active.
+The site is saved as the file's EarthAnchorPoint. Later sets from the same file keep their position relative to the first. To type a location instead, run Rhino's `EarthAnchorPoint` first.
 
-## 5. Design sets and live updates
+**Height.** The model's base sits on the map's ground at the site. **Height offset** (under **Site**) raises or lowers it. **Re-sample ground** measures the ground again. When the site moves in Rhino, the ground is measured again automatically.
 
-A design set is a named selection of Rhino object IDs. Use separate sets for schemes, landscape, or other groups. To replace its selection, select the desired objects, run `SendToEarth`, and choose the same set name. Saving the Rhino file preserves the set associations and project ID.
+## 4. Design sets
 
-- **Show/hide** changes a set's viewer visibility.
-- **Compare** cycles through sets one at a time.
-- **Edit → Name** renames the association in the viewer and Rhino.
-- **Display** chooses Materials, Clay, or Ghost for that set; Default follows the overall display style.
-- **Remove** forgets a set without deleting the Rhino geometry.
-- **Live=On** watches the recorded objects and sends changes after a short delay, roughly one second while idle. New objects are not automatically added to the selection; send the desired selection again.
+A design set is a named group of Rhino objects. Use sets for schemes, landscape or anything you want to show, hide or compare separately. Running `SendToEarth` with an existing set name replaces its objects.
 
-To place a set on the site: select the set's name to open **Edit**, then drag it on the map (**Move on map**: left button; navigation stays on the right button and the trackpad), type the East / North / Up offset in metres, or rotate it with the slider or an exact angle; rotation turns the set about the centre of its base. **Update when it changes in Rhino** is SendToEarth's Live option for that set, and **Update now** makes Rhino send the set again. Every change shows immediately and is saved automatically: the viewer applies the placement itself, so nothing is exported again and there is no Apply step. The card shows how far the base centre is from its Rhino position and the total rotation. The placement is an EarthLink-only layer kept with the set in the .3dm (Rhino's Undo restores it); the Rhino geometry and its grid never move. **Original position** returns the set to where it is in Rhino. While a set is being moved, **Hide map underneath** pauses and comes back when you stop. Dragging needs a view that looks down at the site: near the horizon a pixel is kilometres, so the drag does not start there. Changing only the site location, or a placement, exports no geometry; sets sent by versions before 0.2.0-beta.9 are sent once more automatically.
-
-## 6. Cameras, named views, and sun
-
-Run `EarthLinkSync` and configure:
-
-| Setting | Behavior |
+| In the viewer | What it does |
 | --- | --- |
-| FollowViewport | Browser camera follows the synced Rhino document's active viewport |
-| Sun | Viewer time and Rhino Sun date/time synchronize; the anchor supplies Rhino Sun location and north |
+| Eye | Show or hide the set |
+| Dashed square | **Hide map underneath**: removes the map where the set meets the ground |
+| Name | Opens **Edit** |
+| **Compare** | Shows one set at a time |
 
-**FollowViewport is one-way.** Navigating the browser does not continuously drive Rhino's active viewport. A view saved in the browser is a Rhino named view at once. Browser navigation automatically leaves Follow Rhino. Enable Follow again to resume it.
+**Edit** a set to:
 
-In **Views**, select a saved view to recall it, or use **Save View**. Named views are always the same in Rhino and the viewer: saving, updating, renaming or deleting one in either app changes it in the other within about a second (there is no switch for this). Browser-saved views include camera, projection/lens, and sun time. Perspective, Two-Point, and Parallel projections are supported. Two-Point keeps verticals vertical using lens shift, up to 65° of tilt. The Lens control displays a 35 mm equivalent; true top-down views are available in Perspective and Parallel.
+- **Place it**: drag it on the map, type an East / North / Up offset in metres, or rotate it about the centre of its base. Changes show at once and are saved with the set. Your Rhino geometry never moves. **Original position** puts it back.
+- **Update when it changes in Rhino** (Live): the set follows your edits about a second after Rhino goes idle. New objects are not added by themselves; send the selection again.
+- **Update now**: send the set again.
+- Rename it, choose its display (Materials, Clay or Ghost), or remove it. Removing a set never deletes Rhino objects.
 
-On first named-view reconciliation, Rhino wins conflicting cameras with the same name. Afterwards, the changed side wins; simultaneous conflicting edits favor Rhino. Because deletes also synchronize, avoid editing the same named view independently in both apps at once.
+**Hide map underneath** cuts the map only where the set's base touches the ground, so overhangs keep the map below them. Courtyards and separate pieces are kept. Within 3 m around the base, the map's ground is graded to meet the model without a gap. This is a presentation fill, not survey data.
 
-The Sun panel controls sunlight, date, all 24 hours, and dynamic shadows. The map is a daytime photograph, so the time of day tints it: warm with the sun under about 12°, dark blue once it is 8° under the horizon, with stars and a dim moonlight on your model, which takes the same tint; emissive materials keep glowing. Cast shadows fade out as the sun comes down to the horizon (a sun on the horizon would streak the whole map). By day the sky overhead is blue with no stars. Sunlight off uses neutral illumination and hides date/time controls. Sync with Rhino exchanges both the enabled state and UTC time; on connecting, a Sun that is on in Rhino sets the viewer's date and time, and a Sun that is off in Rhino (the default in a new file) leaves the viewer's sunlight as it was. Changing the time in the viewer does not switch Rhino's Sun on; the Sunlight switch does. The browser computer's per-date time-zone offset is sent to Rhino. This is not an independent site-time-zone scheduler. Photographed shadows in Google's textures cannot be removed by disabling dynamic sunlight.
+Hidden objects and objects on layers that are off are not sent.
 
-**Lights.** The lights of the Rhino model (point, spot, directional, rectangular and linear, switched on and visible) are drawn as Rhino 8's Rendered mode draws them, measured there on a white matte plane: colour x intensity x the cosine of the angle to the surface; the fall-off set in Rhino (Constant by default: none; Linear and Inverse squared are taken in model units, as Rhino takes them, so they are dark beyond a few units); a spotlight cut off at its cone and fading from its axis as cos^exponent (its hot spot); a rectangular or a linear light acting as a point light at its centre. They light the model and the map. A change to a light in Rhino reaches the viewer within about a second without a resend. A light belongs to the design set nearest to it: it moves and turns with that set's placement and is dark while the set is hidden. Turn them off with **Lights** in the Sun panel (shown when the model has lights). Shadows: the first two point lights or spotlights (the brightest) cast hard-edged shadows from your model and the map, as in Rhino; the Shadows switch in the Sun panel turns them off with the sun's. Limits: the other lights cast no shadows (in Rhino every point, spot and directional light does); up to 32 lights; on the map a light without fall-off fades between one and two times the size of its set (at least 12 m); Clay display does not show them; the sun and the skylight are not Rhino lights here, they follow the viewer's time of day.
+## 5. Navigate
 
-When switching Rhino documents, run SendToEarth or EarthLinkViewer/Sync for the file you intend to link. One local viewer/exchange area is active at a time. Keep Rhino open and responsive for two-way requests.
+Navigation follows Rhino 8, including its Mac and Windows differences. **Mod** is ⌘ on a Mac and Ctrl on Windows; **Alt** is Option on a Mac.
 
-## Search, navigation and walking
+| Action | Mouse | Mac trackpad | Windows touchpad |
+| --- | --- | --- | --- |
+| Rotate | Right-drag | Two fingers | Right-drag |
+| Pan | Shift + right-drag, or middle-drag | Shift + two fingers | Shift + right-drag |
+| Zoom toward the cursor | Wheel, or Mod + right-drag | Pinch | Two-finger scroll or pinch |
+| Dolly | Alt + right-drag | | |
+| Rotate a Parallel view | Mod + Shift + right-drag | | |
+| Look around from where you stand | Mod + Alt + right-drag | | |
+| Lens length | Mod + Shift + Alt + right-drag | | |
 
-**Search** (top left) works like Google Earth: Google suggestions refine as you type, recent searches appear first, and names drop postcodes and "USA" ("180 Cayuga Park Lane, Ithaca, NY"). Enter or a click flies there; exact `lat, lon` also works, and while placing a site it sets the picked point. With the field empty, the first result flies to your site. Recent searches stay in this browser only.
+**Keys:** arrows rotate, Shift + arrows pan, Page Up / Page Down zoom, Shift + Page Up / Page Down change the lens.
 
-**Navigation follows Rhino 8's defaults** (McNeel's Rhino 8 help and Mac user guide), including their Mac/Windows differences; Mod is ⌘ on a Mac and Ctrl on Windows, Alt is Option on a Mac. Mouse, both platforms: right-drag rotates (pans in Parallel); Shift + right-drag pans (pressing Shift during a drag locks it to one direction); Mod + right-drag zooms (drag up = in); Alt + right-drag dollies; Mod + Shift + right-drag rotates even a Parallel view; Mod + Alt + right-drag turns the camera where it stands; Mod + Shift + Alt + right-drag changes the lens; the wheel zooms toward the cursor (toward the centre at globe scale); middle-drag pans (Option + middle rotates on a Mac, Alt + middle dollies on Windows). Mac trackpad: two fingers rotate (pan in Parallel), Shift + two fingers pan, pinch zooms. Windows touchpad: two-finger scrolling and pinch zoom, as in Rhino for Windows; rotate and pan with the touchpad's right-drag. Keys: arrows rotate (pan in Parallel), Shift + arrows pan, Page Up / Page Down zoom, Shift + Page Up / Page Down change the lens. The platform is detected from the browser; add `?controls=mac` or `?controls=windows` to the viewer address to choose. Rhino's roll (Shift + Alt + right-drag) is not used.
+- Rotation turns about what is at the centre of the view, like Rhino's camera target.
+- Pressing Shift during a drag locks it to one direction.
+- In a Parallel view, right-drag and two fingers pan, as in Rhino.
+- The horizon always stays level.
+- Each gesture does one thing until it ends: a stray pinch inside a two-finger rotation is ignored.
+- Strokes that end at speed come to rest smoothly instead of stopping dead.
 
-The pivot is what is at the centre of the view when you start turning, like Rhino's camera target. It stays the same from one rotation to the next until you pan, zoom or fly, so a tree passing in front of the centre does not move it. It is always the surface you see at the centre: when the centre of the view passes your model and lands on ground far behind it, the model's depth is used, and beyond a limit (a shallow view reaching the horizon) the model's depth or that limit; it is never a point behind the surface you are looking at, and never a remembered distance. Tilt runs from straight down to straight up, so you can look up at a facade from the street. Two-Point is the same camera drawn with a level axis and a shifted lens: every gesture works as in Perspective, and the tilt stops at 65°. The camera passes through trees and buildings; it rests only on ground or a broad roof it descends onto from above (it passes through a tree, a pole or the like and comes down to the ground around it), follows ground that rises no faster than the camera moves, and cannot sink further while inside something solid. A tilt that reaches the ground stays there for the rest of the gesture; it does not follow every bump while you turn. No other rule moves the camera (Cesium's own camera collision is off). A Magic Mouse cannot be told from a trackpad by a web page, so on a Mac its swipe rotates; a wheel mouse zooms, and a device guessed wrong from its first event is corrected by the next ones. The horizon never rolls. A gesture does one thing until it ends: releasing Shift early cannot turn a pan into an orbit, and a pinch that macOS reports in the middle of a two-finger rotation (fingers drifting apart) is ignored unless it takes over for more than a tenth of a second. The glide macOS adds after your fingers lift counts in full. A stroke from a trackpad that ends while the view is still moving (the fingers lift, or the next stroke touches down and cuts the glide short) comes to rest over about a quarter of a second: the view never slows faster than that, runs on a little, and the next stroke blends in. While the fingers keep moving the view stays exactly under them, and slow, careful motion stops as precisely as before. A mouse drag and a wheel notch are exact. Motion is eased per frame, zoom a little more slowly. Pan moves the ground under your fingers and zoom is proportional to distance, so the same Sensitivity works from orbit to a room. Parallel cameras sit far back along their axis so nothing near the camera is cut away.
+**Compass.** It shows north. Click it for **Heading**, **Tilt** and **Sensitivity**, each with a slider and a typed value, plus **North up**. Drag it to turn and tilt; double-click it for north.
 
-The compass shows north. Click it for a small panel with **Heading**, **Tilt** and **Sensitivity** (sliders and typed values) and **North up**; drag the compass sideways to turn and up or down to tilt; double-click it for north. **Fit** frames visible sets, keeping your heading. Click − / + for a smooth step or hold them to zoom continuously. Lens length (Camera) is in millimetres as on a 35 mm camera: 12 to 200 mm on the slider, 6 to 1200 mm typed.
+**Other controls.** **Fit** frames the visible sets. **− / +** zoom a step, or hold them to keep zooming. **Lens** (under Camera) is the lens length on a 35 mm camera: 12 to 200 mm on the slider, 6 to 1200 mm typed.
 
-**Walk:** drag the person button onto the map and drop it where to stand, as in Google Maps (or select it and click a spot), on your model or on the map, with or without a model; the view flies down to eye level. Minecraft controls: W A S D or arrows walk at 4.4 m/s; double-tap W (on a Mac, also Control) sprints at 11.9 m/s until you stop; Shift sneaks at 1.3 m/s; Space jumps. Double-tap Space to fly as in Minecraft creative mode: no gravity and no collision (you pass through buildings, trees, your model and the ground), Space rises and Shift sinks at 9.4 m/s, W A S D fly at 13.6 m/s (sprint 27 m/s) with a short glide, and double-tapping Space again drops you onto the ground below, or onto the surface above if you are under the map. Two fingers or right-drag look; Esc or the person button returns to the previous camera and projection. You are 1.80 m tall with eyes at 1.65 m. On foot, walls and ceilings stop you and you slide along them; steps up to 0.45 m are climbed and stairs are followed down; you fall from edges. These are navigation parameters, not building-code criteria. On Windows, Control does not sprint, because Ctrl + W closes the browser tab.
+**Projections.** Perspective, Two-Point (verticals stay vertical, tilting up to 65°) and Parallel.
 
-Collisions use what is drawn: your exported model mesh (both face sides) and the loaded Google tiles, tested on the CPU each frame. Nothing is extracted or stored from Google's data. Where the map has not loaded yet you hold your position. Rays follow what **Hide map underneath** does to the map: around a cut set you stand on the graded ground, and inside its base at the base's level. Section cuts disable Walk; changing geometry, visibility or projection exits it.
+On a Mac, a Magic Mouse or smooth-scrolling mouse scrolls like the trackpad (it rotates). Choose **Scroll: Zooms** in the compass panel if you use one.
 
-## 7. Display and measurement
+## 6. Walk and fly
 
-- **Materials**, **Clay**, and **Ghost** change viewer appearance without changing Rhino materials. **Materials** shows your Rhino render materials, lit to match Rhino 8's Rendered mode: on the same colour swatches under the same sun, a sunlit white is white, a face turned from the sun keeps about 0.87 of its colour and a cast shadow about 0.68, within a few percent of Rhino. What carries over: colours, image textures and Rhino's procedural textures (baked by Rhino), with the object's box, planar or other texture mapping; glass, polycarbonate and any transparent material (see-through, as transparent as the material says); emission; an object with no material is white, as in Rendered mode. What a real-time viewer cannot do: ray-traced reflections and refraction (glass does not bend light, and a polished metal has no studio to reflect, so it is drawn mostly as its own colour with a sheen), displacement, and decals. Sets sent by an earlier version are sent once more automatically.
-- **Section cut** clips the displayed model at a chosen local height.
-- **Hide map underneath** is chosen per design set (the dashed square beside its eye in **Design Sets**). It removes Google geometry only under the set's base: every triangle is cut 1 cm above the set's lowest point and the part below is projected to plan, so overhangs, cantilevers and sets that widen upward keep the map under them. Concave outlines, disconnected pieces and courtyard holes are preserved, and ground is removed too. Resend legacy sets after upgrading; no bounding rectangle is used as fallback. Gaps under 1 m² are covered. Older settings with one switch for all sets carry over as on for every set. The map itself is reshaped as it is drawn: inside the base it is not drawn, and within 3 m around it the map's own ground is graded to the base's level, so its own pixels meet the model with no gap, no separate patch and nothing photographed (earlier previews moved the camera for an instant to photograph the ground, which showed as a jump and as white patches). Trees, buildings and slopes more than about 4 m above or below the base keep their height, fading in up to 8 m. All cut sets share one mask (20 pixels per metre up to about 100 m across, coarser beyond; sets more than about 400 m apart get a visibly coarser edge). The grading is a presentation fill, not survey data. If a graphics driver cannot draw the map this way, the viewer reloads once without it and says the cut-out is unavailable.
-- **Measure** picks two visible surface points and reports distance in metres and feet/inches plus height difference. Press Esc to clear. Photorealistic mesh picking is approximate and is not a survey measurement.
+Drag the person button onto the map and drop it where you want to stand, on the map or on your model. The view comes down to eye level.
 
-## Surroundings to Rhino
+| Key | Action |
+| --- | --- |
+| W A S D or arrows | Walk (4.4 m/s) |
+| Double-tap W | Sprint (11.9 m/s) |
+| Shift | Sneak (1.3 m/s) |
+| Space | Jump |
+| Double-tap Space | Fly (double-tap again to land); Space rises, Shift sinks |
+| Two fingers or right-drag | Look around |
+| Esc | Return to the previous view |
 
-The **Surroundings to Rhino** tool imports terrain, contours, building massing, roads, paths, railways, water and parcels (lot lines) for a rectangle you mark on the map with two clicks, one corner and then the opposite one (20 m to 3 km a side; with a mouse you can also press and drag it; Esc forgets the first corner). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
+You are 1.80 m tall with eyes at 1.65 m. On foot, walls stop you, steps up to 45 cm are climbed and stairs are followed down. Flying passes through everything. Walking follows what is drawn: your model and the map, including any holes in the map's scan.
 
-The panel works as CADMapper's does. Under **Include**, choose any of these:
-- Terrain
-- Contours
-- Buildings
-- Roads
-- Paths
-- Railways
-- Water
-- Parcels
+## 7. Views, sun and lights
 
-Each choice shows its own settings while it is on:
-- **Contours**: the interval.
-- **Buildings**: the **Default building height**, for buildings OpenStreetMap gives neither a height nor storeys for (storeys count 3.2 m each).
-- **Roads and paths**: the road geometry. Tick one or more:
+**Named views.** **Save View** in the viewer and Rhino's Named Views are always the same: saving, updating, renaming or deleting a view on either side changes it on the other within a second. A view keeps its camera, projection, lens and sun time.
 
-- **Centerlines**: one line along the middle of each road.
-- **Outlines**: closed curves along the road edges, joined where roads meet, so a street grid becomes one outline with each block as a hole.
-- **Surfaces**: one mesh for each road layer.
+**Follow Rhino.** `EarthLinkSync > FollowViewport` makes the viewer follow Rhino's active viewport. Navigating in the viewer turns it off.
 
-Each geometry goes on its own sublayer, for example **Major roads::Outlines**.
+**Sun.** The sun panel sets sunlight, date, time and shadows. The map darkens toward evening and turns to night with stars. The map is a daytime photograph, so it is tinted, not relit, and shadows in its imagery stay. **Sync with Rhino** shares the sun's date, time and on/off state with Rhino's Sun. Time follows your computer's time zone.
 
-While it imports, the bar shows about how long is left. The estimate comes from how long the part already done took, so it is rough at the start.
+**Lights.** Your Rhino lights (point, spot, directional, rectangular and linear) light the model and the map as Rhino's Rendered mode does. A change to a light in Rhino reaches the viewer within a second.
 
-**Parcels** brings in lot lines, from New York State's public tax parcels. In 2026 that covers 38 counties that share their data (Tompkins among them) and New York City. Outside them it brings nothing and says so. Each lot is a closed curve on the ground, cut at the rectangle. It is named with its address, and its parcel number, municipality, property class, acreage and frontage are in its user text (`parcel:` keys). Owners' names and mailing addresses are not fetched. Parcels are off until you tick them, because pressing Import then also sends the rectangle's corners to the state's parcel server. Lot lines are as accurate as the county's tax map: good for finding your lot, not a boundary survey.
+- A light belongs to the nearest design set: it moves with the set and is off while the set is hidden.
+- The two brightest point lights or spotlights cast shadows.
+- Up to 32 lights are drawn.
+- **Lights** in the sun panel turns them off.
 
-Outlines and surfaces use each road's width from OpenStreetMap (its `width`, or its lanes at 3.3 m). Where it has neither, the usual width for its kind is used: 14 m for a motorway, 7 m for a residential street, 2 m for a footway. They lie on the ground right across and are cut at the rectangle. Bridges and tunnels run straight between their ends. The panel remembers your choices.
+## 8. Display, section and measure
+
+- **Materials** shows your Rhino render materials, lit to match Rhino's Rendered mode: colours, textures and their mapping, transparency and emission. There are no ray-traced reflections or refraction.
+- **Clay** and **Ghost** are plain display styles. Each set can have its own.
+- **Section cut** clips the model at a chosen height.
+- **Measure**: click two points for the distance and height difference. Esc clears it. Map surfaces are approximate.
+
+## 9. Surroundings to Rhino
+
+Bring the area around your site into Rhino as geometry to model against.
+
+1. Click the dashed square with an arrow (right-hand tools).
+2. Click two opposite corners of a rectangle on the map (20 m to 3 km a side). With a mouse you can also drag it. Esc forgets the first corner.
+3. Choose what to include, then press **Import**. The bar shows the progress and the time left.
+
+The model must be placed first, because everything is positioned from the file's EarthAnchorPoint. The panel remembers your choices.
+
+| Include | Settings |
+| --- | --- |
+| Terrain | |
+| Contours | Interval (every fifth line on its own sublayer) |
+| Buildings | **Default building height**, for buildings with no known height (7 m) |
+| Roads, Paths | Geometry: any of **Centerlines**, **Outlines** and **Surfaces** |
+| Railways, Water | |
+| Parcels | (off until ticked) |
+
+**Road geometry:**
+
+- **Centerlines**: one line along each road.
+- **Outlines**: the road edges, joined where roads meet, so a street grid becomes one outline with each block as a hole.
+- **Surfaces**: one mesh per road layer.
+
+Outlines and surfaces use each road's real width where it is recorded, otherwise the usual width for its kind (14 m for a motorway, 7 m for a residential street, 2 m for a footway). Bridges stay level.
+
+Everything is added in place, in the file's units, on layer **EarthLink Context**, as one Undo step:
 
 | Layer | Content |
 | --- | --- |
-| EarthLink Context::Terrain | One mesh; 1 m cells up to 200 m a side, then at most 200 cells along the longer side. Its height at the site equals the map's ground there |
-| EarthLink Context::Buildings | Closed solids with a height from OpenStreetMap (`height`, or `building:levels` x 3.2 m) |
-| EarthLink Context::Buildings (height assumed) | Buildings OpenStreetMap gives no height for: the **Default building height** (7 m unless you change it) |
-| EarthLink Context::Major roads | Motorways, trunk, primary and secondary roads, with the sublayers Centerlines, Outlines and Surfaces for the geometries you ticked. Names, `highway` kind and width are in the name and user text |
-| EarthLink Context::Minor roads | Tertiary, residential, service and other streets, tracks |
-| EarthLink Context::Paths | Footways, paths, cycleways, steps, pedestrian streets |
-| EarthLink Context::Railways | Rail, light rail, tram and subway centre lines (not abandoned or disused ones) |
-| EarthLink Context::Water | Lakes, ponds, river surfaces and reservoirs as closed curves at the water level, cut at the rectangle (islands are marked in user text); rivers, streams and canals as lines |
-| EarthLink Context::Parcels | With **Parcels** on: lot lines, named with their address, parcel details in user text |
-| EarthLink Context::Contours | With **Contours** on: terrain contour lines at your interval, every fifth on the sublayer Index. Over very steep ground the interval is doubled, tripled and so on to stay under about 400 levels |
+| Terrain | One mesh of the ground (1 m cells up to 200 m a side, coarser beyond), passing through the map's ground at your site |
+| Contours | Lines at round heights above sea level; every fifth on **Index** |
+| Buildings | Solids standing on the terrain, with their recorded height (or 3.2 m a storey) |
+| Buildings (height assumed) | Buildings with no known height, at the default height |
+| Major roads | Motorways, trunk, primary and secondary roads |
+| Minor roads | Other streets, service roads and tracks |
+| Paths | Footways, paths, cycleways, steps |
+| Railways | Rail, light rail, tram and subway lines |
+| Water | Lakes, ponds and rivers as closed curves at the water level; streams as lines |
+| Parcels | Lot lines on the ground, named with their address |
 
-Everything is in the file's units, in place, grouped, and one Undo removes it. Each object's user text records its source; the attribution is on the parent layer. Importing again adds another copy: delete the old layer first if you want to replace it.
+Each road layer has a sublayer per geometry you ticked, for example **Major roads::Outlines**. Each object's user text holds what the source records about it: names, use, storeys and width (`osm:` keys), or a lot's parcel number, municipality, property class and acreage (`parcel:` keys). Importing again adds another copy, so delete the old layer first to replace it.
 
-Sources and privacy: buildings, roads, railways and water come from OpenStreetMap (its own map download, the one openstreetmap.org's Export uses; the public Overpass servers if that fails, and for a lake larger than the area, which is fetched whole by its OpenStreetMap number), terrain from Terrain Tiles on AWS Open Data. The rectangle's corner coordinates are sent to those services when you press Import, from your computer; EarthLink has no server. Google's map is never exported: its terms forbid it. Credit "© OpenStreetMap contributors" when you publish drawings made from it.
+**Sources.** Buildings, roads, railways and water are from OpenStreetMap (© OpenStreetMap contributors; credit them when you publish). Terrain comes from open elevation tiles. Parcels come from New York State's public tax parcels, which cover 38 counties and New York City (2026). Outside them, the import says no parcels were found. Owners' names are never fetched.
 
-Limits: a preview of open data, not a survey. Terrain is about 10 m data in much of the world (finer in parts of the US), so kerbs and retaining walls are not in it. Roofs are flat. A very crowded 3 km square is downloaded in up to 16 parts and can take a minute.
+**Limits.** This is open data, not a survey. Terrain is roughly 10 m data in most places, so kerbs and retaining walls are not in it. Roofs are flat. Lot lines are as accurate as the county's tax map. The photorealistic map itself is never exported: its terms do not allow it.
 
-## Feedback
+## 10. Capture and share
 
-**Send feedback** collects a comment, an optional screenshot and system details and hands them to GitHub (a filled-in issue at github.com/J1mmywzh/EarthLink) or to your mail app (to rhinoearthlink@gmail.com). You see exactly what will be shared and nothing leaves the computer until you submit the issue or send the email. The screenshot shows your site and model; the system details hold no location. Your draft is kept if you close the card.
-
-## 8. Capture images
-
-Open **Capture**, choose a preset or custom pixel size, and select one or more passes:
+**Capture** saves images of the current view or of **All Saved Views**.
 
 | Pass | Result |
 | --- | --- |
-| Full | Visible model and context |
-| Context only | Context with the design hidden |
-| Model · transparent | Design on a transparent background |
+| Full | Model and map |
+| Context only | The map without the model |
+| Model · transparent | The model on a transparent background |
 
-Choose Standard/High/Max detail and a default folder or **Ask each time**. **Capture** uses the current view; **All Saved Views** captures the selected passes for each stored view. Camera data is embedded in PNG files; default-folder captures also get a camera JSON sidecar. Context imagery, map logos, and attribution require checking before public reuse; the capture feature is not a usage-rights clearance.
+Choose a size, a detail level (Standard, High, Max) and whether to save to a folder (default `Pictures/EarthLink`) or be asked each time. Images carry their camera in the file. Check the map providers' attribution rules before publishing images.
 
-The default capture folder is `Pictures/EarthLink`. Chrome/Edge can offer file or folder pickers; Safari/Firefox may use browser downloads when Ask each time is selected. Large output is limited by the browser/GPU renderbuffer size. Keep FollowViewport off during a deliberate independent capture. For compositing, match the saved camera and output dimensions in Rhino and compare a test overlay before a full batch.
+**Share** (in Capture) writes a ZIP with a stand-alone viewer of the current sets and views. Put the unzipped folder on any web host. Visitors enter their own map key unless you include one; if you do, restrict it to that site. The ZIP holds your geometry and site location, so review it before sharing.
 
-## 9. Share a viewer
+**Google Earth Pro (optional).** With `EarthPro=On` in `SendToEarth`, EarthLink also writes the set for Google Earth Pro and opens it there.
 
-Use **Capture → Share…** to write a ZIP containing the viewer, current models, views, and settings. Choose whether to include a map token. Without one, visitors enter their own credentials. The ZIP is a static viewer snapshot: it has no live connection back to your Rhino document.
+## 11. Your files and privacy
 
-Extract and serve it on a static web host, or follow its README to start a local web server. Opening the HTML directly from disk is not supported. The package contains your selected geometry and anchor coordinates, so review those before sharing. This export does not bundle Google's tile dataset for offline use.
-
-## 10. Google Earth Pro
-
-Install Google Earth Pro separately. Choose `EarthPro=On` in SendToEarth or change the default in EarthLinkSettings. EarthLink converts the GLB to COLLADA and writes a local KML network link. The application is opened when the link is first sent in that Rhino session.
-
-The browser is the primary viewer. Earth Pro support is optional. In this preview, browser-only updates can delete an older Earth Pro conversion during version cleanup. Re-send with EarthPro enabled to refresh the conversion and its textures.
-
-## Reopening a file
-
-The Rhino file keeps what the viewer shows for it (Document User Text, section EarthLink): project identity, sets and their placement, and the viewer's state for this file: each set's display and cut-out, hidden sets, the height offset and ground sample, the sun's date, time and switches, the lights switch, and the last camera and lens. Named views are Rhino named views. Open the file, run **EarthLinkViewer**: its sets are exported again and the viewer returns to that state. The state is written to the file a few seconds after it changes, which marks the file as modified; save the file to keep it. A copy of the file (Save As, or a duplicate while the original still exists) is a project of its own from then on and starts with the original's views and camera; a renamed or moved file stays the same project.
-
-## 11. Local files and privacy
-
-| Data | macOS | Windows |
-| --- | --- | --- |
-| Settings, views, exchange files | `~/Library/Application Support/EarthLink/` | `%APPDATA%/EarthLink/` |
-| Default captures | `~/Pictures/EarthLink/` | User's `Pictures/EarthLink/` |
-| Per-file project/set associations | Rhino Document User Text, section EarthLink | Same |
-
-The server binds to `127.0.0.1:8765` by default; it is not a public hosting service. **StopViewerServer** stops that server. Close the browser tab separately. Credentials and exported model files persist locally until you remove them; stopping the server does not erase them.
-
-## 12. Troubleshooting and limitations
-
-| Symptom | Check or workaround |
+| What | Where |
 | --- | --- |
-| Map missing | Check credentials, network access, and service access; Not Now skips tiles |
-| Model missing | Check set visibility, supported geometry, units, anchor, and Fit; read Rhino command output |
-| Model floats or is buried | Check anchor reference/elevation; Re-sample for each new site; inspect surface picked on the map |
-| Wrong orientation | Check EarthAnchorPoint model north and base point; turn a set with **Edit** on the set |
-| Browser says Rhino not reachable | Run EarthLinkViewer; check Rhino is responsive and port 8765 is not occupied by another app |
-| Live set does not change | Check Live is on, objects are still in the recorded set, and Rhino is idle; send selection again |
-| Deleted all objects but old model remains | Remove that empty set in the viewer; automatic empty-set export is a known issue |
-| Named views or sun do not sync | Named views are always shared; for the sun check its **Sync with Rhino** switch. Check the linked document, and restart sync with EarthLinkSync if it paused after errors |
-| Lights from Rhino do not show | Check the light is on and its layer visible, **Lights** is on in the Sun panel, and the display is Materials; a Linear or Inverse squared fall-off in a millimetre file is dark, as in Rhino |
-| Surroundings import says OpenStreetMap could not be reached | Its servers are busy or blocked on your network: try again in a minute. Terrain alone still imports |
-| Imported buildings are all 7 m | OpenStreetMap has no heights there; they are on **Buildings (height assumed)** for you to adjust |
-| Earth Pro model disappears | Re-send with EarthPro enabled to regenerate its retained files |
-| Commands work from source only | Verify the installed package separately; source execution is not an installed-plugin check |
+| Settings, map key, views, exported models | Mac: `~/Library/Application Support/EarthLink/`<br>Windows: `%APPDATA%\EarthLink\` |
+| Captures | `Pictures/EarthLink/` |
+| Sets, placement, viewer state, site | In the Rhino file (Document User Text, section EarthLink) |
 
-The stable 0.1.1 release retains the author-tested 0.1.0 runtime. This preview adds unit, API and browser tests and was checked on a Mac GPU over Google's tiles; Windows integration remains a separate check. Scanned context is not survey data; walking on the map follows Google's mesh, including its holes and roughness.
+- The viewer's server listens only on your computer (`127.0.0.1:8765`). `EarthLinkSettings > StopViewerServer` stops it.
+- Your model is never uploaded.
+- The map is requested from Cesium or Google with your key.
+- **Surroundings to Rhino** sends the rectangle's corners to OpenStreetMap, the elevation tiles' host and, if Parcels is ticked, New York State's parcel service. Nothing is sent before you press **Import**.
+- **Send feedback** opens a filled-in GitHub issue or email for you to send yourself. Its system details contain no location.
 
-## 13. For an agent assisting a user
+**Reopening a file.** The Rhino file remembers its sets, their placement and display, the height offset, the sun, the lights switch and the last camera. Open it, run `EarthLinkViewer`, and the viewer is as you left it. Save the file to keep changes. A copy made with Save As becomes a project of its own and starts with the original's views.
 
-Read [AGENT_GUIDE.md](AGENT_GUIDE.md) before operating or changing EarthLink. Establish the user's intended document, selection, set, and site before exporting. A source review, build, local installation, external map request, model move, or public upload are different actions. Use the authorization provided for the actual task; ask when a necessary location or intended change is missing. Use disposable fixture data for tests and never overwrite the user's runtime folder with test fixtures.
+## 12. Troubleshooting
+
+| Problem | Try |
+| --- | --- |
+| No map | Check the key under **Site > Map connection** and your internet connection |
+| Model missing | Check the set is visible, the geometry type is supported, and press **Fit** |
+| Model floats or is buried | **Re-sample ground**, then adjust **Height offset** |
+| Model faces the wrong way | Turn the set with **Edit**, or check north in `EarthAnchorPoint` |
+| "Rhino is not reachable" | Run `EarthLinkViewer`; make sure Rhino is not busy and port 8765 is free |
+| A Live set does not update | Check **Update when it changes in Rhino**; send the selection again if you added objects |
+| Views or sun do not sync | Run `EarthLinkSync` for the file you are working on |
+| Rhino lights do not show | The light must be on and its layer visible; display must be Materials; **Lights** on |
+| Surroundings: OpenStreetMap not reached | Its servers may be busy: try again in a minute |
+| Surroundings: all buildings 7 m | OpenStreetMap has no heights there; they are on **Buildings (height assumed)** |
+| Google Earth Pro shows an old model | Send again with `EarthPro=On` |

@@ -1,5 +1,5 @@
 #! python3
-"""EarthLinkSync: Enscape-style link between Rhino and the EarthLink viewer.
+"""EarthLinkSync: live link between Rhino and the EarthLink viewer.
 
   FollowViewport  the viewer follows Rhino's active viewport live
   Sun             the viewer's date/time and Rhino's Sun stay the same (Sun location/north from the EarthAnchorPoint)

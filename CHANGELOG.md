@@ -1,25 +1,36 @@
 # Changelog
 
-## 0.2.0-beta.13 — preview, in progress
-- **Coming to rest**: measured on a MacBook trackpad, strokes follow each other every third of a second and each new touch cuts the last one's glide while the view is still moving fast, so the view stopped dead again and again. A trackpad stroke that ends at speed now comes to rest over about a quarter of a second and the next stroke blends in. While the fingers move the view stays exactly under them (on the recording the path grew by 3 %; 16 hard stops became 1). The system's glide counts in full again.
-- **Turning point**: it is the surface you see at the centre of the view. The remembered focus distance of beta.12 is gone (it could put the turning point in mid-air), and your model's depth never moves it behind what you see: a model sitting under the map made every tilt swing in and out.
-- **A model under the map**: the ground height is now kept with the place it was measured at. When the site is moved in Rhino (EarthAnchorPoint), or the file is older, the ground is measured again by itself, first quickly at the site and then with care, and the view follows the model to the ground.
-- **Placing a file**: SendToEarth asks for a base point, as the Block command does (Enter: bottom centre of the selection). The viewer's Place panel then puts the cursor in the search field; the base point goes where you click. Later sets of the same file keep their position in Rhino.
-- **Surroundings to Rhino**: the rectangle is two clicks, a corner and the opposite one (two fingers on a trackpad move the map, so it could not be dragged there). Press and drag still works with a mouse; Esc forgets the first corner.
-- The map's credits stand on one line: logos and text are the same height.
-- **Surroundings to Rhino, as CADMapper offers it**:
-  - Roads are sorted onto the layers Major roads, Minor roads and Paths, and railways and water get layers of their own.
-  - Under **Roads and paths**, tick one or more road geometries. Each goes on its own sublayer:
-    - **Centerlines**.
-    - **Outlines**: the road edges, joined where roads meet.
-    - **Surfaces**: a mesh on the ground for each layer.
-  - Outlines and surfaces use each road's width (OpenStreetMap's width or lanes, else the usual width for its kind). Bridges stay level.
-  - Lines get a point every few metres so they follow the ground.
-  - The contour interval and the **Default building height** are in the panel itself, each shown only when its layer is on. The storey height setting is gone (3.2 m a storey).
-  - **Parcels**: lot lines from New York State's public tax parcels (38 counties and New York City), on the ground, named with their address. The parcel number and details are in user text; owners are not fetched. Off until you tick it.
-  - The progress bar says about how long is left.
-  - A lake larger than the area is fetched whole and cut at the rectangle.
-  - The panel remembers your choices.
+## 1.0.0 — unreleased
+
+The first full release. It includes everything in the 0.2 previews, and adds the following.
+
+**Surroundings to Rhino**
+- Roads are sorted onto the layers Major roads, Minor roads and Paths. Railways and water get layers of their own.
+- Road geometry: tick any of **Centerlines**, **Outlines** (road edges, joined where roads meet) and **Surfaces** (meshes on the ground). Each goes on its own sublayer.
+- Outlines and surfaces use each road's recorded width, or the usual width for its kind. Bridges stay level.
+- **Parcels**: lot lines from New York State's public tax parcels (38 counties and New York City), named with their address. Owners are never fetched. Off until ticked.
+- Lakes larger than the area are fetched whole and cut at the rectangle. Lines follow the ground between their points.
+- A simpler panel:
+  - The contour interval and the **Default building height** show only when their layer is on.
+  - The storey height setting is gone (3.2 m a storey).
+  - The time left shows beside the progress bar.
+  - Your choices are remembered.
+- The rectangle is two clicks, one corner and then the opposite one. Dragging still works with a mouse.
+
+**Placing a model**
+- `SendToEarth` asks for a base point, as a block does (Enter: bottom centre of the selection). The viewer then opens on search, and the base point goes where you click.
+- Later sets from the same file keep their position relative to the first.
+- The ground height is kept with the place it was measured at. When the site moves in Rhino, the ground is measured again, so the model never ends up under the map.
+
+**Navigation**
+- Trackpad strokes that end at speed come to rest smoothly instead of stopping dead, and the next stroke blends in.
+- Tilting no longer swings the view in and out after a search or a saved view.
+- Zoom is faster and pan a little slower.
+- From space, the background is black with stars. Two fingers turn the globe north-up, and tilting is limited so the planet stays on screen.
+
+**Other**
+- The map's credits sit on one line, all the same height.
+- **EarthLink Dev**, a second plugin with `Dev` commands, runs a source checkout beside the release for trying changes (see DEVELOPMENT.md).
 
 ## 0.2.0-beta.12 — preview, 2026-11-14
 - **Turning and tilting**: the view turns around what you are looking at, as in beta.9: the turning point keeps the distance you last focused on (Rhino's camera target) and no longer jumps to ground far behind your model, to the horizon, or to map detail that has not loaded yet. That jump made the scene swing in and out while tilting.
@@ -137,7 +148,7 @@ Interface
 - No more roll, Earth flips, inverted pans or mouse/trackpad mix-ups: one input path (Cesium's own controls are off), gestures keep one mode through their momentum, per-frame easing, level horizon near straight-down views, camera kept above Google's mesh.
 - Parallel views no longer show a black half or tile seams and no longer drift while panning; switching back to Perspective keeps the framing.
 - One Sensitivity setting; the input-device selector is gone. Continuous hold-to-zoom on − / +. Compass shows north.
-- Search bar (top left) like Google Earth: suggestions refine as you type, recent searches, Google Earth-style names, fly to your site.
+- Search bar (top left): suggestions refine as you type, recent searches, short place names, fly to your site.
 - Walk works anywhere on the map, with or without a model, at 3.5 m/s (sprint 9.5 m/s), smooth at full frame rate; climbs 45 cm steps, follows stairs down, slides along walls. Replaced the physics library and map-contact modules (about 600 KB) with a small ray-probing walker.
 - Surface picking for pivots, walking and placement uses CPU ray tests on your exported mesh and Google's tiles, independent of the GPU depth buffer.
 - Removed self-shadow stripes on Google's mesh that shimmered while moving.
@@ -187,5 +198,5 @@ Interface
 
 ## 0.1.x — 2026-11-08
 - Commands: `SendToEarth`, `EarthLinkViewer`, `EarthLinkSync`, `EarthLinkSettings`, each with its own icon.
-- Viewer on Google Photorealistic 3D Tiles, Apple Maps–style UI; projections; two-way named views; follow viewport;
+- Viewer on Google Photorealistic 3D Tiles; projections; two-way named views; follow viewport;
   resolution-exact captures with passes; Google Earth Pro live link; localhost-only server.

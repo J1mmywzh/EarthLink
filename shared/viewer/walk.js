@@ -1,5 +1,5 @@
 /* EarthLink walking: a 1.80 m person on whatever is drawn (Google's map or your model), who can also fly
-   like Minecraft's creative mode: double-tap Space to take off, Space rises, Shift sinks, double-tap Space
+   freely: double-tap Space to take off, Space rises, Shift sinks, double-tap Space
    again to drop. Flying has no collision: it passes through buildings, trees, your model and the ground.
 
    Coordinates are metres east/north/up in a frame centred where the walk began. The browser supplies
@@ -11,7 +11,7 @@
     eye: 1.65, head: 1.8, radius: 0.3, step: 0.45,      // stairs up to 45 cm are climbed
     walk: 4.4, sprint: 11.9, sneak: 1.3, accel: 0.12,    // m/s; s to reach speed
     gravity: 9.81, jump: 0.5, snapDown: 0.5,            // m jump height; m followed down stairs
-    fly: 13.6, flySprint: 27, flyUp: 9.4, flyAccel: 0.25,   // Minecraft creative flight, m/s; s to reach speed (it glides)
+    fly: 13.6, flySprint: 27, flyUp: 9.4, flyAccel: 0.25,   // flight, m/s; s to reach speed (it glides)
   };
 
   class Walker {

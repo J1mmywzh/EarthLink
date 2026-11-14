@@ -51,7 +51,7 @@ test('rises onto a map surface that refines upward just after placing',()=>{
   const w=new Walker(world([[-100,-100,1.19,100,100,1.2]]));w.step({},1/60);assert.ok(Math.abs(w.feet[2]-1.2)<0.01);
 });
 
-test('creative flight: take off, rise, fly 25% faster than Minecraft, hover',()=>{
+test('creative flight: take off, rise, fly at 13.6 m/s, hover',()=>{
   const w=new Walker(world([floor]));
   assert.equal(w.toggleFly(),true);
   run(w,{x:0,y:0,jump:true},2);assert.ok(w.feet[2]>15&&w.feet[2]<20,'rose about 9.4 m/s: '+w.feet[2]);

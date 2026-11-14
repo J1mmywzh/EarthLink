@@ -416,7 +416,7 @@ def _layer(doc, path, color):
 
 def add_context(doc, data):
     """Add terrain, contours, buildings, roads, paths, railways and water from context.build() to the document, on
-    EarthLink Context layers (one for each kind, as CADMapper has them), as one undo step. Roads come as centrelines,
+    EarthLink Context layers (one for each kind), as one undo step. Roads come as centrelines,
     closed outlines or mesh surfaces (data["road_style"]). `data` is in metres east/north/up of the model base point.
     Returns what was added, as a sentence."""
     scale = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, doc.ModelUnitSystem)

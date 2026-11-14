@@ -751,7 +751,7 @@
     const sun=scene.context.uniformState.sunDirectionWC;
     const e=on&&sun&&C3.magnitude(sun)>0?Cesium.Math.toDegrees(Math.asin(Math.max(-1,Math.min(1,C3.dot(sun,up))))):90;
     const L=EarthLinkNavigation.daylight(e),cast=on&&S.shadows!==false&&L.shadow>0.02;
-    // Space: above the atmosphere the background is black with stars, as in Apple Maps and Google Earth; the blue
+    // Space: above the atmosphere the background is black with stars; the blue
     // sky is for the ground. (The atmosphere's own glow around the planet stays.)
     const camH=Cesium.Cartographic.fromCartesian(viewer.camera.positionWC)?.height??0,ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
     const space=+ss(40e3,400e3,camH).toFixed(2);
@@ -2125,8 +2125,8 @@
     cxSync(cx.busy ? undefined : "");
   }
   $("contextBtn").onclick = () => toggleContext(!cxOpen());
-  // The panel's choices are remembered: what to include, the road geometry (as CADMapper offers it: centerlines,
-  // outlines or surfaces), the contour interval and the height of a building OpenStreetMap gives none for. Storeys
+  // The panel's choices are remembered: what to include, the road geometry (centerlines,
+  // outlines, surfaces), the contour interval and the height of a building OpenStreetMap gives none for. Storeys
   // OpenStreetMap gives count 3.2 m each (context.LEVEL).
   const cxOpts = Object.assign({ styles: ["lines"] }, store.get("contextOptions") || {});
   const cxStyles = () => CX_GEOM.filter(id => $(id).checked).map(id => $(id).dataset.v);
@@ -2486,7 +2486,7 @@
         const k = state.keys, h = state.heading * Math.PI / 180;
         const f = (k.has("KeyW") || k.has("ArrowUp")) - (k.has("KeyS") || k.has("ArrowDown"));
         const r = (k.has("KeyD") || k.has("ArrowRight")) - (k.has("KeyA") || k.has("ArrowLeft"));
-        if (!f && !r) state.sprinting = false;                    // Minecraft: sprinting ends when you stop
+        if (!f && !r) state.sprinting = false;                    // sprinting ends when you stop
         state.body.step({ x: f * Math.sin(h) + r * Math.cos(h), y: f * Math.cos(h) - r * Math.sin(h),
           sprint: state.sprinting || (MAC_KEYS && (k.has("ControlLeft") || k.has("ControlRight"))),
           sneak: k.has("ShiftLeft") || k.has("ShiftRight"), jump: k.has("Space") }, dt);
@@ -2510,7 +2510,7 @@
     state.eyeZ += (eye[2] - state.eyeZ) * (far ? 1 : 1 - Math.exp(-(dt || 1) * 12));   // eased steps
     viewer.camera.setView(walkPose(state, state.eyeZ));
   }
-  // Minecraft controls. Ctrl sprints on a Mac only: on Windows Ctrl+W would close the tab, so double-tap W there.
+  // Game-style keys. Ctrl sprints on a Mac only: on Windows Ctrl+W would close the tab, so double-tap W there.
   const MAC_KEYS = MAC_NAV;
   const WALK_HELP = `WASD move · Space jump · double-tap Space fly (Space up, Shift down) · ${MAC_KEYS ? "Control or " : ""}double-tap W sprint · Shift sneak · Esc exit`;
   const WALK_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight"];
@@ -2535,7 +2535,7 @@
   });
   document.addEventListener("keyup", e => walk?.keys.delete(e.code));
 
-  // Like Google Maps: drag the person onto the map and drop it to stand there. A click lets you click a spot.
+  // Drag the person onto the map and drop it to stand there. A click lets you click a spot.
   let pegged = false;
   (() => {
     const b = $("walkBtn"), peg = $("peg"), canvas = viewer.scene.canvas;
@@ -2564,7 +2564,7 @@
   })();
   $("walkBtn").onclick = () => { if (pegged) { pegged = false; return; } beginWalk(); };
 
-  // ---------------------------------------------------------------- search (top left), like Google Earth
+  // ---------------------------------------------------------------- search (top left)
   // Suggestions refine as you type (Google geocoder, which the 3D tiles require), recent searches first.
   const geocoder = cfg.ion_token ? new Cesium.IonGeocoderService({ scene, geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE })
     : cfg.google_key && Cesium.GoogleGeocoderService ? new Cesium.GoogleGeocoderService({ key: cfg.google_key }) : null;

@@ -1,4 +1,4 @@
-"""Enscape-style link with Rhino, driven by an Eto UI timer on Rhino's UI thread (no background threads).
+"""Live link with Rhino, driven by an Eto UI timer on Rhino's UI thread (no background threads).
 
 Every tick (0.2 s), for the document being synced:
   * follow viewport  - Rhino's active camera -> live/camera.json (viewer follows)          [link_viewport]

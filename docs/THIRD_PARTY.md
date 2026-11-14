@@ -1,13 +1,20 @@
-# Third-party services and attribution
+# Third-party services and licenses
 
-EarthLink's original source is distributed under the MIT license in the repository root. That license does not grant rights to third-party software, map content, accounts, or trademarks.
+EarthLink's own code is MIT licensed (see `LICENSE`). That license covers no third-party software, map content, accounts or trademarks.
 
-- **CesiumJS 1.140.0** is loaded from a CDN. See the [upstream license and notices](https://github.com/CesiumGS/cesium/blob/1.140/LICENSE.md).
-- **Google Photorealistic 3D Tiles** are requested through the viewer using each user's own Cesium ion token or Google Maps Platform key. Map content is not included in this source repository. Follow the [Map Tiles API policies](https://developers.google.com/maps/documentation/tile/policies) and the terms applicable to your account.
-- **OpenStreetMap** data (buildings, roads) is downloaded on request by **Surroundings to Rhino**, from api.openstreetmap.org and, as a fallback, public Overpass API servers. © OpenStreetMap contributors, [Open Database License](https://www.openstreetmap.org/copyright). Credit OpenStreetMap in work made from it. Requests are single, user-started downloads of a small area, identified by an EarthLink User-Agent, in line with the [API usage policy](https://operations.osmfoundation.org/policies/api/).
-- **Terrain Tiles** (Mapzen elevation tiles on [AWS Open Data](https://registry.opendata.aws/terrain-tiles/)) supply the terrain for the same tool; see their [attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) (USGS 3DEP, SRTM and other sources).
-- Google's map content is **not** exported to Rhino by any EarthLink feature.
-- **Rhino 8 / RhinoCommon** are supplied by McNeel and are not redistributed here.
-- **Google Earth Pro** is an optional external application and is not redistributed here.
+| Used for | Source | Terms |
+| --- | --- | --- |
+| 3D engine | CesiumJS 1.140, loaded from a CDN | [License and notices](https://github.com/CesiumGS/cesium/blob/1.140/LICENSE.md) |
+| Photorealistic map | Google Photorealistic 3D Tiles, through your own Cesium ion token or Google Maps Platform key | [Map Tiles API policies](https://developers.google.com/maps/documentation/tile/policies) and your account's terms |
+| Buildings, roads, railways, water | OpenStreetMap: its map download, or public Overpass servers as a fallback | © OpenStreetMap contributors, [Open Database License](https://www.openstreetmap.org/copyright); [API usage policy](https://operations.osmfoundation.org/policies/api/) |
+| Terrain and contours | Terrain Tiles on [AWS Open Data](https://registry.opendata.aws/terrain-tiles/) | [Attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) (USGS 3DEP, SRTM and others) |
+| Parcels | New York State tax parcels (NYS ITS, public service) | Provided as is, by the counties that share their data |
+| Rhino 8, RhinoCommon | McNeel | Not redistributed |
+| Optional export | Google Earth Pro | A separate application, not redistributed |
 
-Preserve required attribution in the viewer. Before adding map-based screenshots or recordings to a public portfolio, check the applicable service's imagery and attribution requirements. Capture features in this preview do not constitute a rights clearance for the resulting images.
+- No map content is stored in this repository.
+- The photorealistic map is shown in the viewer only; no EarthLink feature exports it.
+- Site downloads for Rhino are single requests, started by you, for a small area, identified by an EarthLink User-Agent.
+- Keep the map credits visible.
+- Credit OpenStreetMap in drawings made from its data.
+- Check each provider's rules before publishing captured images; a capture is not a rights clearance.
