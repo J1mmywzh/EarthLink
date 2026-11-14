@@ -1,7 +1,9 @@
 """Site context from open data, for Rhino: terrain, building massing and roads inside a rectangle.
 
 Pure Python, run by the local server (never inside Rhino's interface thread). Sources, both free to export:
-  * OpenStreetMap (buildings, roads) through the Overpass API. Data (c) OpenStreetMap contributors, ODbL.
+  * OpenStreetMap (buildings, roads): the map download openstreetmap.org's own Export uses, one request for a
+    rectangle someone drew (more only when the area holds over 50,000 points); the public Overpass servers are the
+    fallback. Data (c) OpenStreetMap contributors, ODbL.
   * Terrain Tiles on AWS Open Data ("terrarium" elevation tiles, from Mapzen): USGS 3DEP, SRTM and others.
 Google's map is not used: its terms forbid exporting its content.
 
@@ -13,16 +15,19 @@ ground is, whatever the elevation model's datum.
 import json
 import math
 import struct
+import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
 
+OSM_MAP = "https://api.openstreetmap.org/api/0.6/map.json?bbox=%.7f,%.7f,%.7f,%.7f"     # west, south, east, north
 OVERPASS = ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
 TERRAIN = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
 ATTRIBUTION = ("Buildings and roads (c) OpenStreetMap contributors, ODbL. "
                "Terrain: Terrain Tiles (Mapzen, AWS Open Data; USGS 3DEP, SRTM and other sources).")
 MAX_SIDE, MIN_SIDE = 3000.0, 20.0          # metres
 MAX_ZOOM, GRID = 15, 200                   # elevation tiles stop at zoom 15; at most GRID cells along the longer side
+PAD = 200.0                                # metres of OpenStreetMap asked for around the rectangle (see fetch_osm)
 LEVEL, DEFAULT_HEIGHT = 3.2, 7.0           # metres per storey; height of a building OpenStreetMap gives no height for
 A, E2 = 6378137.0, 6.69437999014e-3        # WGS84
 
@@ -296,20 +301,83 @@ def clip_line(pts, b):
 
 
 # ----------------------------------------------------------------- the build
-def http_get(url, data=None, timeout=45):
+def http_get(url, data=None, timeout=30):
     from earthlink import __version__
-    req = urllib.request.Request(url, data=data, headers={"User-Agent": "EarthLink/%s (Rhino plugin; github.com/J1mmywzh/EarthLink)" % __version__})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    req = urllib.request.Request(url, data=data, headers={
+        "User-Agent": "EarthLink/%s (Rhino plugin; https://github.com/J1mmywzh/EarthLink)" % __version__,
+        "Referer": "https://github.com/J1mmywzh/EarthLink", "Accept": "*/*"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:                     # keep the server's own words ("too many nodes", ...)
+        try:
+            words = e.read(300).decode("utf-8", "replace").strip()
+        except Exception:
+            words = ""
+        raise ContextError("HTTP %d %s" % (e.code, words or e.reason))
+
+
+def _with_geometry(data):
+    """OpenStreetMap's map download lists points, ways and relations separately; give ways and relation members
+    their points, the form parse_osm reads (and the Overpass servers answer in)."""
+    nodes, ways, out = {}, {}, []
+    for el in data.get("elements", []):
+        if el.get("type") == "node":
+            nodes[el["id"]] = {"lat": el["lat"], "lon": el["lon"]}
+    for el in data.get("elements", []):
+        if el.get("type") == "way":
+            geo = [nodes[n] for n in el.get("nodes", []) if n in nodes]
+            if len(geo) == len(el.get("nodes", [])):       # a way with a point missing is not drawn half
+                ways[el["id"]] = geo
+                out.append({"type": "way", "id": el["id"], "tags": el.get("tags") or {}, "geometry": geo})
+    for el in data.get("elements", []):
+        if el.get("type") == "relation":
+            out.append({"type": "relation", "id": el["id"], "tags": el.get("tags") or {},
+                        "members": [{"type": "way", "role": m.get("role", ""), "geometry": ways.get(m.get("ref"), [])}
+                                    for m in el.get("members", []) if m.get("type") == "way"]})
+    return out
+
+
+def _osm_map(b, fetch, depth=0):
+    """Everything OpenStreetMap has in the rectangle; an area with too many points is asked for in quarters."""
+    try:
+        return _with_geometry(json.loads(fetch(OSM_MAP % (b["west"], b["south"], b["east"], b["north"])).decode("utf-8")))
+    except ContextError as e:
+        if "too many nodes" not in str(e) or depth >= 2:
+            raise
+    mx, my, seen, out = (b["west"] + b["east"]) / 2.0, (b["south"] + b["north"]) / 2.0, {}, []
+    for w, e_ in ((b["west"], mx), (mx, b["east"])):
+        for s_, n in ((b["south"], my), (my, b["north"])):
+            for el in _osm_map({"west": w, "south": s_, "east": e_, "north": n}, fetch, depth + 1):
+                key = (el["type"], el["id"])
+                if key not in seen:
+                    seen[key] = len(out)
+                    out.append(el)
+                elif el["type"] == "relation":             # a quarter holds only part of a relation: keep the fullest
+                    size = lambda r: sum(len(m["geometry"]) for m in r["members"])
+                    if size(el) > size(out[seen[key]]):
+                        out[seen[key]] = el
+    return out
 
 
 def fetch_osm(b, buildings, roads, fetch=http_get):
-    body = urllib.parse.urlencode({"data": overpass_query(b, buildings, roads)}).encode()
+    """Buildings and roads in the rectangle, as {"elements": [...]} with each way's points.
+
+    A way is only listed when one of its points lies in the area asked for, so the area is PAD metres wider on every
+    side: a street that crosses the rectangle between two of its points, or a building around it, is still found."""
+    mid = math.radians((b["south"] + b["north"]) / 2.0)
+    dy, dx = PAD / 111320.0, PAD / (111320.0 * max(0.2, math.cos(mid)))
+    b = {"west": b["west"] - dx, "east": b["east"] + dx, "south": b["south"] - dy, "north": b["north"] + dy}
     last = None
+    try:
+        return {"elements": _osm_map(b, fetch)}
+    except Exception as e:                                  # busy or unreachable: the Overpass servers know the same map
+        last = e
+    body = urllib.parse.urlencode({"data": overpass_query(b, buildings, roads)}).encode()
     for url in OVERPASS:
         try:
             return json.loads(fetch(url, body).decode("utf-8"))
-        except Exception as e:          # a busy mirror: try the next one
+        except Exception as e:                              # a busy mirror: try the next one
             last = e
     raise ContextError("OpenStreetMap could not be reached (%s). Try again in a minute." % (last,))
 

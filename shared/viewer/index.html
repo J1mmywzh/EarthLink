@@ -1868,7 +1868,7 @@
     const p = cxPoint(e.position); if (!p) return msg("Start the rectangle on the map.", 2500);
     cx.a = p; cx.b = null; cx.drag = true;
     if (!cx.ent) cx.ent = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(cxOutline, false), width: 3,
-      material: Cesium.Color.fromCssColorString("#0a84ff"), depthFailMaterial: Cesium.Color.fromCssColorString("#0a84ff").withAlpha(0.55) } });
+      material: Cesium.Color.fromCssColorString("#0a84ff"), depthFailMaterial: Cesium.Color.fromCssColorString("#0a84ff") } });   // seen through buildings too
     cxSync("");
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
   cxHandler.setInputAction(e => {

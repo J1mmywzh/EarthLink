@@ -22,6 +22,7 @@ def world(slope=0.0):
                 n=2.0**z;lat=math.degrees(math.atan(math.sinh(math.pi*(1-2*(y+(j+0.5)/256)/n))))
                 return terrarium(250.0+slope*(lat-LAT)*111000.0)
             return png(256,256,px)
+        if 'api.openstreetmap.org' in url:raise OSError('unreachable')   # these tests answer as the Overpass fallback does
         d=0.0002
         sq=[{'lat':LAT+a*d,'lon':LON+b*d*1.4} for a,b in ((-1,-1),(-1,1),(1,1),(1,-1),(-1,-1))]
         far=[{'lat':LAT+0.01+a*d,'lon':LON+b*d} for a,b in ((-1,-1),(-1,1),(1,1),(1,-1),(-1,-1))]
@@ -94,3 +95,50 @@ def test_server_runs_the_import_and_hands_it_to_rhino(tmp_path,monkeypatch):
     assert req['type']=='context' and req['project']=='p1' and os.path.exists(env.live_file(req['file']))
     env.write_json(env.live_file('context_result.json'),{'file':req['file'],'ok':True,'message':'Rhino added terrain.'})
     assert server._context_status()=={'state':'done','message':'Rhino added terrain.','job':req['file'],'counts':st['counts']}
+
+
+def osm_map(limit=None):
+    """OpenStreetMap's own map download: points, ways and relations listed separately. With `limit`, an area wider
+    than that many degrees answers 'too many nodes', as the real server does for crowded areas."""
+    calls=[]
+    def fetch(url,data=None,timeout=0):
+        if 'terrarium' in url:return world()(url)
+        assert 'api.openstreetmap.org/api/0.6/map.json?bbox=' in url and data is None,'the map download comes first: '+url
+        w,s_,e,n=[float(v) for v in url.split('bbox=')[1].split(',')];calls.append((w,s_,e,n))
+        if limit and e-w>limit:raise C.ContextError('HTTP 400 You requested too many nodes (limit is 50000). Either request a smaller area, or use planet.osm')
+        d=0.0002;nodes=[];ways=[]
+        def way(i,tags,pts,close=True):
+            ids=[]
+            for k,(la,lo) in enumerate(pts):nodes.append({'type':'node','id':i*100+k,'lat':la,'lon':lo});ids.append(i*100+k)
+            ways.append({'type':'way','id':i,'nodes':ids+(ids[:1] if close else []),'tags':tags})
+        sq=lambda la,lo,k=1.0:[(la-d*k,lo-d*k),(la-d*k,lo+d*k),(la+d*k,lo+d*k),(la+d*k,lo-d*k)]
+        way(1,{'building':'yes','height':'12 m'},sq(LAT,LON-0.0008))
+        way(2,{'highway':'service'},[(LAT+0.0005,LON-0.01),(LAT+0.0005,LON-0.0025),(LAT+0.0005,LON+0.01)],close=False)   # one point just outside the rectangle, none inside
+        way(3,{},sq(LAT,LON+0.0008,2.0));way(4,{},sq(LAT,LON+0.0008,0.5))               # a courtyard building: outer and inner ring
+        ways.append({'type':'way','id':5,'nodes':[999001,999002],'tags':{'building':'yes'}})       # its points are not in the answer: skipped
+        rel={'type':'relation','id':9,'tags':{'type':'multipolygon','building':'yes','building:levels':'3'},'members':[{'type':'way','ref':3,'role':'outer'},{'type':'way','ref':4,'role':'inner'}]}
+        inside=lambda el:any(w<=x['lon']<=e and s_<=x['lat']<=n for x in nodes if x['id']//100==el['id'])
+        keep=[x for x in ways if x['id']==5 or inside(x)]
+        return json.dumps({'version':'0.6','elements':nodes+keep+[rel]}).encode()
+    return fetch,calls
+
+def test_openstreetmaps_own_map_download_is_read_first():
+    fetch,calls=osm_map();out=C.build(BOUNDS,ANCHOR,{},terrain=False,fetch=fetch)
+    pad_lat=C.PAD/111320.0;assert len(calls)==1 and calls[0][1]==pytest.approx(BOUNDS['south']-pad_lat) and calls[0][3]==pytest.approx(BOUNDS['north']+pad_lat)
+    assert calls[0][0]<BOUNDS['west']-0.002 and calls[0][2]>BOUNDS['east']+0.002,'a wider area is asked for, so that a street crossing between two of its points is found'
+    assert out['counts']['buildings']==2 and out['counts']['roads']==1
+    plain=[b for b in out['buildings'] if not b['inners']][0];yard=[b for b in out['buildings'] if b['inners']][0]
+    assert plain['height']==12.0 and len(plain['outer'])==4
+    assert yard['height']==pytest.approx(3*C.LEVEL) and len(yard['inners'])==1 and len(yard['inners'][0])==4
+    assert out['roads'][0]['kind']=='service'
+
+def test_a_crowded_area_is_downloaded_in_quarters_and_nothing_comes_twice():
+    fetch,calls=osm_map(limit=0.005);out=C.build(BOUNDS,ANCHOR,{},terrain=False,fetch=fetch)
+    assert len(calls)==5,'the whole rectangle once, then its four quarters'
+    assert out['counts']['buildings']==2 and out['counts']['roads']==1,'the road crosses two quarters and is still one road'
+
+def test_without_openstreetmap_the_message_says_so():
+    def fetch(url,data=None,timeout=0):
+        if 'terrarium' in url:return world()(url)
+        raise OSError('timed out')
+    with pytest.raises(C.ContextError,match='OpenStreetMap could not be reached'):C.build(BOUNDS,ANCHOR,{},fetch=fetch)
