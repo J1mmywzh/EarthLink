@@ -114,20 +114,20 @@
   }
   const isMouseWheel = e => wheelEvidence(e).device === "mouse";
   /* The glide after the fingers lift. macOS keeps sending a smoothly shrinking scroll for about a second: that is
-     what makes a turn come to rest gently, so it is kept for its whole length. It only counts for less
-     (COAST_FLOOR), or a flick turns the view much further than the fingers did. The change is gradual both ways:
-     once the steps have only shrunk for COAST_AFTER events (and by a quarter in all) the weight eases down, and a
-     step that grows again (the fingers) eases it back up. */
-  const COAST_AFTER = 6, COAST_FLOOR = 0.55, COAST_DOWN = 0.25, COAST_UP = 0.5;
+     what makes a turn come to rest gently, so it is kept for its whole length. Its later part only counts for
+     less (COAST_FLOOR), or a flick turns the view much further than the fingers did. Moving fingers always count
+     in full, slowing down included: only a long, unbroken shrinking run (COAST_AFTER shrinking steps, down to six tenths) is
+     taken for the glide; the weight then eases down, and eases back up as soon as a step grows again. */
+  const COAST_AFTER = 8, COAST_FLOOR = 0.5, COAST_DOWN = 0.2, COAST_UP = 0.5;
   class Coast {
     constructor() { this.reset(); }
     reset() { this.prev = null; this.run = 0; this.from = 0; this.k = 1; }
     gain(dx, dy) {
       const m = Math.hypot(dx, dy);
-      if (this.prev != null && m <= this.prev && m > 0) { if (!this.run) this.from = this.prev; this.run++; }
-      else this.run = 0;
+      if (this.prev != null && m < this.prev && m > 0) { if (!this.run) this.from = this.prev; this.run++; }   // a shrinking step
+      else if (!(this.prev != null && m === this.prev)) this.run = 0;                                         // an equal step neither counts nor breaks the run
       this.prev = m;
-      const gliding = this.run >= COAST_AFTER && m <= 0.75 * this.from;
+      const gliding = this.run >= COAST_AFTER && m <= 0.6 * this.from;
       this.k += ((gliding ? COAST_FLOOR : 1) - this.k) * (gliding ? COAST_DOWN : COAST_UP);
       if (1 - this.k < 1e-3) this.k = 1;
       return this.k;
@@ -222,6 +222,7 @@
     const E = Cesium.Ellipsoid.WGS84, latch = new WheelLatch(), ease = new Ease();
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
+    let grounded_ = false;                               // this gesture's tilt has reached the ground
     let held = null, groundAt = null, rec = null;        // the pivot kept between rotations; last ground check; input recording
     const floor = new Floor();
     const ssc = scene.screenSpaceCameraController;
@@ -346,14 +347,17 @@
         // from straight down to straight up: below the pivot is fine (looking up at a facade), as in Rhino
         const lim = twoPoint() ? TWO_POINT_MAX : Cesium.Math.toRadians(89.9);
         const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, -lim), Math.max(elev, lim));
-        if (Math.abs(next - elev) > 1e-9) {
+        if (next > elev) grounded_ = false;                // tilting up again
+        if (Math.abs(next - elev) > 1e-9 && !(next < elev && grounded_)) {
           const right = C3.normalize(C3.cross(dir, up, v3()), v3());
           const q = Cesium.Quaternion.fromAxisAngle(right, elev - next);
           const flat = [pos, dir, up];                     // the pose without the tilt
           pos = C3.add(pivot, rotate(q, off), v3()); dir = rotate(q, dir); up = rotate(q, up);
           if (next < elev) {                               // tilting down: stop at the ground, do not slide along it
             let rests = false; setPose(pos, dir, up, () => { rests = true; });
-            if (rests) setPose(...flat);
+            // The ground stopped the tilt: it stays stopped for the rest of this gesture. Tilting on wherever the
+            // ground dips makes the camera follow every bump while it turns, and the picture jumps in and out.
+            if (rests) { grounded_ = true; setPose(...flat); }
             return keep();
           }
         }
@@ -440,6 +444,7 @@
     function begin() {
       hooks.moved(); cam.cancelFlight();
       floor.reset(); groundAt = null;                      // a new gesture never starts by lifting the camera
+      grounded_ = false;
       const c0 = Cesium.Cartographic.fromCartesian(cam.positionWC); if (c0) floor.h = c0.height;
     }
 
