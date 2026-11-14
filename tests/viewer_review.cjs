@@ -213,6 +213,23 @@ test('after a camera flight (search, Fit, a saved view) two fingers only tilt: C
  const r=await p.evaluate(()=>{const c=EL.viewer.camera;return {d:Cesium.Cartesian3.distance(window.__P0,c.positionWC),pitch:c.pitch};});
  assert.ok(Math.abs(r.pitch-P0.pitch)>0.05,'it tilted: '+JSON.stringify([P0,r]));
  assert.ok(Math.abs(r.d-P0.d)<0.01*P0.d,'about the point it looked at, at the same distance (no zoom): '+P0.d.toFixed(2)+' -> '+r.d.toFixed(2));});
+test('from space: black sky with stars, two fingers turn the globe, the planet never leaves the screen',async t=>{const p=await pageFor(t,null,'mac');
+ const look=()=>p.evaluate(()=>{const C=Cesium,c=EL.viewer.camera,s=EL.viewer.scene,r=C.IntersectionTests.rayEllipsoid(new C.Ray(c.positionWC,c.directionWC),C.Ellipsoid.WGS84);
+   return {h:C.Cartographic.fromCartesian(c.positionWC).height,pitch:C.Math.toDegrees(c.pitch),earth:!!r,bg:[s.backgroundColor.red,s.backgroundColor.green,s.backgroundColor.blue],stars:!!(s.skyBox&&s.skyBox.show)};});
+ const scroll=(dx,dy,n)=>p.evaluate(async([dx,dy,n])=>{const cv=EL.viewer.scene.canvas;for(let i=0;i<n;i++){cv.dispatchEvent(new WheelEvent('wheel',{deltaX:dx,deltaY:dy,deltaMode:0,wheelDeltaY:-3*dy,clientX:640,clientY:400,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,16));}},[dx,dy,n]);
+ await p.evaluate(()=>{EL.viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(-76.5,42.4,15e6),orientation:{heading:0,pitch:-Math.PI/2,roll:0}});EL.viewer.scene.requestRender();});await p.waitForTimeout(800);
+ let a=await look();assert.ok(a.bg.every(v=>v<0.02)&&a.stars,'space is black with stars: '+JSON.stringify(a));
+ await scroll(0,-12,40);await p.waitForTimeout(900);let b=await look();
+ assert.ok(b.earth&&b.pitch<-85,'two fingers up and down from space do not tip the planet off the screen: '+JSON.stringify(b));
+ const before=await p.evaluate(()=>Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC));await scroll(30,0,30);await p.waitForTimeout(900);
+ const after=await p.evaluate(()=>Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC));
+ assert.ok(Math.abs(after.longitude-before.longitude)>0.05&&Math.abs(after.height-before.height)<0.01*before.height,'sideways, the globe turns (the camera goes round it at the same height)');
+ assert.ok((await look()).earth,'still looking at the planet');
+ // tilted near the ground, then zoomed far out: the view straightens on the way up
+ await p.evaluate(()=>{EL.viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(-76.5,42.4,3000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-10),roll:0}});});await p.waitForTimeout(400);
+ await p.evaluate(()=>{for(let i=0;i<40;i++)EL.nav.zoomStep(1);});await p.waitForTimeout(4000);
+ const c=await look();assert.ok(c.h>200e3,'zoomed out: '+c.h);assert.ok(c.earth,'and the planet is in view: '+JSON.stringify(c));
+ assert.ok(c.pitch<=-(90-(await p.evaluate(h=>EarthLinkNavigation.maxTilt(h),c.h)))+1,'tilted no more than allowed at that height: '+JSON.stringify(c));});
 test('placing a file for the first time shows that file\'s model on the clicked spot, not the sets of the file shown before',async t=>{const p=await pageFor(t);
  const glb=await p.evaluate(()=>EL.meta.sets.Main.glb);
  await p.evaluate(glb=>EL.site.open({project:'another-file',name:'Tower',set:'Main',preview:{glb}}),glb);

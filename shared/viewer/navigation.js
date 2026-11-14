@@ -41,6 +41,14 @@
     hold: Math.LN2 / 0.69,             // +/- held: distance halves every 0.69 s
     look: 0.072, lookMouse: 0.135,     // walking
   };
+  /* How far the view may tilt from straight down at a height (m): freely near the ground, less and less higher up,
+     not at all from space (as in Apple Maps and Google Earth: the globe stays on the screen). */
+  const GLOBE = { low: 30e3, high: 2500e3, spin: 600e3 };   // spin: above it two fingers (or a drag) turn the globe instead of orbiting
+  function maxTilt(h) {
+    if (!(h > GLOBE.low)) return 180;
+    if (h >= GLOBE.high) return 0;
+    return 90 * (1 - Math.log(h / GLOBE.low) / Math.log(GLOBE.high / GLOBE.low));
+  }
   const STEP = { degrees: 6, pan: 1 / 8 };   // arrow keys: Rhino's 60 steps per turn; pan an eighth of the view
   const GESTURE_GAP = 220;   // ms without wheel events that ends a gesture (momentum included)
   const TAKEOVER = 120;      // ms a pinch must be quiet before scrolling takes over
@@ -253,7 +261,7 @@
     ssc.enableCollisionDetection = false;    // and one thing that moves the camera: Cesium's collision lifts it by itself
     const mac = () => (hooks.mac ? !!hooks.mac() : isMac());
 
-    const normal = p => E.geodeticSurfaceNormal(p, v3());
+    const normal = p => E.geodeticSurfaceNormal(p, v3()) || (C3.magnitude(p) > 1 ? C3.normalize(p, v3()) : C3.clone(C3.UNIT_Z));
     const sens = () => clamp(+hooks.sensitivity() || 1, 0.2, 3);
     const ortho = () => cam.frustum instanceof Cesium.OrthographicFrustum;
     const twoPoint = () => hooks.projection() === "two_point" && !ortho();
@@ -309,7 +317,13 @@
         if (within) d = d == null ? depth : Math.min(d, within[1]);
       }
       if (d == null) d = Math.max(50, height() * 2);
-      return Cesium.Ray.getPoint(ray, d, v3());
+      const at = Cesium.Ray.getPoint(ray, d, v3());
+      // From high up, looking past the Earth: nothing sensible to turn around but the Earth itself. The point of
+      // the Earth under the camera, so that a turn or a zoom brings the planet back, never a point in space or
+      // deep inside the Earth (both lost the planet off the screen and then stuck the camera).
+      if (height() > GLOBE.low && (C3.magnitude(at) < 0.9 * E.minimumRadius || C3.distance(at, cam.positionWC) > 1.2 * C3.magnitude(cam.positionWC)))
+        return E.scaleToGeodeticSurface(cam.positionWC, v3()) || at;
+      return at;
     }
     // The pivot of a rotation: the one the last rotation used while nothing else has moved the camera since.
     function turnPivot() {
@@ -399,7 +413,9 @@
         // Without a map under the camera (not loaded yet, or none) nothing would stop it going under the ground:
         // it then comes down no lower than what it turns around.
         const low = floor.known ? -lim : 0;
-        const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, low), Math.max(elev, lim));
+        // From high up the view tilts less and less, and not at all from space: the planet stays on the screen.
+        const top = Cesium.Math.toRadians(90 - maxTilt(height()));
+        const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, Math.max(low, top)), Math.max(elev, lim));
         if (next > elev) grounded_ = false;                // tilting up again
         if (Math.abs(next - elev) > 1e-9 && !(next < elev && grounded_)) {
           const right = C3.normalize(C3.cross(dir, up, v3()), v3());
@@ -462,13 +478,28 @@
         }
         f.width = w1; return;
       }
-      const A = anchor?.point || pivot || (pivot = centre());
+      let A = anchor?.point || pivot || (pivot = centre());
+      if (height() > GLOBE.low && C3.magnitude(A) < 0.9 * E.minimumRadius) A = pivot = E.scaleToGeodeticSurface(cam.positionWC, v3()) || A;
       const off = C3.subtract(cam.positionWC, A, v3()), d = C3.magnitude(off);
       const nd = clamp(d * z, 0.4, 4e7);
       let pos = C3.add(A, C3.multiplyByScalar(off, nd / (d || 1), v3()), v3());
       if (Cesium.Cartographic.fromCartesian(pos)?.height > 4e7) return;
       pos = grounded(pos).pos;
       cam.setView({ destination: pos, orientation: { direction: cam.directionWC, up: cam.upWC } });   // no re-levelling: the image never turns
+      if (logFactor > 0) straighten();
+    }
+    // Higher up the view may tilt less (maxTilt): turned down towards the Earth where it stands, the planet in view.
+    function straighten() {
+      if (ortho() || twoPoint() || hooks.walking()) return;
+      const h = height(); if (h <= GLOBE.low) return;
+      const n = normal(cam.positionWC), dir = cam.directionWC, pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1));
+      const most = -Cesium.Math.toRadians(90 - maxTilt(h));
+      if (pitch <= most + 1e-6) return;
+      let right = C3.cross(dir, n, v3()); if (C3.magnitude(right) < 1e-6) return; C3.normalize(right, right);
+      const q = Cesium.Quaternion.fromAxisAngle(right, most - pitch);
+      const nd = rotate(q, dir), nu = rotate(q, cam.upWC);
+      pivot = null; held = null;
+      cam.setView({ destination: cam.positionWC.clone(), orientation: { direction: nd, up: level(nd, nu) } });
     }
 
     // ---- frame loop: ease pending motion, continuous zoom, short animations
@@ -524,7 +555,7 @@
           : g.device === "mouse" ? e.deltaY * u * RATE.wheel
           : (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * u * RATE.scroll;
         ease.add("zoom", clamp(delta, -0.7, 0.7) * s, !!g.pinch && !notch);
-      } else if (g.mode === "pan" || proj === "parallel") { ease.add("px", fx, soft); ease.add("py", fy, soft); }
+      } else if (g.mode === "pan" || proj === "parallel" || height() > GLOBE.spin) { ease.add("px", fx, soft); ease.add("py", fy, soft); }   // from space two fingers turn the globe
       else { ease.add("heading", fx * RATE.orbit * s, soft); ease.add("tilt", -fy * RATE.tilt * s, soft); }
       kick();
     }, { passive: false });
@@ -588,6 +619,7 @@
       else if (m === "pan") { ease.add("px", fx); ease.add("py", fy); }
       else if (m === "lookAround") { ease.add("lh", fx * RATE.lookMouse * s); ease.add("lt", -fy * RATE.lookMouse * s); }
       else if (m === "lens") { if (hooks.lens) hooks.lens(Math.exp(fy * 0.004)); }
+      else if (m === "orbit" && height() > GLOBE.spin) { ease.add("px", fx); ease.add("py", fy); }   // from space a drag turns the globe
       else if (m === "orbit") { ease.add("heading", fx * RATE.orbitMouse * s); ease.add("tilt", -fy * RATE.tiltMouse * s); }
       kick();
     });
@@ -662,5 +694,5 @@
     const n = typeof navigator !== "undefined" ? navigator : {};
     return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
   }
-  return { RATE, STEP, WheelLatch, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, daylight, create };
+  return { RATE, STEP, GLOBE, maxTilt, WheelLatch, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, daylight, create };
 });

@@ -735,16 +735,20 @@
     const sun=scene.context.uniformState.sunDirectionWC;
     const e=on&&sun&&C3.magnitude(sun)>0?Cesium.Math.toDegrees(Math.asin(Math.max(-1,Math.min(1,C3.dot(sun,up))))):90;
     const L=EarthLinkNavigation.daylight(e),cast=on&&S.shadows!==false&&L.shadow>0.02;
-    const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2)].join();
+    // Space: above the atmosphere the background is black with stars, as in Apple Maps and Google Earth; the blue
+    // sky is for the ground. (The atmosphere's own glow around the planet stays.)
+    const camH=Cesium.Cartographic.fromCartesian(viewer.camera.positionWC)?.height??0,ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+    const space=+ss(40e3,400e3,camH).toFixed(2);
+    const key=[on,cast,!!tileset&&tileset.customShader===mapShader,...L.tint.map(v=>v.toFixed(3)),L.shadow.toFixed(2),L.night.toFixed(2),space].join();
     if(key===dayKey)return;dayKey=key;
     mapTint.x=L.tint[0];mapTint.y=L.tint[1];mapTint.z=L.tint[2];
     dayTint=new Cesium.Color(...L.tint.map(v=>Math.pow(v,1/2.2)),1);   // your model takes the same tint as the map (a model colour is given in display values)
     for(const n of Object.keys(models))styleModel(models[n],n);
-    scene.backgroundColor=new Cesium.Color(...L.sky,1);
+    scene.backgroundColor=new Cesium.Color(...L.sky.map(v=>v*(1-space)),1);
     // The sky's own glow follows the time of day: Cesium keeps a bright blue band at the horizon all night otherwise.
     if(scene.skyAtmosphere){const a=scene.skyAtmosphere;a.show=L.night<0.97;a.brightnessShift=-0.92*L.night;a.saturationShift=-0.3*L.night;}
     if(scene.fog)scene.fog.enabled=L.night<0.5;
-    if(scene.skyBox)scene.skyBox.show=L.night>0.5;
+    if(scene.skyBox)scene.skyBox.show=L.night>0.5||space>0.3;
     if(scene.moon)scene.moon.show=L.night>0.5;
     viewer.shadows=cast;viewer.shadowMap.darkness=LIGHT.shadow+(1-LIGHT.shadow)*(1-L.shadow);
     if(on){

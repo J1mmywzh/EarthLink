@@ -190,3 +190,9 @@ test('time of day: the map is untouched by day, warm at sunset, dark blue at nig
   let last=D(20).tint[0]+D(20).tint[1]+D(20).tint[2];
   for(let e=19;e>=-10;e--){const t=D(e).tint,sum=t[0]+t[1]+t[2];assert.ok(sum<=last+1e-9,'darkens steadily: '+e);last=sum;}
 });
+
+test('the view may tilt freely near the ground, less higher up, not at all from space',()=>{
+  assert.equal(N.maxTilt(500),180);assert.equal(N.maxTilt(N.GLOBE.low),180);assert.equal(N.maxTilt(N.GLOBE.high),0);assert.equal(N.maxTilt(2e7),0);
+  let last=180;for(let h=N.GLOBE.low*1.01;h<N.GLOBE.high;h*=1.3){const t=N.maxTilt(h);assert.ok(t<=last&&t>=0);last=t;}
+  assert.ok(N.GLOBE.spin>N.GLOBE.low&&N.GLOBE.spin<N.GLOBE.high);
+});
