@@ -50,6 +50,10 @@
   #sideHead { padding: 14px 16px 10px; display: flex; gap: 10px; align-items: center; }
   #modelName { font-size: 17px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #status { color: var(--fg2); font-size: 12px; } #status:empty { display: none; }
+  .steps { margin: 4px 0 10px; padding-left: 20px; display: grid; gap: 10px; } .steps input { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
+  #keyState { min-height: 18px; font-size: 12.5px; color: var(--fg2); } #keyState.ok { color: var(--green); } #keyState.bad { color: var(--red); }
+  #gkeyBox { margin-top: 8px; font-size: 12.5px; color: var(--fg2); } #gkeyBox input { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
+  #mapLink { margin-left: auto; white-space: nowrap; }
   #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); flex: none; margin-top: 2px; }
   #dot.live { background: var(--green); } #dot.flash { background: var(--orange); }
   #sideBody { overflow-y: auto; padding: 0 10px 12px; flex: 1; }
@@ -207,7 +211,7 @@
   <div id="results" class="glass"></div>
 </form>
 <aside id="sidebar" class="glass">
-  <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status"></div></div></div>
+  <div id="sideHead"><span id="dot"></span><div style="min-width:0"><div id="modelName">EarthLink</div><div id="status"></div></div><button class="link" id="mapLink" hidden>Connect map</button></div>
   <div id="sideBody">
     <div class="group" id="setsGroup">
       <div class="ghead">Design Sets <button id="flipSets" class="link" title="Show one set at a time, in turn">Compare</button></div>
@@ -241,7 +245,7 @@
       <div class="card">
         <div class="item"><span class="ic"><svg class="i" style="width:15px;height:15px"><use href="#i-pin"/></svg></span><span class="grow"><div class="t" id="siteLatLon">—</div></span></div>
         <div class="item"><span class="grow">Height offset</span><input type="number" id="nudge" step="0.1" style="width:84px;text-align:right" aria-label="Height offset in metres"><span class="val">m</span></div>
-        <div class="item"><button class="link" id="resample" title="Measure the map's ground height at the site again">Re-sample ground</button></div>
+        <div class="item" style="justify-content:space-between"><button class="link" id="resample" title="Measure the map's ground height at the site again">Re-sample ground</button><button class="link" id="mapEdit">Map connection</button></div>
       </div>
     </div>
   </div>
@@ -367,13 +371,15 @@
 <div id="busy"><div class="glass"><div class="spin"></div><span id="busyText">Capturing…</span></div></div>
 
 <div id="keys" class="modal"><div class="sheet glass">
-  <h2>Connect a 3D map</h2>
-  
-  <label>Cesium ion token</label>
-  <input id="itok" type="text" placeholder="eyJ…">
-  <label>Google Maps key</label>
-  <input id="gkey" type="text" placeholder="AIza…">
-  <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="pill" id="skip">Not Now</button><button class="primary" id="savekeys">Connect</button></div>
+  <h2>Connect the map</h2>
+  <ol class="steps">
+    <li><a class="link" href="https://ion.cesium.com/signup" target="_blank" rel="noopener">Create a free Cesium ion account</a></li>
+    <li><a class="link" href="https://ion.cesium.com/tokens" target="_blank" rel="noopener">Open your access tokens</a> and copy the default token</li>
+    <li>Paste it here<input id="itok" type="text" placeholder="eyJ…" aria-label="Cesium ion token" spellcheck="false" autocomplete="off"></li>
+  </ol>
+  <div id="keyState" role="status"></div>
+  <details id="gkeyBox"><summary>Use a Google Maps key instead</summary><input id="gkey" type="text" placeholder="AIza…" aria-label="Google Maps key" spellcheck="false" autocomplete="off"></details>
+  <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="pill" id="skip">Not now</button><button class="primary" id="savekeys" disabled>Connect</button></div>
 </div></div>
 
 <div id="ask" class="modal"><div class="sheet glass">
@@ -436,22 +442,50 @@
   };
 
   // ---------------------------------------------------------------- map keys
-  let cfg = await api("/api/config");
-  if (!cfg.google_key && !cfg.ion_token && !store.get("skipKeys")) {
-    $("keys").classList.add("open");
-    cfg = await new Promise(res => {
+  /* The map needs a Cesium ion token (free) or a Google Maps key. The dialog leads to the two ion pages and checks a
+     pasted token with ion at once (one request to api.cesium.com that asks for the map asset), so a wrong or
+     incomplete token is caught here and not as a grey globe later. It can be reopened from the sidebar. */
+  const ION_MAP = 2275207;                                 // Google Photorealistic 3D Tiles in Cesium ion
+  async function checkIon(token) {
+    try {
+      const r = await fetch(`https://api.cesium.com/v1/assets/${ION_MAP}/endpoint?access_token=${encodeURIComponent(token)}`);
+      if (r.ok) return { ok: true, text: "Token accepted" };
+      if (r.status === 401) return { ok: false, text: "Cesium ion does not know this token. Copy the whole token." };
+      return { ok: false, text: "This token cannot read the Google 3D map. Use the default token, or allow assets:read for all assets." };
+    } catch { return { ok: null, text: "Could not reach Cesium ion to check the token." }; }
+  }
+  function askKeys(current = {}, note = "") {
+    return new Promise(res => {
+      const state = (cls, text) => { $("keyState").className = cls; $("keyState").textContent = text; };
+      let seq = 0, good = false;
+      const sync = () => { $("savekeys").disabled = !(good || $("gkey").value.trim().length > 20); };
+      const check = async () => {
+        const t = $("itok").value.trim(), mine = ++seq; good = false; sync();
+        if (!t) return state("", note);
+        if (t.length < 40) return state("", "");
+        state("", "Checking…");
+        const r = await checkIon(t); if (mine !== seq) return;
+        good = r.ok !== false; state(r.ok ? "ok" : r.ok === false ? "bad" : "", r.text); sync();   // unreachable: let the person try it
+      };
+      $("itok").value = current.ion_token || ""; $("gkey").value = current.google_key || ""; $("gkeyBox").open = !!current.google_key;
+      $("itok").oninput = check; $("gkey").oninput = sync; state(note ? "bad" : "", note); check();
       $("savekeys").onclick = async () => {
         const c = { google_key: $("gkey").value.trim(), ion_token: $("itok").value.trim() };
         if (RHINO) await api("/api/config", c); else store.set("shareKeys", c);
-        res(c);
+        store.set("skipKeys", false); $("keys").classList.remove("open"); res(c);
       };
-      $("skip").onclick = () => { store.set("skipKeys", true); res({}); };
+      $("skip").onclick = () => { store.set("skipKeys", true); $("keys").classList.remove("open"); res(null); };
+      $("keys").classList.add("open"); setTimeout(() => $("itok").focus(), 50);
     });
-    $("keys").classList.remove("open");
   }
+  let cfg = await api("/api/config");
+  if (!cfg.google_key && !cfg.ion_token && !store.get("skipKeys")) cfg = (await askKeys()) || {};
   if (cfg.ion_token) Cesium.Ion.defaultAccessToken = cfg.ion_token;
   if (cfg.google_key) Cesium.GoogleMaps.defaultApiKey = cfg.google_key;
   const haveTiles = !!(cfg.google_key || cfg.ion_token);
+  const connectMap = async note => { const c = await askKeys(cfg, typeof note === "string" ? note : ""); if (c) location.reload(); };   // the map is opened at start: start again with the new key
+  $("mapLink").hidden = haveTiles; $("mapLink").onclick = $("mapEdit").onclick = connectMap;
+  if (new URLSearchParams(location.search).get("connect")) { history.replaceState(null, "", location.pathname); connectMap(); }   // EarthLinkSettings > ConnectMap
 
   // ---------------------------------------------------------------- viewer
   const viewer = new Cesium.Viewer("cesium", {
@@ -535,7 +569,7 @@
     try {
       tileset = await openMap();
       scene.globe.show = false;
-    } catch (e) { msg("Map unavailable. Check your token.", 6000); }
+    } catch (e) { $("mapLink").hidden = false; msg("The map did not open. Check the map connection.", 6000); }
   }
   async function openMap() {
     const ts = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });

@@ -18,6 +18,7 @@ while True:
                                 env.snapshot_dir(), env.data_dir()))
     go = Rhino.Input.Custom.GetOption()
     go.SetCommandPrompt("EarthLink settings")
+    i_map = go.AddOption("ConnectMap")
     i_tok = go.AddOption("CesiumToken")
     i_key = go.AddOption("GoogleKey")
     t_ep = Rhino.Input.Custom.OptionToggle(bool(s["earthpro"]), "Off", "On")
@@ -32,7 +33,15 @@ while True:
     if r != Rhino.Input.GetResult.Option:
         break
     idx = go.OptionIndex()
-    if idx in (i_tok, i_key):
+    if idx == i_map:
+        # The viewer's own dialog: links to Cesium ion's sign-up and token pages, and a field that checks the token.
+        if server.start() == "busy":
+            Rhino.RhinoApp.WriteLine("EarthLink: port %d is used by another program." % env.PORT)
+        else:
+            env.open_url(server.url() + "?connect=1")
+            Rhino.RhinoApp.WriteLine("EarthLink: the viewer shows how to get a free Cesium ion token and checks it.")
+        break
+    elif idx in (i_tok, i_key):
         key = "ion_token" if idx == i_tok else "google_key"
         gs = Rhino.Input.Custom.GetString()
         gs.SetCommandPrompt("Paste the %s (Enter to keep, '-' to clear)" % ("Cesium ion token" if key == "ion_token" else "Google Maps Platform key"))

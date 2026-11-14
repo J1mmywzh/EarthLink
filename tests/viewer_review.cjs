@@ -179,3 +179,17 @@ test('the pivot stays within the model while it is in the middle of the view, th
  assert.ok(r.pivot<=s.far+s.r+1&&r.pivot>=s.far-s.r-1,'the pivot is within the model: '+JSON.stringify({pivot:r.pivot,...s}));
  assert.ok(Math.abs(after/before-1)<0.12,'tilting does not make the model rush away or closer: '+(after/before).toFixed(3));
  const again=await swipe(p,3,0,10);assert.ok(Math.abs(again.pivot-r.pivot)<Math.max(1,0.02*r.pivot),'and the next rotation turns about the same point');});
+
+// ---- beta.11: connecting the map
+test('Map connection: the dialog leads to Cesium ion, checks a pasted token at once and only then connects',async t=>{
+ let asked=[];const p=await pageFor(t,async p=>{await p.route('https://api.cesium.com/v1/assets/**',route=>{const tok=new URL(route.request().url()).searchParams.get('access_token');asked.push(tok);
+   return tok.startsWith('good')?route.fulfill({json:{type:'3DTILES'}}):tok.startsWith('noasset')?route.fulfill({status:404,json:{code:'RESOURCE_NOT_FOUND'}}):route.fulfill({status:401,json:{code:'INVALID_TOKEN'}});});});
+ assert.equal(await p.locator('#mapLink').isVisible(),true,'without a map the sidebar offers to connect one');
+ await p.locator('#mapLink').click();assert.equal(await p.locator('#keys').isVisible(),true);
+ const links=await p.locator('#keys .steps a').evaluateAll(a=>a.map(x=>x.href));assert.deepEqual(links,['https://ion.cesium.com/signup','https://ion.cesium.com/tokens']);
+ assert.equal(await p.locator('#savekeys').isDisabled(),true);
+ await p.locator('#itok').fill('bad'+'x'.repeat(60));await p.waitForFunction(()=>document.getElementById('keyState').classList.contains('bad'));assert.match(await p.locator('#keyState').innerText(),/does not know this token/);assert.equal(await p.locator('#savekeys').isDisabled(),true);
+ await p.locator('#itok').fill('noasset'+'x'.repeat(60));await p.waitForFunction(()=>/cannot read the Google 3D map/.test(document.getElementById('keyState').textContent));assert.equal(await p.locator('#savekeys').isDisabled(),true);
+ await p.locator('#itok').fill('good'+'x'.repeat(60));await p.waitForFunction(()=>document.getElementById('keyState').classList.contains('ok'));assert.equal(await p.locator('#savekeys').isEnabled(),true);
+ await p.locator('#skip').click();assert.equal(await p.locator('#keys').isVisible(),false);
+ assert.equal(await p.locator('#mapEdit').count(),1,'the dialog can be opened again from Site');});
