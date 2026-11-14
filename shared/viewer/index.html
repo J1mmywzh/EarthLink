@@ -1885,7 +1885,7 @@
       cx.timer = setTimeout(cxWatch, 700); return;
     }
     cx.busy = false;
-    const text = r.state === "done" ? "Rhino " + (r.message || "added it") + "." : r.message || "The import did not finish.";
+    const text = r.state === "done" ? r.message || "Rhino added it." : r.message || "The import did not finish.";
     cxSync(text, r.state !== "done");
     if (!cxOpen()) msg(text, 7000);
   }

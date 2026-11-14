@@ -99,7 +99,7 @@ test('Surroundings to Rhino: a dragged rectangle is sent as bounds, the import i
  let posted=null,polls=0;
  const p=await pageFor(t,async p=>{await p.route('**/api/context',async route=>{const r=route.request();
    if(r.method()==='POST'){posted=JSON.parse(r.postData());return route.fulfill({json:{state:'working',message:'Reading the terrain'}});}
-   polls++;return route.fulfill({json:polls<2?{state:'working',message:'Reading OpenStreetMap'}:polls<3?{state:'sent',counts:{terrain:100,buildings:12,roads:5}}:{state:'done',message:"added terrain (100 faces), 12 buildings, 5 road lines on layer 'EarthLink Context'"}});});});
+   polls++;return route.fulfill({json:polls<2?{state:'working',message:'Reading OpenStreetMap'}:polls<3?{state:'sent',counts:{terrain:100,buildings:12,roads:5}}:{state:'done',message:"Rhino added terrain (100 faces), 12 buildings, 5 road lines on layer 'EarthLink Context'."}});});});
  await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
  const before=await cam(p);
  await p.getByRole('button',{name:'Bring the surroundings into Rhino',exact:true}).click();
