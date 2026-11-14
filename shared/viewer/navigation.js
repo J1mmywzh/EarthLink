@@ -113,32 +113,38 @@
     return { device: "mouse", sure: true };
   }
   const isMouseWheel = e => wheelEvidence(e).device === "mouse";
-  /* The glide after the fingers lift. macOS keeps sending a smoothly shrinking scroll for about a second; a long
-     glide turns the view much further than the fingers did. Once the steps have only shrunk for COAST_AFTER events
-     (and by a quarter in all), the rest counts less and less; any step that grows again is the fingers, at full
-     strength. */
-  const COAST_AFTER = 6, COAST_FADE = 0.85;
+  /* The glide after the fingers lift. macOS keeps sending a smoothly shrinking scroll for about a second: that is
+     what makes a turn come to rest gently, so it is kept for its whole length. It only counts for less
+     (COAST_FLOOR), or a flick turns the view much further than the fingers did. The change is gradual both ways:
+     once the steps have only shrunk for COAST_AFTER events (and by a quarter in all) the weight eases down, and a
+     step that grows again (the fingers) eases it back up. */
+  const COAST_AFTER = 6, COAST_FLOOR = 0.55, COAST_DOWN = 0.25, COAST_UP = 0.5;
   class Coast {
     constructor() { this.reset(); }
     reset() { this.prev = null; this.run = 0; this.from = 0; this.k = 1; }
     gain(dx, dy) {
       const m = Math.hypot(dx, dy);
       if (this.prev != null && m <= this.prev && m > 0) { if (!this.run) this.from = this.prev; this.run++; }
-      else { this.run = 0; this.k = 1; }
+      else this.run = 0;
       this.prev = m;
-      if (this.run >= COAST_AFTER && m <= 0.75 * this.from) this.k *= COAST_FADE;
+      const gliding = this.run >= COAST_AFTER && m <= 0.75 * this.from;
+      this.k += ((gliding ? COAST_FLOOR : 1) - this.k) * (gliding ? COAST_DOWN : COAST_UP);
+      if (1 - this.k < 1e-3) this.k = 1;
       return this.k;
     }
   }
 
-  // Pending motion released gradually, frame by frame.
+  // Pending motion released gradually, frame by frame. Zoom is released more slowly: a pinch and a wheel have no
+  // glide of their own, and a zoom that stops dead reads as a jolt.
+  const EASE_OF = { zoom: 0.085 };
   class Ease {
     constructor() { this.v = { heading: 0, tilt: 0, px: 0, py: 0, zoom: 0, lh: 0, lt: 0 }; }
     add(k, x) { if (Number.isFinite(x)) this.v[k] += x; }
     take(dt) {
-      const f = 1 - Math.exp(-Math.max(0, dt) / EASE), out = {};
+      const out = {};
       let any = false;
       for (const k in this.v) {
+        const f = 1 - Math.exp(-Math.max(0, dt) / (EASE_OF[k] || EASE));
         out[k] = this.v[k] * f; this.v[k] -= out[k];
         if (Math.abs(this.v[k]) < 1e-4) { out[k] += this.v[k]; this.v[k] = 0; }
         if (out[k]) any = true;

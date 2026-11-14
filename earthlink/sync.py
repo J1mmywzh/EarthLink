@@ -8,7 +8,7 @@ Every tick (0.2 s), for the document being synced:
   * sun              - Rhino Sun date/time <-> viewer sun, and the Sun's location/north from the anchor [sync_sun]
   * named views      - two-way, about once a second, always
 """
-import os, time, math
+import os, time, math, shutil
 
 import Rhino
 import System
@@ -105,6 +105,7 @@ def _apply_anchor_request(doc):
         os.remove(env.live_file("pick_request.json"))
     except OSError:
         pass
+    shutil.rmtree(env.live_file("preview"), ignore_errors=True)    # the placement preview: the real set follows
     if req.get("rotate") or first or not env.current_meta().get("sets"):
         send_sets(doc, reason="new site location")   # anchor watcher sees no change after this
     else:                                            # only the location changed: nothing to export again

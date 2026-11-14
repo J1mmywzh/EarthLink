@@ -188,6 +188,21 @@ test("Rhino lights: a point light and a spotlight cast the model's shadow, and t
  await p.locator('label.switch:has(#sunOn)').click();assert.equal(await p.locator('#shadowRow').isVisible(),true,'sunlight off, lamps on: the Shadows switch is still there');
  await set(null,2);assert.equal(await p.locator('#shadowRow').isVisible(),false,'neither sun nor lamps: nothing to switch');await p.locator('label.switch:has(#sunOn)').click();
  assert.equal(await p.evaluate(()=>!!document.querySelector('.cesium-widget-errorPanel')),false);});
+test('placing a file for the first time shows that file\'s model on the clicked spot, not the sets of the file shown before',async t=>{const p=await pageFor(t);
+ const glb=await p.evaluate(()=>EL.meta.sets.Main.glb);
+ await p.evaluate(glb=>EL.site.open({project:'another-file',name:'Tower',set:'Main',preview:{glb}}),glb);
+ assert.equal(await p.locator('#siteTitle').textContent(),'Place “Tower”');
+ assert.equal(await p.evaluate(()=>EL.models.Main.show),false,'the other file\'s set is not the preview');
+ await p.waitForFunction(()=>EL.site.ghost&&EL.site.ghost.ready,null,{timeout:20000});
+ assert.equal(await p.evaluate(()=>EL.site.ghost.show),false,'nothing stands anywhere before a spot is clicked');
+ const off=await p.evaluate(()=>{EL.site.pick(42.4405,-76.5108,120);const g=EL.site.ghost,at=Cesium.Matrix4.getTranslation(g.modelMatrix,new Cesium.Cartesian3());return {show:g.show,d:Cesium.Cartesian3.distance(at,Cesium.Cartesian3.fromDegrees(-76.5108,42.4405,120)),apply:document.getElementById('siteApply').disabled};});
+ assert.equal(off.show,true);assert.ok(off.d<1e-6,'its base point is on the picked point: '+off.d);assert.equal(off.apply,false);
+ await p.evaluate(()=>EL.site.pick(42.4406,-76.5107,121));assert.ok(await p.evaluate(()=>Cesium.Cartesian3.distance(Cesium.Matrix4.getTranslation(EL.site.ghost.modelMatrix,new Cesium.Cartesian3()),Cesium.Cartesian3.fromDegrees(-76.5107,42.4406,121)))<1e-6,'it follows the next click');
+ await p.locator('#siteCancel').click();
+ assert.deepEqual(await p.evaluate(()=>[EL.site.ghost,EL.models.Main.show]),[null,true],'cancelled: the preview is gone and the shown file is back');
+ await p.evaluate(()=>EL.site.open({project:'another-file',name:'Tower'}));await p.waitForTimeout(300);
+ assert.deepEqual(await p.evaluate(()=>[EL.site.ghost,EL.models.Main.show]),[null,false],'no preview from Rhino: the dot alone, still not another file\'s model');
+ await p.locator('#siteCancel').click();});
 test('the pivot stays within the model while it is in the middle of the view, though the centre of the view passes over it',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
  await view(p,[15,-70,60],[15,10,34]);                    // the centre of the view clears the roof by 4 m and lands on the ground 190 m away
  const s=await p.evaluate(()=>{const b=Cesium.BoundingSphere.fromBoundingSpheres(Object.values(EL.models).filter(m=>m.show).map(m=>m.boundingSphere));return{far:Cesium.Cartesian3.distance(b.center,EL.viewer.camera.positionWC),r:b.radius};});

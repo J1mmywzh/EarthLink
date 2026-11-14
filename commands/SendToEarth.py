@@ -88,8 +88,12 @@ def run(doc):
             Rhino.RhinoApp.WriteLine("SendToEarth: run EarthAnchorPoint to set the site location, then SendToEarth again.")
             return Rhino.Commands.Result.Cancel
         core.put_set(doc, set_name, ids, live=live, pending=True)
-        env.write_json(env.live_file("pick_request.json"),
-                       {"project": core.project_id(doc), "name": core.project_name(doc), "set": set_name})
+        req = {"project": core.project_id(doc), "name": core.project_name(doc), "set": set_name}
+        try:                                  # the viewer shows the model itself under the cursor while you choose the spot
+            req["preview"] = core.export_preview(doc, ids)
+        except Exception as ex:
+            Rhino.RhinoApp.WriteLine("SendToEarth: no preview on the map (%s); the model is sent after Apply." % ex)
+        env.write_json(env.live_file("pick_request.json"), req)
         if _open_viewer(doc, first_time_msg=True):
             at_origin = doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9
             Rhino.RhinoApp.WriteLine("SendToEarth: in the viewer, find the site (search or lat, lon), click where the model "

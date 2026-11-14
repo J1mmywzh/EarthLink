@@ -285,9 +285,8 @@
 <div id="feedbackCard" class="glass pop">
   <h3>Feedback <button class="mini" data-close="feedbackCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
   <textarea id="fbText" rows="5" aria-label="Your feedback" placeholder="What should change?"></textarea>
-  <label class="chip" style="margin-top:8px"><input type="checkbox" id="fbShot" checked>Screenshot</label>
+  <div class="row" style="margin-top:8px"><label class="chip"><input type="checkbox" id="fbShot" checked>Screenshot</label><label class="chip"><input type="checkbox" id="fbSys" checked>System details</label></div>
   <img id="fbThumb" alt="Screenshot that will be shared">
-  <label class="chip" style="margin-top:8px"><input type="checkbox" id="fbSys" checked>System details</label>
   <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="pill" id="fbEmail" title="Opens your mail app with the message filled in">Email</button><button class="primary" id="fbGithub" title="Opens a filled-in issue on GitHub; you need a GitHub account">Open on GitHub</button></div>
 </div>
 <div id="contextCard" class="glass pop">
@@ -1369,6 +1368,7 @@
         loadDerived(n,next,s);
       } catch (e) { if(generation!==modelGeneration)return;msg(`Could not load “${n}”: ${e.message}`); }
     }
+    if (ghost && !picking && m.project === ghostProject) { dropGhost(); foreign = false; }   // the real model is here
     const hid = hidden();
     for (const n of Object.keys(models)) { models[n].show = !hid.has(n) && !(m.sets[n] || {}).empty; styleModel(models[n], n); }
     renderSets(); placeModels(); showSite(); if (editing) showSetCard();
@@ -1535,9 +1535,33 @@
   // ---------------------------------------------------------------- site location (writes Rhino's EarthAnchorPoint)
   let pickReq = RHINO ? await api("/api/pick") : {};
   let picking = false, picked = null, marker = null;
+  // A file placed for the first time: Rhino sends the model itself (pickReq.preview) and it stands on the clicked spot,
+  // its base point on the blue dot. Another file's sets, still in the viewer, are hidden meanwhile: they are not it.
+  let ghost = null, ghostFor = null, ghostAt = null, ghostProject = null, foreign = false;
+  const showSets = () => { for (const n of Object.keys(models)) models[n].show = !hidden().has(n) && !((meta && meta.sets[n]) || {}).empty; scene.requestRender(); };
+  function dropGhost() { if (ghost) scene.primitives.remove(ghost); ghost = null; ghostFor = null; ghostAt = null; scene.requestRender(); }
+  function placeGhost() {
+    if (!ghost) return;
+    ghost.show = !!ghostAt;
+    if (ghostAt) ghost.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(ghostAt.lon, ghostAt.lat, ghostAt.h));
+    scene.requestRender();
+  }
+  async function loadGhost() {
+    const pv = pickReq && pickReq.preview;
+    if (!pv || !pv.glb || ghostFor === pv.glb) return;
+    dropGhost(); ghostFor = pv.glb; ghostProject = pickReq.project;
+    try {
+      const g = await Cesium.Model.fromGltfAsync({ url: `${DATA}live/${pv.glb}`, show: false, shadows: Cesium.ShadowMode.ENABLED, forwardAxis: Cesium.Axis.X, imageBasedLighting: skyLight() });
+      if (ghostFor !== pv.glb) { g.destroy(); return; }
+      ghost = scene.primitives.add(g); ghostAt = picked ? { ...picked } : null; placeGhost();
+    } catch { ghostFor = null; }                         // no preview: the blue dot alone marks the spot
+  }
   function openSite(first) {
     if(walk)walk.exit();
     picking = true; picked = null; clearTimeout(sitePending); preview = null;
+    foreign = !!first && !!meta && !!pickReq.project && meta.project !== pickReq.project;
+    if (foreign) { for (const m of Object.values(models)) m.show = false; scene.requestRender(); }
+    if (first) loadGhost(); else dropGhost();
     document.body.classList.add("picking");
     $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
     $("pickedLbl").textContent = first || !anchor() ? "Click on the map" : "Current location — click to move";
@@ -1549,8 +1573,8 @@
     if (marker) { viewer.entities.remove(marker); marker = null; }
     $("siteCard").classList.remove("open");
     clearTimeout(sitePending);
-    if (keep === true && preview) sitePending = setTimeout(() => { preview = null; placeModels(); }, 10000);   // no answer from Rhino
-    else preview = null;
+    if (keep === true && (preview || ghost)) sitePending = setTimeout(() => { preview = null; dropGhost(); if (foreign) { foreign = false; showSets(); } placeModels(); }, 10000);   // no answer from Rhino
+    else { preview = null; dropGhost(); if (foreign) { foreign = false; showSets(); } }
     placeModels();
   }
   function setPicked(lat, lon, h) {
@@ -1561,6 +1585,7 @@
     // the height the model will have once Rhino has the new site (see baseHeight): the preview must not jump
     const a = anchor(), ground = !a || a.zero === "GroundLevel";
     preview = { lat, lon, h: ground ? h + (a ? a.elev : 0) : baseHeight() - (S.nudge || 0) };
+    ghostAt = { lat, lon, h }; placeGhost();             // a first placement stands on the ground at the dot
     placeModels();
     $("siteApply").disabled = false;
   }
@@ -2529,7 +2554,8 @@
     if (first) choose(first); else msg("No place found. Try adding the street or city.");
   };
 
-  window.EL = { viewer, models, place, placementOf, setPlacement, rotateSet, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get cut() { return cut; }, cutAt, get lamps() { return lamps; }, LAMPS, applyLights, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask };
+  window.EL = { viewer, models, place, placementOf, setPlacement, rotateSet, nav, beginWalk, placeWalker, get walk(){return walk;}, flyToPlace, fit: flyTo, surfaceHit, openSetCard, get meta() { return meta; }, get tileset() { return tileset; }, get cut() { return cut; }, cutAt, get lamps() { return lamps; }, LAMPS, applyLights, retryMap: () => retryMap(), capture, applyView, captureCamera, refreshViews, setProjection, ask,
+    site: { open(req) { pickReq = req || {}; openSite(true); }, pick: setPicked, close: closeSite, get ghost() { return ghost; } } };
 
   // ---------------------------------------------------------------- live link (Rhino) or one-time load (share)
   if (RHINO) {

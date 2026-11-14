@@ -95,14 +95,22 @@ test('the device is corrected when the first event misleads, and remembered',()=
   assert.equal(l.read(ev(40,-120),'perspective',2000).mode,'zoom','remembered');
   l=new N.WheelLatch();assert.equal(l.read(ev(4,-120),'perspective',0,false).mode,'zoom');
 });
-test('the glide after the fingers lift fades; moving fingers never do',()=>{
-  let c=new N.Coast(),sum=0,raw=0;
+test('the glide after the fingers lift keeps its length and counts for less; moving fingers count in full',()=>{
+  let c=new N.Coast(),sum=0,raw=0,gains=[];
   for(const m of [4,9,14,20,26,30,31,33])assert.equal(c.gain(0,m),1);          // fingers speeding up
-  for(let m=32;m>=0.5;m*=0.93){const g=c.gain(0,m);sum+=m*g;raw+=m;}            // the glide
-  assert.ok(sum<0.55*raw&&sum>0.2*raw,'glide shortened: '+(sum/raw).toFixed(2));
-  assert.equal(c.gain(0,6),1,'a step that grows again is the fingers');
+  for(let m=32;m>=0.5;m*=0.93){const g=c.gain(0,m);gains.push(g);sum+=m*g;raw+=m;}            // the glide
+  assert.ok(sum<0.8*raw&&sum>0.55*raw,'the glide turns less than the system sends: '+(sum/raw).toFixed(2));
+  assert.ok(Math.min(...gains)>=0.55-1e-9,'and never dies away: it comes to rest as the system\'s glide does, not suddenly');
+  for(let i=1;i<gains.length;i++)assert.ok(gains[i-1]-gains[i]<0.12,'no step in its weight');
+  const back=[c.gain(0,6),c.gain(0,7),c.gain(0,8),c.gain(0,9),c.gain(0,10),c.gain(0,11),c.gain(0,12),c.gain(0,13),c.gain(0,14),c.gain(0,15),c.gain(0,16)];
+  assert.ok(back[0]>0.7&&back[back.length-1]===1,'steps that grow again are the fingers: full weight within a few events '+back.map(v=>v.toFixed(2)));
   c=new N.Coast();for(let i=0;i<60;i++)assert.equal(c.gain(2,0),1,'a steady slow rotation is untouched');
   c=new N.Coast();for(const m of [9,8,8,7,9,8,7,7,6,8,7,6,6,7])assert.equal(c.gain(m,0),1,'noisy fingers slowing down');
+});
+test('zoom is released more slowly than a turn, and still exactly',()=>{
+  const e=new N.Ease();e.add('zoom',1);e.add('heading',1);let z=0,h=0,nz=0,nh=0,out;
+  while((out=e.take(1/60))){if(out.zoom){z+=out.zoom;nz++;}if(out.heading){h+=out.heading;nh++;}}
+  assert.ok(Math.abs(z-1)<1e-9&&Math.abs(h-1)<1e-9);assert.ok(nz>1.5*nh&&nz<70,'frames: zoom '+nz+', turn '+nh);
 });
 test('the ground rule never lifts the camera suddenly',()=>{
   let f=new N.Floor();f.h=50;

@@ -632,9 +632,9 @@ def _legacy_copy(tmp, material, mats):
     return mats[key]
 
 
-def _export_glb(doc, objs, path):
+def _export_glb(doc, objs, path, xf=None):
     """Write `objs`, re-oriented to east/north/up, to a GLB. Returns their bounding box (model units, ENU)."""
-    xf = enu_transform(doc)
+    xf = enu_transform(doc) if xf is None else xf
     tmp = Rhino.RhinoDoc.CreateHeadless(None)
     bbox = rg.BoundingBox.Empty
     try:
@@ -805,6 +805,44 @@ def send_set(doc, name, to_earthpro=False):
     env.write_json(os.path.join(live, "meta.json"), meta)   # atomic: the viewer only sees complete files
     _prune(live, sd)
     return meta, msgs, master
+
+
+def export_preview(doc, ids):
+    """The model as it will stand on the spot picked on the map, for a file that has no site yet: the same export as
+    a send, around the point that will sit on that spot (the bottom centre of the objects, or EarthAnchorPoint's
+    base point when it has one). Returns {"glb": path under live/, "bbox_m": ...} or None."""
+    objs = []
+    for i in ids or []:
+        try:
+            o = doc.Objects.FindId(System.Guid(str(i)))
+        except Exception:
+            o = None
+        if o is not None and not o.IsDeleted and o.Visible:
+            objs.append(o)
+    if not objs:
+        return None
+    ep = doc.EarthAnchorPoint
+    base = ep.ModelBasePoint
+    if base.DistanceTo(rg.Point3d.Origin) < 1e-9:
+        base = base_point_for(doc, ids) or base
+    n = ep.ModelNorth
+    alpha = math.atan2(-n.X, n.Y) if not n.IsZero else 0.0
+    xf = rg.Transform.Rotation(-alpha, rg.Vector3d.ZAxis, rg.Point3d.Origin) * rg.Transform.Translation(rg.Point3d.Origin - base)
+    d = os.path.join(env.live_dir(), "preview")
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d, exist_ok=True)
+    name = "model_%d.glb" % int(time.time() * 1000)
+    path = os.path.join(d, name)
+    bbox = _export_glb(doc, objs, path, xf)
+    for fix in (geometry.merge_glb, geometry.screen_materials):
+        try:
+            fix(path)
+        except Exception:
+            pass
+    scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
+    return {"glb": "preview/" + name,
+            "bbox_m": [[bbox.Min.X * scale, bbox.Min.Y * scale, bbox.Min.Z * scale],
+                       [bbox.Max.X * scale, bbox.Max.Y * scale, bbox.Max.Z * scale]] if bbox.IsValid else None}
 
 
 def remove_set_from_viewer(name):
