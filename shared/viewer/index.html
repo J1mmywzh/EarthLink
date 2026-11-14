@@ -130,6 +130,7 @@
   .cxSize { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; } .cxSize.none { font-weight: 400; color: var(--fg2); font-size: 13px; }
   .cxSize .s { display: block; font-size: 12px; font-weight: 400; color: var(--fg2); }
   #cxStatus.bad { color: var(--red); }
+  #cxMore { margin-top: 10px; font-size: 12.5px; } #cxMore summary { color: var(--fg2); cursor: pointer; } #cxMore .item { padding: 6px 0; }
   .pop h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
   .pop .lbl { color: var(--fg2); font-size: 11.5px; margin: 12px 0 6px; }
   .pop select, .pop input[type=search] { width: 100%; }
@@ -295,7 +296,13 @@
     <label class="chip"><input type="checkbox" id="cxTerrain" checked>Terrain</label>
     <label class="chip"><input type="checkbox" id="cxBuildings" checked>Buildings</label>
     <label class="chip"><input type="checkbox" id="cxRoads" checked>Roads</label>
+    <label class="chip"><input type="checkbox" id="cxContours">Contours</label>
   </div>
+  <details id="cxMore"><summary>Options</summary>
+    <div class="item"><span class="grow">Contour interval</span><input type="number" id="cxInterval" class="typed" min="0.1" max="100" step="0.5" value="1"><span class="val">m</span></div>
+    <div class="item"><span class="grow">Height when unknown</span><input type="number" id="cxHeight" class="typed" min="1" max="300" step="0.5" value="7"><span class="val">m</span></div>
+    <div class="item"><span class="grow">Storey height</span><input type="number" id="cxLevel" class="typed" min="2" max="10" step="0.1" value="3.2"><span class="val">m</span></div>
+  </details>
   <div class="bar" id="cxBar" hidden><i></i></div>
   <div class="row" style="margin-top:12px; justify-content:space-between; align-items:center"><span class="hint" id="cxStatus" role="status" style="margin:0"></span><button class="primary" id="cxImport" disabled>Import</button></div>
 </div>
@@ -1923,7 +1930,7 @@
     $("cxSize").classList.toggle("none", !size || big || small);
     $("cxSize").innerHTML = !size ? "Drag a rectangle on the map" : big ? `Too large (limit ${CX.max / 1000} km a side)` : small ? `Too small (at least ${CX.min} m a side)`
       : `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
-    const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked;
+    const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked || $("cxContours").checked;
     $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
     if (status !== undefined) { $("cxStatus").textContent = status; $("cxStatus").classList.toggle("bad", !!bad); }
     $("cxBar").hidden = !cx.busy;
@@ -1944,7 +1951,9 @@
     cxSync(cx.busy ? undefined : "");
   }
   $("contextBtn").onclick = () => toggleContext(!cxOpen());
-  $("cxTerrain").onchange = $("cxBuildings").onchange = $("cxRoads").onchange = () => cxSync();
+  $("cxTerrain").onchange = $("cxBuildings").onchange = $("cxRoads").onchange = $("cxContours").onchange = () => cxSync();
+  { const o = store.get("contextOptions") || {};            // the panel's options are remembered
+    for (const [id, k] of [["cxInterval", "interval"], ["cxHeight", "height"], ["cxLevel", "level"]]) { if (o[k] > 0) $(id).value = o[k]; $(id).onchange = () => store.set("contextOptions", { interval: +$("cxInterval").value, height: +$("cxHeight").value, level: +$("cxLevel").value }); } }
   const cxHandler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
   cxHandler.setInputAction(e => {
     if (!cxOpen() || cx.busy || modal()) return;
@@ -1959,7 +1968,7 @@
     const p = cxPoint(e.endPosition); if (p) { cx.b = p; cxSync(); scene.requestRender(); }
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   cxHandler.setInputAction(() => { if (cx.drag) { cx.drag = false; cxSync(); } }, Cesium.ScreenSpaceEventType.LEFT_UP);
-  const cxWords = c => c ? [c.terrain && "terrain", c.buildings && `${c.buildings} building${c.buildings === 1 ? "" : "s"}`, c.roads && `${c.roads} road line${c.roads === 1 ? "" : "s"}`].filter(Boolean).join(", ") : "";
+  const cxWords = c => c ? [c.terrain && "terrain", c.buildings && `${c.buildings} building${c.buildings === 1 ? "" : "s"}`, c.roads && `${c.roads} road line${c.roads === 1 ? "" : "s"}`, c.contours && `${c.contours} contour line${c.contours === 1 ? "" : "s"}`].filter(Boolean).join(", ") : "";
   async function cxWatch() {                                  // follow the import: the server fetches, then Rhino adds
     clearTimeout(cx.timer);
     let r; try { r = await api("/api/context"); } catch { r = { state: "error", message: "Rhino is not answering." }; }
@@ -1977,7 +1986,8 @@
   $("cxImport").onclick = async () => {
     const b = cxBounds(); if (!b || cx.busy) return;
     cx.busy = true; $("cxBar").firstElementChild.style.width = "3%"; cxSync("Starting");
-    let r; try { r = await api("/api/context", { bounds: b, terrain: $("cxTerrain").checked, buildings: $("cxBuildings").checked, roads: $("cxRoads").checked }); } catch { r = { state: "error", message: "Rhino is not answering." }; }
+    let r; try { r = await api("/api/context", { bounds: b, terrain: $("cxTerrain").checked, buildings: $("cxBuildings").checked, roads: $("cxRoads").checked,
+      contours: $("cxContours").checked ? Math.max(0.1, +$("cxInterval").value || 1) : 0, default_height: +$("cxHeight").value || 7, level_height: +$("cxLevel").value || 3.2 }); } catch { r = { state: "error", message: "Rhino is not answering." }; }
     if (r.state === "error") { cx.busy = false; return cxSync(r.message || "The import could not start.", true); }
     cxWatch();
   };

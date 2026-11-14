@@ -142,3 +142,26 @@ def test_without_openstreetmap_the_message_says_so():
         if 'terrarium' in url:return world()(url)
         raise OSError('timed out')
     with pytest.raises(C.ContextError,match='OpenStreetMap could not be reached'):C.build(BOUNDS,ANCHOR,{},fetch=fetch)
+
+
+def test_contours_at_round_heights_and_chosen_building_heights():
+    out=C.build(BOUNDS,ANCHOR,{},fetch=world(slope=0.1),contours=2.0,default_height=10.0,level_height=4.0)
+    cs=out['contours'];assert out['contour_interval']==2.0 and out['counts']['contours']==len(cs)>=8
+    assert all(abs(c['elevation']/2.0-round(c['elevation']/2.0))<1e-9 for c in cs),'lines at multiples of the interval above sea level'
+    ground=250.0                                            # the site ground is 250 m above sea level and is height 0 of the model
+    for c in cs:
+        assert len(c['pts'])>=2 and all(abs(p[2]-(c['elevation']-ground))<0.02 for p in c['pts']),'each line lies at its own height'
+        assert abs(c['pts'][0][1]-c['pts'][-1][1])<1.0 and abs(c['pts'][0][0]-c['pts'][-1][0])>200,'on ground rising to the north the lines run east-west, right across'
+        assert abs(c['pts'][0][1]-(c['elevation']-ground)/0.1)<1.5,'where the ground has that height'
+    hall,other=out['buildings'];assert hall['height']==pytest.approx(16.0) and other['height']==10.0 and other['assumed']
+    assert hall['tags']['building:levels']=='4' and out['roads'][0]['tags']['highway']=='residential'
+    only=C.build(BOUNDS,ANCHOR,{},fetch=world(slope=0.1),terrain=False,buildings=False,roads=False,contours=5.0)
+    assert only['terrain'] is None and len(only['contours'])>=3
+    flat=C.build(BOUNDS,ANCHOR,{},fetch=world(),contours=1.0,buildings=False,roads=False);assert flat['contours']==[],'flat ground has no contour lines'
+
+def test_contour_lines_close_around_a_hill():
+    nx=ny=21;val=lambda i,j:10.0-((i-10)**2+(j-10)**2)**0.5
+    lines=C.contour_lines(nx,ny,val,lambda fi,fj,e:[fi,fj,e],2.0)
+    assert [l['elevation'] for l in lines]==[-4.0,-2.0,0.0,2.0,4.0,6.0,8.0] or len(lines)>=5
+    ring=[l for l in lines if l['elevation']==6.0];assert len(ring)==1,'one closed ring per height'
+    p=ring[0]['pts'];assert abs(p[0][0]-p[-1][0])<1e-6 and abs(p[0][1]-p[-1][1])<1e-6 and all(abs(((q[0]-10)**2+(q[1]-10)**2)**0.5-4.0)<0.35 for q in p)

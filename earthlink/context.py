@@ -192,15 +192,73 @@ def _number(text):
         return None
 
 
-def building_height(tags):
+def building_height(tags, default=DEFAULT_HEIGHT, level=LEVEL):
     """(height in metres, True if assumed)."""
     h = _number(tags.get("height") or tags.get("building:height"))
     if h and 1.0 <= h <= 1000.0:
         return h, False
     levels = _number(tags.get("building:levels"))
     if levels and 0.5 <= levels <= 250:
-        return levels * LEVEL + (_number(tags.get("roof:levels")) or 0) * LEVEL, False
-    return DEFAULT_HEIGHT, True
+        return levels * level + (_number(tags.get("roof:levels")) or 0) * level, False
+    return default, True
+
+
+def contour_lines(nx, ny, value, point, interval, base=0.0):
+    """Contour lines of a grid. value(i, j) is the height that is contoured (metres above sea level), point(i, j, t_i,
+    t_j) the 3D point at a fractional grid position. Returns [{"elevation": e, "pts": [...]}], lines joined end to end."""
+    if not interval or interval <= 0:
+        return []
+    vals = [[value(i, j) for i in range(nx)] for j in range(ny)]
+    lo, hi = min(map(min, vals)), max(map(max, vals))
+    out, k = [], math.ceil((lo - base) / interval)
+    while base + k * interval <= hi and len(out) < 4000:
+        level = base + k * interval
+        e = level + 1e-7                                     # a line through a grid point exactly would split in two there
+        k += 1
+        segs = []
+        for j in range(ny - 1):
+            for i in range(nx - 1):
+                c = (vals[j][i], vals[j][i + 1], vals[j + 1][i + 1], vals[j + 1][i])        # corners, counter-clockwise
+                pos = ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))
+                cut = []
+                for a in range(4):
+                    b = (a + 1) % 4
+                    if (c[a] < e) != (c[b] < e):
+                        t = (e - c[a]) / (c[b] - c[a])
+                        cut.append((pos[a][0] + (pos[b][0] - pos[a][0]) * t, pos[a][1] + (pos[b][1] - pos[a][1]) * t))
+                if len(cut) == 2:
+                    segs.append((cut[0], cut[1]))
+                elif len(cut) == 4:                              # a saddle: pair the cuts by the cell's middle
+                    mid = sum(c) / 4.0 < e
+                    pairs = ((0, 1), (2, 3)) if mid == (c[0] < e) else ((0, 3), (1, 2))
+                    segs += [(cut[a], cut[b]) for a, b in pairs]
+        key = lambda q: (round(q[0], 6), round(q[1], 6))
+        ends = {}
+        for n, (a, b) in enumerate(segs):
+            ends.setdefault(key(a), []).append(n)
+            ends.setdefault(key(b), []).append(n)
+        used = [False] * len(segs)
+        for n in range(len(segs)):
+            if used[n]:
+                continue
+            used[n] = True
+            line = [segs[n][0], segs[n][1]]
+            for front in (False, True):                          # grow from the end, then from the start
+                while True:
+                    tip = line[0] if front else line[-1]
+                    nxt = next((m for m in ends.get(key(tip), []) if not used[m]), None)
+                    if nxt is None:
+                        break
+                    used[nxt] = True
+                    a, b = segs[nxt]
+                    other = b if key(a) == key(tip) else a
+                    if front:
+                        line.insert(0, other)
+                    else:
+                        line.append(other)
+            if len(line) >= 2:
+                out.append({"elevation": round(level, 3), "pts": [point(q[0], q[1], level) for q in line]})
+    return out
 
 
 def _ring(geometry):
@@ -382,7 +440,8 @@ def fetch_osm(b, buildings, roads, fetch=http_get):
     raise ContextError("OpenStreetMap could not be reached (%s). Try again in a minute." % (last,))
 
 
-def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text, part=None: None):
+def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fetch=http_get, progress=lambda text, part=None: None,
+          contours=0.0, default_height=DEFAULT_HEIGHT, level_height=LEVEL):
     """The context inside `bounds`, in metres east/north/up of the model base point.
 
     anchor: the published EarthAnchorPoint (lat, lon, elev, zero). settings: ground_h, nudge, geoid_offset."""
@@ -412,8 +471,11 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
     rel = lambda la, lo: dem.at(la, lo) + offset       # metres above the base point, before the Earth's curve
     point = lambda la, lo: [round(v, 3) for v in enu(la, lo, rel(la, lo), lat0, lon0)]
 
-    out = {"bounds": b, "size": [round(w, 1), round(h, 1)], "attribution": ATTRIBUTION, "terrain": None, "buildings": [], "roads": []}
-    if terrain:
+    default_height = min(300.0, max(1.0, float(default_height or DEFAULT_HEIGHT)))
+    level_height = min(10.0, max(2.0, float(level_height or LEVEL)))
+    contours = float(contours or 0.0)
+    out = {"bounds": b, "size": [round(w, 1), round(h, 1)], "attribution": ATTRIBUTION, "terrain": None, "buildings": [], "roads": [], "contours": []}
+    if terrain or contours > 0:
         nx, ny = max(2, int(round(w / cell)) + 1), max(2, int(round(h / cell)) + 1)
         pts = []
         for j in range(ny):
@@ -422,7 +484,16 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
             la = b["south"] + (b["north"] - b["south"]) * j / (ny - 1)
             for i in range(nx):
                 pts.append(point(la, b["west"] + (b["east"] - b["west"]) * i / (nx - 1)))
-        out["terrain"] = {"nx": nx, "ny": ny, "points": pts, "cell": round(cell, 2)}
+        if terrain:
+            out["terrain"] = {"nx": nx, "ny": ny, "points": pts, "cell": round(cell, 2)}
+        if contours > 0:                                   # at round heights above sea level, on the same surface as the mesh
+            lat_of = lambda fj: b["south"] + (b["north"] - b["south"]) * fj / (ny - 1)
+            lon_of = lambda fi: b["west"] + (b["east"] - b["west"]) * fi / (nx - 1)
+            sea = [[dem.at(lat_of(j), lon_of(i)) for i in range(nx)] for j in range(ny)]
+            step = max(contours, (max(map(max, sea)) - min(map(min, sea))) / 400.0, 0.1)      # never thousands of lines
+            out["contours"] = contour_lines(nx, ny, lambda i, j: sea[j][i],
+                                            lambda fi, fj, e: [round(v, 3) for v in enu(lat_of(fj), lon_of(fi), e + offset, lat0, lon0)], step)
+            out["contour_interval"] = round(step, 3)
     if buildings or roads:
         progress("Buildings and roads", 0.55 if terrain else 0.1)
         found, ways = parse_osm(fetch_osm(b, buildings, roads, fetch))
@@ -431,15 +502,18 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
             c = [sum(p[k] for p in f["outer"]) / len(f["outer"]) for k in (0, 1)]
             if not (b["south"] <= c[0] <= b["north"] and b["west"] <= c[1] <= b["east"]):
                 continue                                   # whole buildings only: those centred in the rectangle
-            height, assumed = building_height(f["tags"])
+            height, assumed = building_height(f["tags"], default_height, level_height)
             base = min(rel(la, lo) for la, lo in f["outer"])
             flat = lambda ring: [[round(v, 3) for v in enu(la, lo, base, lat0, lon0)[:2]] for la, lo in ring]
             out["buildings"].append({"outer": flat(f["outer"]), "inners": [flat(i) for i in f["inners"]],
                                      "base": round(enu(c[0], c[1], base, lat0, lon0)[2], 3), "height": round(height, 2), "assumed": assumed,
-                                     "name": f["tags"].get("name") or f["tags"].get("addr:housenumber", "")})
+                                     "name": f["tags"].get("name") or f["tags"].get("addr:housenumber", ""),
+                                     "tags": {str(k)[:60]: str(v)[:200] for k, v in list(f["tags"].items())[:40]}})
         for r in (ways if roads else []):
             for line in clip_line(r["pts"], b):
-                out["roads"].append({"pts": [point(la, lo) for la, lo in line], "kind": r["tags"].get("highway", ""), "name": r["tags"].get("name", "")})
+                out["roads"].append({"pts": [point(la, lo) for la, lo in line], "kind": r["tags"].get("highway", ""), "name": r["tags"].get("name", ""),
+                                     "tags": {str(k)[:60]: str(v)[:200] for k, v in list(r["tags"].items())[:40]}})
     out["counts"] = {"terrain": (out["terrain"]["nx"] - 1) * (out["terrain"]["ny"] - 1) if out["terrain"] else 0,
-                     "buildings": len(out["buildings"]), "assumed": sum(1 for x in out["buildings"] if x["assumed"]), "roads": len(out["roads"])}
+                     "buildings": len(out["buildings"]), "assumed": sum(1 for x in out["buildings"] if x["assumed"]), "roads": len(out["roads"]),
+                     "contours": len(out["contours"])}
     return out

@@ -339,9 +339,16 @@ def add_context(doc, data):
     tol = doc.ModelAbsoluteTolerance
     C = System.Drawing.Color
     undo = doc.BeginUndoRecord("EarthLink context")
-    ids, counts = [], {"terrain": 0, "buildings": 0, "roads": 0}
+    ids, counts = [], {"terrain": 0, "buildings": 0, "roads": 0, "contours": 0}
     try:
         note = lambda a, kind: (a.SetUserString("EarthLink", "context"), a.SetUserString("source", kind))
+
+        def tags(a, item):                                # what OpenStreetMap says about it, as the object's user text
+            for k, v in (item.get("tags") or {}).items():
+                try:
+                    a.SetUserString("osm:" + str(k), str(v))
+                except Exception:
+                    pass
         t = data.get("terrain")
         if t and t.get("points"):
             mesh, nx, ny = rg.Mesh(), int(t["nx"]), int(t["ny"])
@@ -382,6 +389,7 @@ def add_context(doc, data):
             at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + layer, C.FromArgb(200, 200, 195)), b.get("name") or ""
             note(at, "OpenStreetMap")
             at.SetUserString("height_m", "%.2f" % up)
+            tags(at, b)
             ids.append(doc.Objects.AddBrep(solid, at))
             counts["buildings"] += 1
         for r in data.get("roads") or []:
@@ -393,8 +401,23 @@ def add_context(doc, data):
             note(at, "OpenStreetMap")
             if r.get("kind"):
                 at.SetUserString("highway", r["kind"])
+            tags(at, r)
             ids.append(doc.Objects.AddCurve(rg.Polyline(pts).ToNurbsCurve(), at))
             counts["roads"] += 1
+        step = data.get("contour_interval") or 0
+        for c in data.get("contours") or []:
+            pts = [pt(p) for p in c["pts"]]
+            if len(pts) < 2:
+                continue
+            e = float(c.get("elevation", 0.0))
+            major = step and abs(e / (5 * step) - round(e / (5 * step))) < 1e-6          # every fifth line
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex = _layer(doc, CONTEXT_LAYER + ("::Contours::Index" if major else "::Contours"), C.FromArgb(110, 90, 60) if major else C.FromArgb(160, 140, 110))
+            at.Name = "%g m" % e
+            note(at, "Terrain Tiles (Mapzen, AWS Open Data)")
+            at.SetUserString("elevation_m", "%g" % e)
+            ids.append(doc.Objects.AddCurve(rg.Polyline(pts).ToNurbsCurve(), at))
+            counts["contours"] += 1
         ids = [i for i in ids if i != System.Guid.Empty]
         if ids:
             doc.Groups.Add("EarthLink context", System.Array[System.Guid](ids))
@@ -409,6 +432,8 @@ def add_context(doc, data):
         parts.append("%d building%s" % (counts["buildings"], "" if counts["buildings"] == 1 else "s"))
     if counts["roads"]:
         parts.append("%d road line%s" % (counts["roads"], "" if counts["roads"] == 1 else "s"))
+    if counts["contours"]:
+        parts.append("%d contour line%s" % (counts["contours"], "" if counts["contours"] == 1 else "s"))
     return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
 
 
