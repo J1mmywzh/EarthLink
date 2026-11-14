@@ -924,10 +924,17 @@
     if (!a || a.zero !== "GroundLevel" || !tileset) return;
     const mode = force ? "sample" : groundMode();
     if (!mode || sampling) return;
-    sampling = true; const touchedBefore = touched; let moved = false;
+    sampling = true; const touchedBefore = touched; let moved = false, replaced = false;
     msg(mode === "check" ? "" : "Sampling ground height…");
     cutPause(true);                                      // measure the map as it is, not as it is graded
     try {
+      if (!force) {                                      // first a quick look at the one point, so that a model far off the ground is not left there for long
+        const q = (await scene.sampleHeightMostDetailed([Cesium.Cartographic.fromDegrees(a.lon, a.lat)], Object.values(models)))[0];
+        if (q && Number.isFinite(q.height) && (S.ground_h == null || Math.abs(q.height - S.ground_h) > 5) && anchor() === a) {
+          S.ground_h = q.height; moved = true; replaced = true; placeModels();
+          if (touched === touchedBefore && !picking) { flyTo(0.8); moved = false; }
+        }
+      }
       await tilesSettled(8000);
       // the anchor plus a ring just outside every footprint; the median ignores a stray roof or tree
       const pts = [Cesium.Cartographic.fromDegrees(a.lon, a.lat)];
@@ -945,10 +952,11 @@
       const now = anchor();
       if (!now || Math.abs(now.lat - a.lat) > 1e-6 || Math.abs(now.lon - a.lon) > 1e-6) { /* the site moved meanwhile: the next call measures there */ }
       else if (hs.length) {
-        const h = hs[Math.floor(hs.length / 2)], keep = mode === "check" && Math.abs(h - S.ground_h) <= 5;
-        moved = !keep && (S.ground_h == null || Math.abs(h - S.ground_h) > 5);
+        const h = hs[Math.floor(hs.length / 2)], keep = mode === "check" && !replaced && Math.abs(h - S.ground_h) <= 5;
+        moved = moved || (!keep && (S.ground_h == null || Math.abs(h - S.ground_h) > 5));
         saveS(keep ? { ground_at: [a.lat, a.lon] } : { ground_h: h, ground_at: [a.lat, a.lon] }); msg("");
-      } else if (mode !== "check") msg("No ground found. Adjust Height.");
+      } else if (replaced) saveS({ ground_h: S.ground_h, ground_at: [a.lat, a.lon] });
+      else if (mode !== "check") msg("No ground found. Adjust Height.");
     } catch (e) { if (mode !== "check") msg("Ground sampling failed: " + e.message); }
     cutPause(false); sampling = false;
     placeModels(); showSite();
