@@ -450,7 +450,8 @@
       const proj = hooks.projection();
       if (g.mode === "zoom") {
         if (!anchor) anchor = zoomAnchor(e);
-        const delta = g.pinch ? e.deltaY * u * RATE.pinch
+        const notch = g.pinch && wheelEvidence(e).device === "mouse";       // Ctrl + mouse wheel: a wheel step, not a 100 % pinch
+        const delta = notch ? e.deltaY * u * RATE.wheel : g.pinch ? e.deltaY * u * RATE.pinch
           : g.device === "mouse" ? e.deltaY * u * RATE.wheel
           : (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * u * RATE.scroll;
         ease.add("zoom", clamp(delta, -0.7, 0.7) * s);
@@ -458,6 +459,21 @@
       else { ease.add("heading", fx * RATE.orbit * s); ease.add("tilt", -fy * RATE.tilt * s); }
       kick();
     }, { passive: false });
+    // Safari reports a trackpad pinch as gesture events, not as wheel events (it would zoom the whole page).
+    let gesture = null;
+    canvas.addEventListener("gesturestart", e => {
+      e.preventDefault();
+      if (!hooks.allowed() || hooks.walking()) return;
+      begin(); pivot = null; ease.clear(); anchor = zoomAnchor(e); gesture = { scale: e.scale || 1 };
+      latch.kind = "pinch"; latch.last = e.timeStamp || performance.now();      // scrolling waits until the pinch is over
+    });
+    canvas.addEventListener("gesturechange", e => {
+      e.preventDefault();
+      if (!gesture || !(e.scale > 0)) return;
+      ease.add("zoom", clamp(-Math.log(e.scale / gesture.scale) * 100 * RATE.pinch, -0.7, 0.7) * sens()); gesture.scale = e.scale;
+      latch.last = e.timeStamp || performance.now(); kick();
+    });
+    canvas.addEventListener("gestureend", e => { e.preventDefault(); gesture = null; });
     function zoomAnchor(e) {
       const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
       if (ortho()) return { screen: [x, y] };

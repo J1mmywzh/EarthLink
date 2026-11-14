@@ -193,3 +193,9 @@ test('Map connection: the dialog leads to Cesium ion, checks a pasted token at o
  await p.locator('#itok').fill('good'+'x'.repeat(60));await p.waitForFunction(()=>document.getElementById('keyState').classList.contains('ok'));assert.equal(await p.locator('#savekeys').isEnabled(),true);
  await p.locator('#skip').click();assert.equal(await p.locator('#keys').isVisible(),false);
  assert.equal(await p.locator('#mapEdit').count(),1,'the dialog can be opened again from Site');});
+test('Safari: a trackpad pinch (gesture events) zooms the map, not the page',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);});await p.waitForTimeout(500);
+ const a=await cam(p);const prevented=await p.evaluate(async()=>{const c=EL.viewer.scene.canvas,r=c.getBoundingClientRect(),ev=(n,scale)=>{const e=new Event(n,{bubbles:true,cancelable:true});e.scale=scale;e.clientX=r.left+r.width/2;e.clientY=r.top+r.height/2;c.dispatchEvent(e);return e.defaultPrevented;};
+   const out=[ev('gesturestart',1)];for(let i=1;i<=10;i++){out.push(ev('gesturechange',1+i*0.05));await new Promise(f=>requestAnimationFrame(f));}out.push(ev('gestureend',1.5));await new Promise(f=>setTimeout(f,500));return out.every(Boolean);});
+ const b=await cam(p);assert.equal(prevented,true,'the page itself does not zoom');
+ const dist=q=>p.evaluate(pos=>Cesium.Cartesian3.distance(new Cesium.Cartesian3(...pos),EL.models.Main.boundingSphere.center),q.pos);
+ const da=await dist(a),db=await dist(b);assert.ok(db<da*0.85,'spreading the fingers by half moves in: '+(db/da).toFixed(2));});
