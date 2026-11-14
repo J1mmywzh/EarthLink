@@ -35,10 +35,10 @@
     orbit: 0.117, tilt: 0.105,         // two fingers
     orbitMouse: 0.219, tiltMouse: 0.197, // right-drag
     pan: 0.89,                         // x the distance under the fingers (1 = exact follow)
-    // zoom: 10 % faster than beta.12 (the author, 2026-11-14); the turning and panning rates are as they like them
-    pinch: 0.01203, scroll: 0.00605,   // zoom: log-distance per wheel delta unit (trackpad)
-    wheel: 0.00286, dragZoom: 0.00484, // mouse wheel, Ctrl + right-drag
-    hold: Math.LN2 / 0.69,             // +/- held: distance halves every 0.69 s
+    // zoom: twice 10 % faster than beta.12 (the author, 2026-11-14); the turning and panning rates are as they like them
+    pinch: 0.01324, scroll: 0.00666,   // zoom: log-distance per wheel delta unit (trackpad)
+    wheel: 0.00315, dragZoom: 0.00532, // mouse wheel, Ctrl + right-drag
+    hold: Math.LN2 / 0.63,             // +/- held: distance halves every 0.63 s
     look: 0.072, lookMouse: 0.135,     // walking
   };
   /* How far the view may tilt from straight down at a height (m): freely near the ground, less and less higher up,
