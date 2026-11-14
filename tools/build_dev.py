@@ -18,7 +18,7 @@ from build import RHINOCODE  # noqa: E402
 
 VERSION = "1.0.0"
 REPO = "https://github.com/J1mmywzh/EarthLink.git"
-FIRST_BRANCH = "beta13"     # what a new checkout starts on (it must contain tools/devloader.py)
+FIRST_BRANCH = "main"       # what a new checkout starts on (it must contain tools/devloader.py)
 COMMANDS = [   # (Dev command, released command it runs, id)
     ("DevSendToEarth", "SendToEarth", "a1e5c0d2-3b4f-4a6e-8c7d-1f2e3a4b5c61"),
     ("DevEarthLinkViewer", "EarthLinkViewer", "b2f6d1e3-4c5a-4b7f-9d8e-2a3f4b5c6d72"),

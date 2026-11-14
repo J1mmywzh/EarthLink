@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 — unreleased
+## 1.0.0 — 2026-11-14
 
 The first full release. It includes everything in the 0.2 previews, and adds the following.
 
