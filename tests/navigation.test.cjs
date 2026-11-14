@@ -53,14 +53,13 @@ test('a mouse wheel is told from a trackpad by its legacy delta (Chrome, Safari)
 });
 test('the pivot is what is at the centre of the view; at the horizon, the model or a limit',()=>{
   const P=N.pivotDistance;
-  assert.equal(P(95,null,100),95,'the surface at the centre, near the model');
-  assert.equal(P(1700,null,100),100,'a shallow view past the model: the model depth');
-  assert.equal(P(null,null,100),100,'sky: the model depth');
-  assert.equal(P(12,null,100),12,'a detail closer than the model');
-  assert.equal(P(1700,150,null),150,'no model in view: the distance last focused on');
-  assert.equal(P(400,150,null),400);assert.equal(P(5000,null,null,480),480,'nothing known: limited');
-  assert.equal(P(41000,150,null,41000),150,'unloaded map far away never becomes the turning point');
-  assert.equal(P(null,null,null),null);
+  assert.equal(P(95,100),95,'the surface at the centre, near the model');
+  assert.equal(P(1700,100,480),100,'a shallow view past the model: the model depth');
+  assert.equal(P(null,100),100,'sky: the model depth');
+  assert.equal(P(12,100),12,'a detail closer than the model');
+  assert.equal(P(400,null,480),400);assert.equal(P(5000,null,480),480,'no model in view: limited');
+  assert.equal(P(40,2000,480),40,'a model far behind the surface you see (placed too low, behind a hill): the surface');
+  assert.equal(P(null,null),null);
 });
 test('a pinch has to be meant: the small pinches of scrolling or resting fingers are dropped, a real pinch zooms at once',()=>{
   const l=new N.WheelLatch();let t=0;
@@ -103,19 +102,61 @@ test('the device is corrected when the first event misleads, and remembered',()=
   assert.equal(l.read(ev(40,-120),'perspective',2000).mode,'zoom','remembered');
   l=new N.WheelLatch();assert.equal(l.read(ev(4,-120),'perspective',0,false).mode,'zoom');
 });
-test('the glide after the fingers lift keeps its length and counts for less; moving fingers count in full',()=>{
-  let c=new N.Coast(),sum=0,raw=0,gains=[];
-  for(const m of [4,9,14,20,26,30,31,33])assert.equal(c.gain(0,m),1);          // fingers speeding up
-  for(let m=32;m>=0.5;m*=0.93){const g=c.gain(0,m);gains.push(g);sum+=m*g;raw+=m;}            // the glide
-  assert.ok(sum<0.92*raw&&sum>0.6*raw,'the glide turns less than the system sends: '+(sum/raw).toFixed(2));
-  assert.ok(Math.min(...gains)>=0.5-1e-9,'and never dies away: it comes to rest as the system\'s glide does, not suddenly');
-  for(let i=1;i<gains.length;i++)assert.ok(gains[i-1]-gains[i]<0.12,'no step in its weight');
-  const back=[c.gain(0,6),c.gain(0,7),c.gain(0,8),c.gain(0,9),c.gain(0,10),c.gain(0,11),c.gain(0,12),c.gain(0,13),c.gain(0,14),c.gain(0,15),c.gain(0,16)];
-  assert.ok(back[0]>0.7&&back[back.length-1]===1,'steps that grow again are the fingers: full weight within a few events '+back.map(v=>v.toFixed(2)));
-  c=new N.Coast();for(let i=0;i<60;i++)assert.equal(c.gain(2,0),1,'a steady slow rotation is untouched');
-  c=new N.Coast();for(const m of [9,8,8,7,9,8,7,7,6,8,7,6,6,7])assert.equal(c.gain(m,0),1,'noisy fingers slowing down');
-  c=new N.Coast();for(let r=0;r<4;r++)for(const m of [3,4,5,6,7,8,9,8,7,6,5,4,3])assert.equal(c.gain(0,m),1,'a careful tilt, faster and slower: every bit of it counts in full');
-  c=new N.Coast();for(const m of [14,14,14,14,14,11,8,5,3,2,1])assert.equal(c.gain(0,m),1,'fingers coming to a quick stop');
+// Two strokes recorded on a MacBook trackpad in Chrome (120 events a second): [ms since the last event, deltaX, deltaY].
+// The first tilts and is cut at 27 px per event by the next stroke 71 ms later; the second is cut and then reversed.
+const STROKE_A=[[8,0,-31],[8,0,-31],[9,0,-30],[8,0,-33],[9,0,-34],[8,0,-31],[8,0,-30],[8,0,-30],[9,0,-28],[4,0,-27],[71,-1,0],[9,-4,2],[8,-3,1],[9,-6,2],[8,-10,2],[8,-11,2],[8,-12,2],[9,-13,2],[8,-14,2],[8,-15,2],[9,-25,3],[8,-7,1],[9,-20,2]];
+const STROKE_B=[[8,0,-28],[8,0,-28],[9,0,-27],[8,0,-26],[9,0,-25],[8,0,-24],[8,0,-23],[9,0,-21],[8,0,-21],[67,0,1],[8,0,3],[1,0,1],[8,1,5],[8,1,8],[8,1,12],[9,1,20],[8,1,23],[8,1,26],[8,1,29],[10,2,49],[7,1,13],[9,2,36],[8,1,9],[9,1,25]];
+function play(strokes,soft,lead=40){              // steady motion first, then the recorded events; returns what a 120 Hz screen shows per frame (px)
+  const e=new N.Ease(),ev=[];let t=0;
+  for(let i=0;i<lead;i++){t+=8.33;ev.push([t,strokes[0][1],strokes[0][2]]);}
+  for(const [gap,dx,dy] of strokes){t+=gap;ev.push([t,dx,dy]);}
+  const frames=[];let k=0,sum=[0,0],fed=[0,0];
+  for(let now=0;now<t+900;now+=1000/120){
+    while(k<ev.length&&ev[k][0]<=now){e.add('px',ev[k][1],soft);e.add('py',ev[k][2],soft);fed[0]+=ev[k][1];fed[1]+=ev[k][2];k++;}
+    const m=e.take(1/120)||{px:0,py:0};sum[0]+=m.px;sum[1]+=m.py;frames.push([now,m.px,m.py]);
+  }
+  return {frames,sum,fed,end:t,cut:lead*8.33+strokes.slice(0,strokes.findIndex(q=>q[0]>40)).reduce((a,q)=>a+q[0],0)};
+}
+test('the system\'s glide counts in full: every scroll event turns the view by what it says',()=>{
+  const L=new N.WheelLatch();let t=0;
+  for(const m of [4,9,14,20,26,30,31,33])assert.equal(L.read({deltaX:0,deltaY:m,deltaMode:0,wheelDeltaY:-3*m},'perspective',t+=8).gain,1);
+  for(let m=32;m>=0.5;m*=0.96){const r=Math.round(m);assert.equal(L.read({deltaX:0,deltaY:r,deltaMode:0,wheelDeltaY:-3*r},'perspective',t+=8).gain,1,'the glide after the fingers lift is what brings the turn to rest');}
+});
+test('a stroke cut short at speed comes to rest; it does not stop dead',()=>{
+  const hard=play(STROKE_A,false),soft=play(STROKE_A,true);
+  const at=(r,ms)=>{const f=r.frames.find(q=>q[0]>=r.cut+ms);return Math.abs(f[2]);};
+  const before=at(soft,-10);assert.ok(before>26&&before<36,'steady before the cut: '+before);
+  assert.ok(Math.abs(at(hard,-10)-before)<0.5,'and the same as without the soft release: steady motion is untouched');
+  assert.ok(at(hard,50)<0.35*before,'released as it is, the view has all but stopped 50 ms after the cut: '+at(hard,50));
+  assert.ok(at(soft,50)>0.55*before&&at(soft,50)<0.8*before,'with the soft release it is still at two thirds: '+at(soft,50));
+  assert.ok(at(soft,150)>0.15*before&&at(soft,150)<0.45*before,'and fading at 150 ms: '+at(soft,150));
+  let worst=0;for(let i=1;i<soft.frames.length;i++)if(soft.frames[i][0]>soft.cut-100)worst=Math.max(worst,Math.abs(soft.frames[i][2]-soft.frames[i-1][2]));
+  assert.ok(worst<0.12*before,'no step in speed from one frame to the next: '+worst.toFixed(2)+' of '+before.toFixed(1));
+  const over=Math.abs(soft.sum[1]-soft.fed[1]);assert.ok(over>40&&over<300,'it glides on by a little: '+over.toFixed(0)+' px');
+  const side=soft.sum[0]-soft.fed[0];assert.ok(side<=0.5&&side>-90,'the next stroke, sideways, arrives in full (and glides on a little itself when it is cut): '+soft.sum[0].toFixed(1)+' of '+soft.fed[0]);
+});
+test('turning back: the old motion fades under the new one, and the new one counts in full',()=>{
+  const r=play(STROKE_B,true),hard=play(STROKE_B,false);
+  const ys=r.frames.filter(q=>q[0]>r.cut-20&&q[0]<r.cut+260).map(q=>q[2]);
+  const hy=hard.frames.filter(q=>q[0]>r.cut-20&&q[0]<r.cut+260).map(q=>q[2]),jump=a=>Math.max(...a.slice(1).map((v,i)=>Math.abs(v-a[i])));
+  assert.ok(jump(ys)<=jump(hy)+1.5,'no harder a change of speed than the fingers make themselves: '+jump(ys).toFixed(1)+' vs '+jump(hy).toFixed(1)+' | '+ys.map(v=>v.toFixed(0)).join(' '));
+  const lull=a=>a.filter(v=>Math.abs(v)<3).length;assert.ok(lull(ys)<lull(hy),'and no standstill between the two strokes: '+lull(ys)+' frames near rest, '+lull(hy)+' without');
+  assert.ok(Math.min(...ys)<-20&&Math.max(...ys)>12,'from one direction to the other');
+  assert.ok(Math.abs((r.sum[1]-r.fed[1])-(hard.sum[1]-hard.fed[1]))<220);
+});
+test('moving fingers are followed exactly: steady, uneven or slow input gains nothing',()=>{
+  let e=new N.Ease(),sum=0,fed=0;                                    // events and frames out of step, as on a real trackpad
+  for(let i=0,t=0,next=0;i<1500;i++){t+=1000/120;while(next<=t){const d=(20+((i*7)%5))*Math.min(1,(1500-i)/300);e.add('heading',d,true);fed+=d;next+=7+((i*3)%4);}const m=e.take(1/120);if(m)sum+=m.heading;}   // uneven, then slowing down
+  for(let i=0;i<200;i++){const m=e.take(1/120);if(m)sum+=m.heading;}
+  assert.ok(Math.abs(sum-fed)/fed<0.004,'steady: '+sum.toFixed(1)+' of '+fed);
+  e=new N.Ease();sum=0;fed=0;                                         // a careful stop: the fingers slow down themselves
+  for(let i=0;i<300;i++){const d=Math.max(0,0.5-i*0.004);if(d){e.add('heading',d,true);fed+=d;}const m=e.take(1/120);if(m)sum+=m.heading;}
+  for(let i=0;i<200;i++){const m=e.take(1/120);if(m)sum+=m.heading;}
+  assert.ok(Math.abs(sum-fed)<0.02,'a slow, careful stop lands where the fingers stopped: '+(sum-fed).toFixed(4));
+  e=new N.Ease();sum=0;e.add('zoom',0.26);for(let i=0;i<400;i++){const m=e.take(1/120);if(m)sum+=m.zoom;}
+  assert.ok(Math.abs(sum-0.26)<1e-9,'a wheel notch zooms by exactly its step');
+  e=new N.Ease();sum=0;for(let i=0;i<60;i++){e.add('heading',3);const m=e.take(1/120);if(m)sum+=m.heading;}for(let i=0;i<300;i++){const m=e.take(1/120);if(m)sum+=m.heading;}
+  assert.ok(Math.abs(sum-180)<1e-6,'a mouse drag (not soft) stops where the mouse stopped');
 });
 test('zoom is released more slowly than a turn, and still exactly',()=>{
   const e=new N.Ease();e.add('zoom',1);e.add('heading',1);let z=0,h=0,nz=0,nh=0,out;

@@ -56,7 +56,7 @@
      pinch, scroll events are dropped until the pinch has been quiet for TAKEOVER ms. The device is corrected if
      later events prove the first guess wrong, and remembered. */
   class WheelLatch {
-    constructor() { this.last = -Infinity; this.mode = null; this.device = null; this.prior = null; this.kind = null; this.n = 0; this.sure = 0; this.coast = new Coast(); this.pend = []; this.flow = []; }
+    constructor() { this.last = -Infinity; this.mode = null; this.device = null; this.prior = null; this.kind = null; this.n = 0; this.sure = 0; this.pend = []; this.flow = []; }
     read(e, projection, now, mac = true) {
       const kind = e.ctrlKey ? "pinch" : "scroll";
       if (this.kind && now - this.last > GESTURE_GAP) { this.kind = null; this.pend = []; }   // the fingers lifted or rest: the gesture is over
@@ -76,7 +76,7 @@
         if (now - this.last <= TAKEOVER) return { mode: "none", skip: true, start: false };
         fresh = true;
       }
-      if (fresh) { this.kind = kind; this.n = 0; this.sure = 0; this.coast.reset(); this.pend = []; this.flow = []; }
+      if (fresh) { this.kind = kind; this.n = 0; this.sure = 0; this.pend = []; this.flow = []; }
       this.last = now; this.n++;
       if (kind === "scroll") this.flow.push([now, (Math.abs(e.deltaX) + Math.abs(e.deltaY)) * wheelPx(e)]);
       if (kind === "pinch") { this.mode = "zoom"; return { mode: "zoom", pinch: true, start: fresh, gain: 1 }; }
@@ -93,8 +93,7 @@
         if (this.sure >= 2 && (ev.device === "trackpad" || this.n <= 4)) { choose(ev.device); start = true; }
       } else if (ev.sure) this.sure = 0;
       if (ev.sure && ev.device === this.device) this.prior = ev.device;
-      const gain = this.device === "trackpad" && this.mode !== "zoom" ? this.coast.gain(e.deltaX, e.deltaY) : 1;
-      return { mode: this.mode, device: this.device, start, gain };
+      return { mode: this.mode, device: this.device, start, gain: 1 };   // gain: the system's glide counts in full (it is what brings a turn to rest)
     }
   }
   /* What a wheel event says about its device: {device: "mouse" | "trackpad" | null, sure}. Chrome and Safari
@@ -113,59 +112,71 @@
     return { device: "mouse", sure: true };
   }
   const isMouseWheel = e => wheelEvidence(e).device === "mouse";
-  /* The glide after the fingers lift. macOS keeps sending a smoothly shrinking scroll for about a second: that is
-     what makes a turn come to rest gently, so it is kept for its whole length. Its later part only counts for
-     less (COAST_FLOOR), or a flick turns the view much further than the fingers did. Moving fingers always count
-     in full, slowing down included: only a long, unbroken shrinking run (COAST_AFTER shrinking steps, down to six tenths) is
-     taken for the glide; the weight then eases down, and eases back up as soon as a step grows again. */
-  const COAST_AFTER = 8, COAST_FLOOR = 0.5, COAST_DOWN = 0.2, COAST_UP = 0.5;
-  class Coast {
-    constructor() { this.reset(); }
-    reset() { this.prev = null; this.run = 0; this.from = 0; this.k = 1; }
-    gain(dx, dy) {
-      const m = Math.hypot(dx, dy);
-      if (this.prev != null && m < this.prev && m > 0) { if (!this.run) this.from = this.prev; this.run++; }   // a shrinking step
-      else if (!(this.prev != null && m === this.prev)) this.run = 0;                                         // an equal step neither counts nor breaks the run
-      this.prev = m;
-      const gliding = this.run >= COAST_AFTER && m <= 0.6 * this.from;
-      this.k += ((gliding ? COAST_FLOOR : 1) - this.k) * (gliding ? COAST_DOWN : COAST_UP);
-      if (1 - this.k < 1e-3) this.k = 1;
-      return this.k;
-    }
-  }
+  /* Pending motion released gradually, frame by frame. Zoom is released more slowly: a wheel has no glide of its own.
 
-  // Pending motion released gradually, frame by frame. Zoom is released more slowly: a pinch and a wheel have no
-  // glide of their own, and a zoom that stops dead reads as a jolt.
-  const EASE_OF = { zoom: 0.085 };
+     Coming to rest. A two-finger turn, pan or pinch often ends while the view is still moving: the fingers lift, or
+     the next stroke touches down and cuts the system's glide short (measured on a MacBook: strokes follow each
+     other every 0.3 s and the stream stops at 20 to 30 px per event). Released as it is, the view would stop dead
+     within EASE. Motion added as `soft` therefore never slows faster than RELEASE allows: the view runs on and comes
+     to rest. What it runs ahead is a loan: while the fingers keep moving the same way the next events pay it back
+     (the view stays exactly under the fingers, and uneven events are evened out); when nothing follows for FORGIVE
+     s, or the fingers turn back, it is forgiven and is the little the view glided. Slow motion (below the first
+     speed of SOFT, per second) stops as precisely as before; from the second speed on the release is in full. */
+  const EASE_OF = { zoom: 0.085 }, RELEASE = 0.12, FORGIVE = 0.04;
+  const SOFT = { heading: [14, 56], tilt: [14, 56], lh: [14, 56], lt: [14, 56], px: [150, 600], py: [150, 600], zoom: [0.3, 1.2] };
   class Ease {
-    constructor() { this.v = { heading: 0, tilt: 0, px: 0, py: 0, zoom: 0, lh: 0, lt: 0 }; }
-    add(k, x) { if (Number.isFinite(x)) this.v[k] += x; }
+    constructor() { this.v = { heading: 0, tilt: 0, px: 0, py: 0, zoom: 0, lh: 0, lt: 0 }; this.u = {}; this.c = {}; this.loan = {}; this.idle = {}; this.soft = {}; this.clear(); }
+    add(k, x, soft = false) {
+      if (!Number.isFinite(x) || !x) return;
+      const loan = this.loan[k];
+      if (loan) {
+        if (Math.sign(x) === Math.sign(loan)) { const pay = Math.sign(x) * Math.min(Math.abs(x), Math.abs(loan)); x -= pay; this.loan[k] -= pay; }
+        else this.loan[k] = 0;
+      }
+      this.v[k] += x; this.idle[k] = 0; this.soft[k] = !!soft;
+    }
     take(dt) {
+      dt = Math.max(0, dt);
       const out = {};
       let any = false;
       for (const k in this.v) {
-        const f = 1 - Math.exp(-Math.max(0, dt) / (EASE_OF[k] || EASE));
-        out[k] = this.v[k] * f; this.v[k] -= out[k];
-        if (Math.abs(this.v[k]) < 1e-4) { out[k] += this.v[k]; this.v[k] = 0; }
-        if (out[k]) any = true;
+        const f = 1 - Math.exp(-dt / (EASE_OF[k] || EASE));
+        let q = this.v[k] * f; this.v[k] -= q;
+        if (Math.abs(this.v[k]) < 1e-4) { q += this.v[k]; this.v[k] = 0; }
+        this.idle[k] += dt; if (this.idle[k] > FORGIVE) this.loan[k] = 0;
+        let o = q;
+        const lim = SOFT[k];
+        if (lim && this.soft[k] && dt > 0 && (this.u[k] || this.c[k])) {
+          const from = this.c[k] || this.u[k];                                             // per second: what is fading, or the speed of the last frame
+          const env = from * dt * Math.exp(-dt / RELEASE), s = Math.sign(env);             // the slowest it may get this frame
+          const w = clamp((Math.abs(from) - lim[0]) / (lim[1] - lim[0]), 0, 1);
+          if (w && Math.sign(q) === -s) { this.c[k] = env / dt; o = q + env * w; }          // turning back: the old motion fades under the new one
+          else {
+            this.c[k] = 0;
+            if (w && s * (env - q) > 0) { const extra = (env - q) * w; o = q + extra; this.loan[k] += extra; }
+          }
+        } else this.c[k] = 0;
+        this.u[k] = dt > 0 ? o / dt : 0;
+        if (Math.abs(o) < 1e-7) { o = 0; this.u[k] = 0; }
+        out[k] = o;
+        if (o) any = true;
       }
       return any ? out : null;
     }
-    clear() { for (const k in this.v) this.v[k] = 0; }
-    get busy() { return Object.values(this.v).some(Boolean); }
+    drop(k) { this.v[k] = 0; this.u[k] = 0; this.c[k] = 0; this.loan[k] = 0; }
+    clear() { for (const k in this.v) { this.drop(k); this.idle[k] = 1; this.soft[k] = false; } }
+    get busy() { return Object.values(this.v).some(Boolean) || Object.values(this.u).some(Boolean); }
   }
 
-  /* How far along the centre of the view the pivot is (Rhino's camera target: it keeps its depth, and is put back
-     "where the objects are" after a pan or a zoom). pick: distance to the surface there (null: none).
-     target: the distance last turned around or zoomed to (null: unknown). focus: depth of the visible model when
-     it is in view (null: none). limit: farthest pivot accepted when nothing else is known. A surface far behind
-     what you are looking at (a shallow view, the horizon, map detail that has not loaded yet) is not what you are
-     turning around; anything nearer is. */
-  function pivotDistance(pick, target, focus, limit = Infinity) {
-    const ref = focus ?? target;
-    if (pick != null && pick <= (ref != null ? 4 * ref : limit)) return pick;
-    if (ref != null) return ref;
-    return pick != null ? Math.min(pick, limit) : null;
+  /* How far along the centre of the view the pivot is. pick: distance to the surface there (null: none).
+     focus: depth of the visible model when it is in view (null: none). limit: the farthest surface that still
+     counts as what you are looking at (a shallow view reaches the horizon). The pivot is what you see at the
+     centre of the view; it is never a remembered distance and never a point behind the surface you are looking
+     at: turning about anything else makes the picture rush in and out. */
+  function pivotDistance(pick, focus, limit = Infinity) {
+    if (pick != null && pick <= limit) return pick;
+    if (focus != null) return focus;
+    return pick != null ? limit : null;
   }
 
   /* The ground rule, in heights above the ellipsoid. `top` is the map's upper surface at the camera's position and
@@ -230,7 +241,6 @@
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
     let grounded_ = false;                               // this gesture's tilt has reached the ground
-    let target = null, mine = null;                      // the distance last focused on; the pose this module set last
     let held = null, groundAt = null, rec = null;        // the pivot kept between rotations; last ground check; input recording
     const floor = new Floor();
     const ssc = scene.screenSpaceCameraController;
@@ -275,8 +285,8 @@
           const off = Math.atan2(side, d), wide = Math.asin(f.radius / far), fov = cam.frustum.fovy || 0.8;
           if (off <= fov / 2 + 0.5 * wide) depth = d;
           // The model reaches the middle of the view: it is what you are turning around. The centre of the view
-          // often passes it (through a gap, over a roof) and lands on ground far behind, or on a tree in front;
-          // turning about that makes the model rush towards you and away. The pivot stays within the model's depth.
+          // often passes it (through a gap, over a roof) and lands on ground far behind; turning about that makes
+          // the model rush towards you and away. The pivot is then no farther than the model's far side.
           if (off <= fov / 4 + wide) within = [Math.max(0.4, d - f.radius), d + f.radius];
         }
       }
@@ -288,10 +298,10 @@
         // The ground under the camera where it is known: a far hit on map detail that has not loaded yet lies deep
         // below the real ground and must not stretch the limit.
         const under = floor.known && floor.top != null ? floor.top : (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0);
-        if (!mine || C3.distance(mine, cam.positionWC) > 0.01) target = null;   // something else moved the camera (a flight, a saved view): focus anew
-        d = pivotDistance(dp, target, depth, Math.max(300, 8 * Math.max(0, height() - under)));
-        if (within) d = clamp(d ?? depth, within[0], within[1]);
-        if (d != null) target = d;
+        d = pivotDistance(dp, depth, Math.max(300, 8 * Math.max(0, height() - under)));
+        // Only ever nearer: the surface you see in front of the model (a hill, a tree, the map over a model that
+        // sits too low) stays the pivot. A point behind what is seen is the one thing a pivot must not be.
+        if (within) d = d == null ? depth : Math.min(d, within[1]);
       }
       if (d == null) d = Math.max(50, height() * 2);
       return Cesium.Ray.getPoint(ray, d, v3());
@@ -328,7 +338,6 @@
         cam.frustum._elShift = Math.tan(pitch);
         cam.setView({ destination: pos, orientation: { direction: C3.normalize(flat, flat), up: n } });
       } else cam.setView({ destination: pos, orientation: { direction: dir, up: level(dir, up) } });
-      mine = cam.positionWC.clone();
     }
     // The ground rule (Floor): one ray down onto the map's upper surface where the camera is going.
     function grounded(pos) {
@@ -432,7 +441,7 @@
       const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), Math.min(pitch, -lim), Math.max(pitch, lim));
       const right = C3.normalize(C3.cross(dir, n, v3()), v3());
       dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
-      pivot = null; held = null; target = null;            // the view turned where it stands: the old turning point is no longer ahead
+      pivot = null; held = null;                           // the view turned where it stands: the old turning point is no longer ahead
       setPose(P.pos, dir, P.up);
     }
     function zoom(logFactor) {                             // > 0 zooms out
@@ -455,8 +464,6 @@
       if (Cesium.Cartographic.fromCartesian(pos)?.height > 4e7) return;
       pos = grounded(pos).pos;
       cam.setView({ destination: pos, orientation: { direction: cam.directionWC, up: cam.upWC } });   // no re-levelling: the image never turns
-      if (target != null) target = clamp(target * nd / (d || 1), 0.4, 4e7);   // the focus comes closer with the camera
-      mine = cam.positionWC.clone();
     }
 
     // ---- frame loop: ease pending motion, continuous zoom, short animations
@@ -498,8 +505,12 @@
       if (rec) rec.push(["wheel", Math.round(e.timeStamp), e.deltaX, e.deltaY, e.deltaMode, e.wheelDeltaY ?? null, +e.ctrlKey, +e.shiftKey, g.mode, g.device || "", +(g.gain ?? 1).toFixed(3)]);
       if (g.skip) return;
       const fx = -e.deltaX * u * g.gain, fy = -e.deltaY * u * g.gain;   // finger motion (natural scrolling)
-      if (hooks.walking()) { if (g.mode !== "zoom") { ease.add("heading", fx * RATE.look * s); ease.add("tilt", fy * RATE.look * s); kick(); } return; }
-      if (g.start) { begin(); pivot = null; anchor = null; ease.clear(); }
+      const soft = g.device !== "mouse";                   // fingers on a trackpad: comes to rest (see Ease); a wheel notch is exact
+      if (hooks.walking()) { if (g.mode !== "zoom") { ease.add("heading", fx * RATE.look * s, soft); ease.add("tilt", fy * RATE.look * s, soft); kick(); } return; }
+      if (g.start) {                                       // the next stroke: what is still gliding from the last one fades by itself
+        begin(); pivot = null; anchor = null;
+        if (g.device === "mouse") ease.clear(); else if (g.mode !== "zoom") ease.drop("zoom");
+      }
       const proj = hooks.projection();
       if (g.mode === "zoom") {
         if (!anchor) anchor = zoomAnchor(e);
@@ -507,9 +518,9 @@
         const delta = notch ? e.deltaY * u * RATE.wheel : g.pinch ? e.deltaY * u * RATE.pinch
           : g.device === "mouse" ? e.deltaY * u * RATE.wheel
           : (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * u * RATE.scroll;
-        ease.add("zoom", clamp(delta, -0.7, 0.7) * s);
-      } else if (g.mode === "pan" || proj === "parallel") { ease.add("px", fx); ease.add("py", fy); }
-      else { ease.add("heading", fx * RATE.orbit * s); ease.add("tilt", -fy * RATE.tilt * s); }
+        ease.add("zoom", clamp(delta, -0.7, 0.7) * s, !!g.pinch && !notch);
+      } else if (g.mode === "pan" || proj === "parallel") { ease.add("px", fx, soft); ease.add("py", fy, soft); }
+      else { ease.add("heading", fx * RATE.orbit * s, soft); ease.add("tilt", -fy * RATE.tilt * s, soft); }
       kick();
     }, { passive: false });
     // Safari reports a trackpad pinch as gesture events, not as wheel events (it would zoom the whole page).
@@ -523,7 +534,7 @@
     canvas.addEventListener("gesturechange", e => {
       e.preventDefault();
       if (!gesture || !(e.scale > 0)) return;
-      ease.add("zoom", clamp(-Math.log(e.scale / gesture.scale) * 100 * RATE.pinch, -0.7, 0.7) * sens()); gesture.scale = e.scale;
+      ease.add("zoom", clamp(-Math.log(e.scale / gesture.scale) * 100 * RATE.pinch, -0.7, 0.7) * sens(), true); gesture.scale = e.scale;
       latch.last = e.timeStamp || performance.now(); kick();
     });
     canvas.addEventListener("gestureend", e => { e.preventDefault(); gesture = null; });
@@ -646,5 +657,5 @@
     const n = typeof navigator !== "undefined" ? navigator : {};
     return /mac|iphone|ipad/i.test((n.userAgentData && n.userAgentData.platform) || n.platform || "");
   }
-  return { RATE, STEP, WheelLatch, Coast, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, daylight, create };
+  return { RATE, STEP, WheelLatch, Ease, Floor, pivotDistance, isMouseWheel, wheelEvidence, isMac, neutralDirection, daylight, create };
 });
