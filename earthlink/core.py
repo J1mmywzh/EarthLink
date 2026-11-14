@@ -368,6 +368,77 @@ def add_context(doc, data):
     return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
 
 
+# ----------------------------------------------------------------- lights
+_LIGHT_KINDS = {"WorldPoint": "point", "WorldSpot": "spot", "WorldDirectional": "directional",
+                "WorldRectangular": "rect", "WorldLinear": "linear"}
+
+
+def lights_info(doc):
+    """The document's lights that are on, for the viewer: positions and sizes in metres east/north/up of the model
+    base point (the frame the exported geometry is in), colours as Rhino shows them (0..1), Rhino's own intensity and
+    attenuation. The sun and the skylight are not in this table; they follow the viewer's time of day."""
+    if not anchor_ok(doc):
+        return []
+    xf = enu_transform(doc)
+    scale = Rhino.RhinoMath.UnitScale(doc.ModelUnitSystem, Rhino.UnitSystem.Meters)
+    r = lambda v: round(float(v), 4)
+
+    def point(p):
+        q = rg.Point3d(p)
+        q.Transform(xf)
+        return [r(q.X * scale), r(q.Y * scale), r(q.Z * scale)]
+
+    def vector(v, unit=False):
+        w = rg.Vector3d(v)
+        w.Transform(xf)
+        if unit:
+            if not w.Unitize():
+                return [0.0, 0.0, -1.0]
+            return [round(w.X, 5), round(w.Y, 5), round(w.Z, 5)]
+        return [r(w.X * scale), r(w.Y * scale), r(w.Z * scale)]
+
+    out = []
+    for lo in doc.Lights:
+        try:
+            lg = lo.LightGeometry
+            kind = _LIGHT_KINDS.get(str(lg.LightStyle))
+            if kind is None or lo.IsDeleted or not lg.IsEnabled or not lo.Visible:
+                continue
+            c = lg.Diffuse
+            a = lg.AttenuationVector
+            item = {"id": str(lo.Id), "name": lo.Name or "", "kind": kind, "pos": point(lg.Location),
+                    "dir": vector(lg.Direction, True), "color": [round(c.R / 255.0, 4), round(c.G / 255.0, 4), round(c.B / 255.0, 4)],
+                    "intensity": r(lg.Intensity),
+                    # 1 / (a0 + a1 d + a2 d^2) with d in model units, rewritten for metres
+                    "att": [r(a.X), round(a.Y / scale, 6), round(a.Z / (scale * scale), 8)],
+                    "att_type": str(lg.AttenuationType), "shadow": r(lg.ShadowIntensity)}
+            if kind == "spot":
+                item["angle"] = r(lg.SpotAngleRadians)          # half the cone
+                item["hot"] = r(lg.HotSpot)                      # 0..1 of the cone at full strength
+            if kind in ("rect", "linear"):
+                item["length"] = vector(lg.Length)
+                item["width"] = vector(lg.Width)
+            out.append(item)
+        except Exception:
+            continue                                             # an odd light never stops the others
+    out.sort(key=lambda x: x["id"])
+    return out
+
+
+def publish_lights(doc, lights=None):
+    """Make live/meta.json carry the document's lights. No geometry is exported. Returns True when meta changed."""
+    meta = load_meta()
+    if not meta.get("sets") or meta.get("project") != project_id(doc):
+        return False
+    lights = lights_info(doc) if lights is None else lights
+    if (meta.get("lights") or []) == lights:
+        return False
+    meta["lights"] = lights
+    meta["version"] = int(meta.get("version", 0)) + 1
+    env.write_json(os.path.join(env.live_dir(), "meta.json"), meta)
+    return True
+
+
 def _copy_texture_mappings(src, dst, xform):
     """Carry an object's texture mappings (box, planar, ...) to its copy, which was moved by `xform`.
     Without them a mapped texture falls back to the surface's own UVs: the wrong size and direction."""
@@ -544,7 +615,7 @@ def send_set(doc, name, to_earthpro=False):
         entry["dae"] = meta["sets"][name]["dae"]   # keep showing the last Earth Pro version
 
     meta.update(version=version, project=pid, name=project_name(doc), anchor=anchor_info(doc),
-                sent_at=entry["sent_at"])
+                sent_at=entry["sent_at"], lights=lights_info(doc))
     meta.setdefault("sets", {})[name] = entry
     if entry.get("dae") or any(s.get("dae") for s in meta["sets"].values()):
         master = _write_earthpro(live, meta)
