@@ -501,14 +501,16 @@ class Mesh(object):
         else:
             self.f += [[ids[0], ids[k], ids[k + 1]] for k in range(1, len(ids) - 1)]
 
-    def disk(self, c, r, n=12):
-        ring = [(c[0] + r * math.cos(2 * math.pi * k / n), c[1] + r * math.sin(2 * math.pi * k / n), c[2]) for k in range(n)]
+    def disk(self, c, r, n=12, z=None):
+        ring = [(c[0] + r * math.cos(2 * math.pi * k / n), c[1] + r * math.sin(2 * math.pi * k / n)) for k in range(n)]
+        ring = [(x, y, z(x, y) if z else c[2]) for x, y in ring]
         for k in range(n):
             self.add([c, ring[k], ring[(k + 1) % n]])
 
-    def strip(self, pts, w, lift=0.0):
-        """A road `w` metres wide along a polyline of (x, y, z) points, its cross-section level, with round ends and
-        round outer corners where it turns sharply. Faces point up."""
+    def strip(self, pts, w, lift=0.0, ground=None):
+        """A road `w` metres wide along a polyline of (x, y, z) points, with round ends and round outer corners where
+        it turns sharply. Its edges lie on `ground(x, y)` (lifted as its line is), or level with its line without one,
+        as a bridge's are. Faces point up."""
         pts = [p for k, p in enumerate(pts) if k == 0 or math.hypot(p[0] - pts[k - 1][0], p[1] - pts[k - 1][1]) > 1e-3]
         if len(pts) < 2:
             return
@@ -525,10 +527,12 @@ class Mesh(object):
             cos = tx * b[0] + ty * b[1]
             m = 1.0 / cos if cos > 0.5 else 1.0                # the mitre keeps the width; a sharp turn gets a round corner
             z = p[2] + lift
-            left.append((p[0] - ty * half * m, p[1] + tx * half * m, z))
-            right.append((p[0] + ty * half * m, p[1] - tx * half * m, z))
+            at = (lambda x, y: ground(x, y) + lift) if ground else (lambda x, y: z)
+            lx, ly, rx, ry = p[0] - ty * half * m, p[1] + tx * half * m, p[0] + ty * half * m, p[1] - tx * half * m
+            left.append((lx, ly, at(lx, ly)))
+            right.append((rx, ry, at(rx, ry)))
             if k in (0, len(pts) - 1) or cos <= 0.5:
-                self.disk((p[0], p[1], z), half)
+                self.disk((p[0], p[1], z), half, z=at)
         for k in range(len(pts) - 1):
             self.add([left[k], right[k], right[k + 1], left[k + 1]])
 
@@ -721,6 +725,12 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
         inside = [(lambda a, c: lambda p: (c[0] - a[0]) * (p[1] - a[1]) - (c[1] - a[1]) * (p[0] - a[0]))(corners[k], corners[(k + 1) % 4])
                   for k in range(4)]                       # the rectangle on the ground, counter-clockwise
         meshes = {}
+        per_lon = enu(lat0, lon0 + 1e-4, 0.0, lat0, lon0)[0] / 1e-4
+        per_lat = enu(lat0 + 1e-4, lon0, 0.0, lat0, lon0)[1] / 1e-4
+
+        def ground(x, y):                                  # the ground's height at a point east/north of the base point
+            la, lo = lat0 + y / per_lat, lon0 + x / per_lon
+            return enu(la, lo, rel(la, lo), lat0, lon0)[2]
         for r in ways:
             tags = r["tags"]
             kind = road_kind(tags)
@@ -751,7 +761,7 @@ def build(bounds, anchor, settings, terrain=True, buildings=True, roads=True, fe
                     if road_style != "lines":
                         if cls not in meshes:
                             meshes[cls] = Mesh(inside)
-                        meshes[cls].strip(pts, width, LIFT[cls])
+                        meshes[cls].strip(pts, width, LIFT[cls], None if straight else ground)
                 into.append(item)
         if meshes:
             out["road_meshes"] = {k: m.data() for k, m in meshes.items()}

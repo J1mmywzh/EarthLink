@@ -251,7 +251,9 @@ def test_road_outlines_and_surfaces_are_meshes_cut_to_the_rectangle():
     major=out['road_meshes']['major']['v'];ys=sorted({round(p[1],1) for p in major})
     road_y=out['roads'][[r['kind'] for r in out['roads']].index('primary')]['pts'][0][1]
     assert max(ys)-min(ys)==pytest.approx(13.2,abs=0.05) and (max(ys)+min(ys))/2==pytest.approx(road_y,abs=0.05),'as wide as the road, on its line'
-    centre=min(major,key=lambda p:abs(p[0]));assert centre[2]==pytest.approx(0.05*road_y+C.LIFT['major'],abs=0.05),'level across, at the height of its line, a little above the ground'
+    for q in major:assert q[2]==pytest.approx(0.05*q[1]+C.LIFT['major'],abs=0.05),'on the ground right across, a little above it'
+    over=[q for q in out['road_meshes']['minor']['v'] if 60<q[0]<72 and 50<q[1]<60]
+    assert over and all(abs(q[2]-(0.05*q[1]+C.LIFT['minor']))<0.3 for q in over),'the bridge stays up, right across, over the 20 m dip'
     outl=C.build(BOUNDS,ANCHOR,{},fetch=fetch,terrain=False,buildings=False,road_style='outlines')
     assert outl['road_meshes'].keys()==out['road_meshes'].keys(),'Rhino draws outlines around the same surfaces'
 
