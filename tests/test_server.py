@@ -173,3 +173,30 @@ def test_a_server_from_another_version_is_replaced(monkeypatch, tmp_path):
     assert S.start(new) == "started" and state["stopped"] == 1 and new in state["launched"]
     monkeypatch.setattr(S, "_ping", lambda full=False: {"earthlink": True, "viewer": new} if full else True)
     assert S.start(new) == "running" and state["stopped"] == 1
+
+
+def test_files_with_non_ascii_names_are_served_and_nothing_outside_the_folders_is(tmp_path, monkeypatch):
+    import threading, urllib.request, urllib.error, urllib.parse, socket, time as _t
+    from earthlink import env, server
+    data = tmp_path / "data"; live = data / "live"; (live / "set_方案 A").mkdir(parents=True)
+    (live / "set_方案 A" / "model.glb").write_bytes(b"glTF")
+    (live / "meta.json").write_text("{}")
+    (tmp_path / "secret.txt").write_text("no")
+    viewer = tmp_path / "viewer"; viewer.mkdir(); (viewer / "worker.js").write_text("//")
+    monkeypatch.setattr(env, "data_dir", lambda: str(data))
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    threading.Thread(target=server.serve, args=(str(viewer), port), daemon=True).start()
+    base = "http://127.0.0.1:%d" % port
+    for _ in range(50):
+        try:
+            urllib.request.urlopen(base + "/api/ping", timeout=1); break
+        except Exception:
+            _t.sleep(0.05)
+    r = urllib.request.urlopen(base + "/live/" + urllib.parse.quote("set_方案 A/model.glb"), timeout=2)
+    assert r.read() == b"glTF" and r.headers["Content-Type"] == "model/gltf-binary"
+    assert urllib.request.urlopen(base + "/viewer/worker.js", timeout=2).headers["Content-Type"].startswith("text/javascript")
+    for bad in ("/live/..%2F..%2Fsecret.txt", "/live/%2e%2e/%2e%2e/secret.txt", "/viewer/..%5C..%5Csecret.txt"):
+        try:
+            urllib.request.urlopen(base + bad, timeout=2); raise AssertionError("served " + bad)
+        except urllib.error.HTTPError as e:
+            assert e.code in (403, 404)

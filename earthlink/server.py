@@ -10,6 +10,7 @@ Rhino talks to it only through files in the EarthLink data folder:
 From Rhino use start()/stop()/running(); they launch or stop the process.
 """
 import os, sys, json, math, time, socket, subprocess, base64, threading
+import urllib.parse
 
 if __name__ == "__main__" and __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -153,45 +154,64 @@ def _queue_for_rhino(req):
 
 # ----------------------------------------------------------------- site context from open data (context.py)
 _CONTEXT = {"state": "idle"}
+_CONTEXT_LOCK = threading.Lock()
+
+
+def _context_set(job=None, **values):
+    """Change the import's status; with `job`, only while that job is still the current one."""
+    with _CONTEXT_LOCK:
+        if job is not None and _CONTEXT.get("job") != job:
+            return
+        _CONTEXT.update(values)
 
 
 def _context_start(data, build=None):
     """Fetch terrain, buildings and roads for a rectangle in a worker thread; Rhino adds the result on its next tick."""
-    if _CONTEXT.get("state") == "working":
-        return dict(_CONTEXT)
     meta = env.current_meta()
     try:
         bounds = context.check_bounds(data.get("bounds") or {})
         if not (meta.get("anchor") or {}).get("lat") and (meta.get("anchor") or {}).get("lat") != 0:
             raise context.ContextError("Place the model on the map first (SendToEarth).")
     except context.ContextError as e:
-        _CONTEXT.clear(); _CONTEXT.update(state="error", message=str(e))
-        return dict(_CONTEXT)
+        with _CONTEXT_LOCK:
+            if _CONTEXT.get("state") == "working":
+                return dict(_CONTEXT)
+            _CONTEXT.clear(); _CONTEXT.update(state="error", message=str(e))
+            return dict(_CONTEXT)
     job = "context_%d.json" % int(time.time() * 1000)
-    _CONTEXT.clear(); _CONTEXT.update(state="working", message="Starting", job=job, progress=0.02)
+    with _CONTEXT_LOCK:                                      # one import at a time, whoever asks (two tabs, a double click)
+        if _CONTEXT.get("state") == "working":
+            return dict(_CONTEXT)
+        fresh = {"state": "working", "message": "Starting", "job": job, "progress": 0.02}
+        _CONTEXT.clear(); _CONTEXT.update(fresh)
     want = {k: data.get(k, True) is not False for k in ("terrain", "buildings", "roads")}
 
     def run():
         try:
             out = (build or context.build)(bounds, meta.get("anchor"), env.load_settings(),
-                                           progress=lambda text, part=None: _CONTEXT.update(message=text, **({"progress": part} if part is not None else {})), **want)
+                                           progress=lambda text, part=None: _context_set(job, message=text, **({"progress": part} if part is not None else {})), **want)
             env.write_json(env.live_file(job), out)
             _queue_for_rhino({"type": "context", "file": job, "project": meta.get("project")})
-            _CONTEXT.update(state="sent", message="Rhino is adding it", counts=out["counts"], progress=0.9)
+            _context_set(job, state="sent", message="Rhino is adding it", counts=out["counts"], progress=0.9, sent_at=time.time())
         except context.ContextError as e:
-            _CONTEXT.update(state="error", message=str(e))
+            _context_set(job, state="error", message=str(e))
         except Exception as e:           # never leave the viewer waiting
-            _CONTEXT.update(state="error", message="The import failed: %s" % (e,))
+            _context_set(job, state="error", message="The import failed: %s" % (e,))
     threading.Thread(target=run, daemon=True).start()
-    return dict(_CONTEXT)
+    return fresh
 
 
 def _context_status():
-    if _CONTEXT.get("state") == "sent":      # Rhino reports back in a small file
-        done = env.read_json(env.live_file("context_result.json")) or {}
-        if done.get("file") == _CONTEXT.get("job"):
-            _CONTEXT.update(state="done" if done.get("ok") else "error", message=done.get("message", ""))
-    return dict(_CONTEXT)
+    with _CONTEXT_LOCK:
+        if _CONTEXT.get("state") == "sent":      # Rhino reports back in a small file
+            done = env.read_json(env.live_file("context_result.json")) or {}
+            if done.get("file") == _CONTEXT.get("job"):
+                _CONTEXT.update(state="done" if done.get("ok") else "error", message=done.get("message", ""))
+            elif time.time() - _CONTEXT.get("sent_at", time.time()) > 90:      # Rhino is closed, busy or on another file
+                _CONTEXT.update(state="error", message="Rhino did not answer. Run EarthLinkViewer in Rhino and import again.")
+        out = dict(_CONTEXT)
+    out.pop("sent_at", None)
+    return out
 
 
 def _rename_in_settings(old, new):
@@ -308,6 +328,11 @@ def serve(viewer_dir, port):
         def log_message(self, *a):
             pass
 
+        # Windows takes file types from the registry, where .js is sometimes text/plain: a worker script is refused then.
+        extensions_map = dict(SimpleHTTPRequestHandler.extensions_map, **{
+            ".js": "text/javascript", ".mjs": "text/javascript", ".json": "application/json", ".html": "text/html",
+            ".css": "text/css", ".glb": "model/gltf-binary", ".png": "image/png", ".svg": "image/svg+xml"})
+
         def end_headers(self):
             self.send_header("Cache-Control", "no-store")
             super().end_headers()
@@ -320,8 +345,11 @@ def serve(viewer_dir, port):
                 root, rel = viewer_dir, p[len("/viewer/"):]
             else:
                 return os.path.join(viewer_dir, "__nope__")
-            full = os.path.normpath(os.path.join(root, *[x for x in rel.split("/") if x not in ("", ".", "..")]))
-            if not full.startswith(os.path.normpath(root)):
+            # the browser sends names as %-escapes (a set called "方案 A" or "Schéma")
+            parts = [urllib.parse.unquote(x) for x in rel.split("/")]
+            full = os.path.normpath(os.path.join(root, *[x for x in parts if x not in ("", ".", "..") and "/" not in x and "\\" not in x and "\0" not in x]))
+            base = os.path.normpath(root)
+            if full != base and not full.startswith(base + os.sep):
                 return os.path.join(viewer_dir, "__nope__")
             return os.path.join(full, "index.html") if os.path.isdir(full) else full
 

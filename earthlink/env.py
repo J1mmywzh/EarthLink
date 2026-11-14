@@ -1,5 +1,5 @@
 """Paths, settings and OS helpers (macOS + Windows)."""
-import os, sys, json, subprocess, tempfile
+import os, sys, json, subprocess, tempfile, time
 from contextlib import contextmanager
 
 PLUGIN_ID = "6b3c2a8e-0f5d-4d7e-9a61-2e4c8b1d7f30"   # = "id" in EarthLink.rhproj (never change it)
@@ -72,12 +72,28 @@ def read_json(path, default=None):
         return default
 
 
+def _replace(tmp, path):
+    """os.replace, tried again for a moment: on Windows it fails while another process (the server, Rhino) has the
+    file open to read it, which happens many times a second."""
+    for attempt in range(8):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(0.025)
+
+
+_META = {"key": None, "data": {}}
+
+
 def write_json(path, data):
     fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
     try:
         with os.fdopen(fd, "w") as fh:
             json.dump(data, fh, indent=1, allow_nan=False)
-        os.replace(tmp, path)
+        _replace(tmp, path)
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
@@ -121,9 +137,16 @@ def put_view(model_name, view):
 
 
 def current_meta():
+    """live/meta.json, read again only when the file changed (the server asks many times a second)."""
+    path = os.path.join(live_dir(), "meta.json")
     try:
-        with open(os.path.join(live_dir(), "meta.json")) as fh:
-            return json.load(fh)
+        st = os.stat(path)
+        key = (path, st.st_mtime_ns, st.st_size)
+        if _META["key"] != key:
+            with open(path) as fh:
+                _META["data"] = json.load(fh)
+            _META["key"] = key
+        return json.loads(json.dumps(_META["data"]))      # callers change what they get
     except Exception:
         return {}
 
