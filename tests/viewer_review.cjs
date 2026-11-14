@@ -171,6 +171,21 @@ test("Rhino lights: a light brightens the faces turned to it, follows its set an
  assert.deepEqual(await p.evaluate(()=>Array.from(EL.lamps.data.slice(16,19))),[-99,-99,-50]);});
 
 // ---- beta.10: turning about the model, not about the ground far behind it
+test("Rhino lights: a point light and a spotlight cast the model's shadow, and the shadow goes when shadows are off",async t=>{const p=await pageFor(t);
+ await p.evaluate(()=>{EL.setProjection('perspective');EL.fit(0);const d=document.getElementById('date'),h=document.getElementById('hour');if(!document.getElementById('sunOn').checked)document.getElementById('sunOn').click();d.value='2026-06-21';h.value=60;h.dispatchEvent(new Event('input'));});await p.waitForTimeout(700);
+ const win=q=>p.evaluate(q=>{const w=Cesium.Matrix4.multiplyByPoint(EL.models.Main.modelMatrix,new Cesium.Cartesian3(...q),new Cesium.Cartesian3()),c=Cesium.SceneTransforms.worldToWindowCoordinates(EL.viewer.scene,w);return[c.x,c.y];},q);
+ const behind=await win([3,2.5,10]),open=await win([22,2.5,10]),sum=c=>c[0]+c[1]+c[2],read=async()=>[sum(await pixel(p,...behind)),sum(await pixel(p,...open))];   // two points on the low roof: the tower stands between the first and the light
+ const set=(light,n)=>p.evaluate(([light,n])=>{EL.LAMPS.shadows=n;EL.meta.lights=light?[light]:[];EL.applyLights();},[light,n]);
+ await set(null,2);const dark=await read();
+ const point={id:'p',kind:'point',pos:[25,50,25],dir:[0,0,-1],color:[1,0.9,0.7],intensity:1,att:[1,0,0]};
+ await set(point,0);const plain=await read();assert.ok(plain[0]>dark[0]+60&&plain[1]>dark[1]+60,'without shadows the light reaches both: '+JSON.stringify([dark,plain]));
+ await set(point,2);const cast=await read();assert.ok(Math.abs(cast[0]-dark[0])<12,'behind the tower the roof is as dark as with no light: '+JSON.stringify([dark,cast]));assert.ok(Math.abs(cast[1]-plain[1])<12,'in the open nothing changes: '+JSON.stringify([plain,cast]));
+ await set(point,0);assert.deepEqual(await read(),plain,'shadows off again: as before');
+ await set(point,2);await p.locator('#shadows').click();await p.locator('label.switch:has(#castShadows)').click();assert.deepEqual(await read(),plain,'Shadows switched off: the lamp casts none either');await p.locator('label.switch:has(#castShadows)').click();assert.ok(Math.abs((await read())[0]-dark[0])<12,'and on again');
+ const spot={id:'s',kind:'spot',pos:[25,50,25],dir:[-0.36,-0.86,-0.36],color:[1,0.9,0.7],intensity:1,att:[1,0,0],angle:0.7,exp:1};
+ await set(spot,0);const sPlain=await read();assert.ok(sPlain[0]>dark[0]+40&&sPlain[1]>dark[1]+40,'the spotlight reaches both without shadows: '+JSON.stringify([dark,sPlain]));
+ await set(spot,2);const sCast=await read();assert.ok(Math.abs(sCast[0]-dark[0])<12&&Math.abs(sCast[1]-sPlain[1])<12,"the spotlight's shadow: "+JSON.stringify([dark,sPlain,sCast]));
+ assert.equal(await p.evaluate(()=>!!document.querySelector('.cesium-widget-errorPanel')),false);});
 test('the pivot stays within the model while it is in the middle of the view, though the centre of the view passes over it',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
  await view(p,[15,-70,60],[15,10,34]);                    // the centre of the view clears the roof by 4 m and lands on the ground 190 m away
  const s=await p.evaluate(()=>{const b=Cesium.BoundingSphere.fromBoundingSpheres(Object.values(EL.models).filter(m=>m.show).map(m=>m.boundingSphere));return{far:Cesium.Cartesian3.distance(b.center,EL.viewer.camera.positionWC),r:b.radius};});
