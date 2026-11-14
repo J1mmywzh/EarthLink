@@ -213,6 +213,7 @@ test('after a camera flight (search, Fit, a saved view) two fingers only tilt: C
  const r=await p.evaluate(()=>{const c=EL.viewer.camera;return {d:Cesium.Cartesian3.distance(window.__P0,c.positionWC),pitch:c.pitch};});
  assert.ok(Math.abs(r.pitch-P0.pitch)>0.05,'it tilted: '+JSON.stringify([P0,r]));
  assert.ok(Math.abs(r.d-P0.d)<0.01*P0.d,'about the point it looked at, at the same distance (no zoom): '+P0.d.toFixed(2)+' -> '+r.d.toFixed(2));});
+const Cesium_heading=h=>((h*180/Math.PI+540)%360)-180;
 test('from space: black sky with stars, two fingers turn the globe, the planet never leaves the screen',async t=>{const p=await pageFor(t,null,'mac');
  const look=()=>p.evaluate(()=>{const C=Cesium,c=EL.viewer.camera,s=EL.viewer.scene,r=C.IntersectionTests.rayEllipsoid(new C.Ray(c.positionWC,c.directionWC),C.Ellipsoid.WGS84);
    return {h:C.Cartographic.fromCartesian(c.positionWC).height,pitch:C.Math.toDegrees(c.pitch),earth:!!r,bg:[s.backgroundColor.red,s.backgroundColor.green,s.backgroundColor.blue],stars:!!(s.skyBox&&s.skyBox.show)};});
@@ -224,7 +225,11 @@ test('from space: black sky with stars, two fingers turn the globe, the planet n
  const before=await p.evaluate(()=>Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC));await scroll(30,0,30);await p.waitForTimeout(900);
  const after=await p.evaluate(()=>Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC));
  assert.ok(Math.abs(after.longitude-before.longitude)>0.05&&Math.abs(after.height-before.height)<0.01*before.height,'sideways, the globe turns (the camera goes round it at the same height)');
+ assert.ok(Math.abs(after.latitude-before.latitude)<0.002,'along the parallel: the globe turns about its own axis, it does not slide diagonally');
+ assert.ok(Math.abs(Cesium_heading(await p.evaluate(()=>EL.viewer.camera.heading)))<0.5,'north stays up');
  assert.ok((await look()).earth,'still looking at the planet');
+ await scroll(0,-25,80);await p.waitForTimeout(1200);const pole=await p.evaluate(()=>[Cesium.Math.toDegrees(Cesium.Cartographic.fromCartesian(EL.viewer.camera.positionWC).latitude),EL.viewer.camera.heading]);
+ assert.ok(pole[0]<=85.01&&Math.abs(Cesium_heading(pole[1]))<0.5,'up and down along the meridian, never over the pole: '+pole);
  // tilted near the ground, then zoomed far out: the view straightens on the way up
  await p.evaluate(()=>{EL.viewer.camera.setView({destination:Cesium.Cartesian3.fromDegrees(-76.5,42.4,3000),orientation:{heading:0,pitch:Cesium.Math.toRadians(-10),roll:0}});});await p.waitForTimeout(400);
  await p.evaluate(()=>{for(let i=0;i<40;i++)EL.nav.zoomStep(1);});await p.waitForTimeout(4000);

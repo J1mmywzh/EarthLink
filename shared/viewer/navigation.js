@@ -433,7 +433,20 @@
       }
       setPose(pos, dir, up); keep();
     }
+    // From space a pan turns the globe about its own axis, as Apple Maps and Google Earth do: sideways along the
+    // parallels, up and down along the meridians, north stays where it is and the poles are not crossed. (Moving
+    // the camera along great circles instead, as near the ground, slid the globe diagonally and turned it.)
+    function globePan(fx, fy) {
+      const [, h] = size(), c = Cesium.Cartographic.fromCartesian(cam.positionWC); if (!c) return;
+      const R = E.maximumRadius, dist = Math.max(1, c.height), m = 2 * dist * Math.tan((cam.frustum.fovy || 0.8) / 2) / h * RATE.pan * sens();
+      const H = cam.heading, de = -fx * m * Math.cos(H) + fy * m * Math.sin(H), dn = fx * m * Math.sin(H) + fy * m * Math.cos(H);
+      const lat = clamp(c.latitude + dn / R, -Cesium.Math.toRadians(85), Cesium.Math.toRadians(85));
+      const lon = Cesium.Math.negativePiToPi(c.longitude + de / R);
+      pivot = null; held = null;
+      cam.setView({ destination: Cesium.Cartesian3.fromRadians(lon, lat, c.height), orientation: { heading: H, pitch: cam.pitch, roll: 0 } });
+    }
     function pan(fx, fy) {                                 // finger motion in CSS px; the scene follows it
+      if (!ortho() && !twoPoint() && height() > GLOBE.spin) return globePan(fx, fy);
       const [w, h] = size(), k = RATE.pan * sens();
       if (ortho()) {
         const m = cam.frustum.width / w * k, d = C3.add(C3.multiplyByScalar(cam.rightWC, -fx * m, v3()), C3.multiplyByScalar(cam.upWC, fy * m, v3()), v3());
