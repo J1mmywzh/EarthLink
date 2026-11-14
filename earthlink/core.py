@@ -287,25 +287,20 @@ def set_objects(doc, name):
 
 
 def signature(objs):
-    """Changes whenever a set's geometry or look changes: Rhino gives edited objects a new serial; the rest covers what
-    leaves the object as it is - another layer, a layer's colour or material, a material edited in place."""
-    looks, out = {}, []
+    """Changes whenever a set's geometry or look changes. Rhino gives an object with edited geometry a new serial; its
+    attributes are read for what leaves the serial as it is (material, colour, layer); the document's layers and
+    materials are read once for what leaves the object as it is: a layer's colour or material, a material edited in place."""
+    out = []
     for o in objs:
         a = o.Attributes                                    # fetched once: each access makes a new wrapper
-        key = (int(a.MaterialSource), a.MaterialIndex, int(a.ColorSource), a.LayerIndex)
-        look = looks.get(key)
-        if look is None:                                    # resolved once per combination, not per object
-            try:
-                m = o.GetRenderMaterial(True)
-                mat = (str(m.Id), int(m.RenderHash)) if m else ""
-            except Exception:
-                mat = ""
-            try:
-                layer = o.Document.Layers[a.LayerIndex].Color.ToArgb()
-            except Exception:
-                layer = 0
-            look = looks[key] = (key, mat, layer)
-        out.append((o.RuntimeSerialNumber, a.ObjectColor.ToArgb(), look))
+        out.append((o.RuntimeSerialNumber, a.MaterialIndex, a.LayerIndex, a.ObjectColor.ToArgb(), a.MaterialSource, a.ColorSource))
+    if objs:
+        try:
+            doc = objs[0].Document
+            out.append(tuple((L.Color.ToArgb(), str(L.RenderMaterial.Id) if L.RenderMaterial else "") for L in doc.Layers))
+            out.append(tuple((str(m.Id), int(m.RenderHash)) for m in doc.RenderMaterials))
+        except Exception:
+            pass
     return tuple(out)
 
 
