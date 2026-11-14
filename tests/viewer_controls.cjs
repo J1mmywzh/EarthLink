@@ -17,8 +17,8 @@ const assert=require('node:assert/strict');
  const dist=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i])),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),turn=d=>((d%360)+540)%360-180;
  await page.evaluate(()=>EL.fit(0));await settle();
 
- // No Navigation pop-up: Sensitivity is in the sidebar, the compass turns and tilts
- assert.equal(await page.locator('#navCard').count(),0);assert.equal(await page.getByRole('slider',{name:'Sensitivity',exact:true}).count(),1);
+ // Heading, tilt and sensitivity are in the compass pop-up; nothing about navigation in the sidebar
+ assert.equal(await page.locator('#navCard').count(),1);assert.equal(await page.locator('#sidebar #sens, #sidebar #navHelp').count(),0);
  assert.equal(await page.locator('#inputDevice').count(),0);
 
  // two fingers orbit about the centre of the view, level horizon
@@ -49,7 +49,7 @@ const assert=require('node:assert/strict');
  assert.ok(pv&&Math.abs(dist(b.pos,pv)/dist(a.pos,pv)-1)<0.01,'an orbit, not a zoom '+JSON.stringify({mouse:sw.mouse,pivot:!!sw.pivot,centre:!!a.centre,ratio:pv&&dist(b.pos,pv)/dist(a.pos,pv)}));}
 
  // Reset to north
- await page.getByRole('button',{name:'North up',exact:true}).click();
+ await page.getByRole('button',{name:'Compass',exact:true}).click();await page.getByRole('button',{name:'North up',exact:true}).click();
  await page.waitForFunction(()=>{const h=Cesium.Math.toDegrees(EL.viewer.camera.heading);return Math.abs(((h%360)+540)%360-180)<0.5;},null,{timeout:30000}).catch(()=>{});
  {const hh=(await cam()).heading;assert.ok(Math.abs(turn(hh))<0.5,'north '+hh);}
 
@@ -73,7 +73,8 @@ const assert=require('node:assert/strict');
  a=await cam();await wheel(Array(10).fill({x:6,shift:true}));await settle();b=await cam();assert.ok(Math.abs(b.width-a.width)<1e-6&&dist(a.pos,b.pos)>0.5,'Shift + two fingers still pans');
  a=b;await wheel(Array(10).fill({y:-6,ctrl:true}));await settle();b=await cam();assert.ok(b.width<a.width*0.9,'pinch zooms');
  const t0=await page.evaluate(()=>EL.nav.headingTilt().tilt);
- {const box=await page.getByRole('button',{name:'North up',exact:true}).boundingBox(),cx=box.x+box.width/2,cy=box.y+box.height/2;
+ await page.keyboard.press('Escape');await page.evaluate(()=>document.getElementById('navCard').classList.remove('open'));
+ {const box=await page.getByRole('button',{name:'Compass',exact:true}).boundingBox(),cx=box.x+box.width/2,cy=box.y+box.height/2;
   await page.mouse.move(cx,cy);await page.mouse.down();await page.mouse.move(cx,cy+(t0>30?60:-60),{steps:6});await page.mouse.up();await settle();}
  assert.ok(Math.abs(await page.evaluate(()=>EL.nav.headingTilt().tilt)-t0)>10,'dragging the compass tilts, also in Parallel');
  await page.getByRole('button',{name:'Perspective',exact:true}).click();

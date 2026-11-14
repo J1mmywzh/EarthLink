@@ -2126,6 +2126,7 @@
   const setSens = v => { if (!(v >= 25 && v <= 200)) return; store.set("sensitivity", Math.round(v)); };
   $("sens").oninput = () => { setSens(+$("sens").value); navLabels(); }; $("sensN").onchange = () => { setSens(+$("sensN").value); navLabels(); };
   $("northUp").onclick = north;
+  for (const id of ["lensMm", "headingN", "tiltN", "sensN", "hourT"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); });   // Enter finishes typing: the field follows the slider again
   let labelsAt = 0;
   scene.postRender.addEventListener(() => { const now = performance.now(); if ($("navCard").classList.contains("open") && now - labelsAt > 150) { labelsAt = now; navLabels(); } });
   (() => {
