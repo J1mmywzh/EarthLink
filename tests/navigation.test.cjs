@@ -53,13 +53,14 @@ test('a mouse wheel is told from a trackpad by its legacy delta (Chrome, Safari)
 });
 test('the pivot is what is at the centre of the view; at the horizon, the model or a limit',()=>{
   const P=N.pivotDistance;
-  assert.equal(P(95,100,400),95,'the surface at the centre');
-  assert.equal(P(250,100,400),250,'ground behind the model but near: still what you look at');
-  assert.equal(P(1700,100,400),100,'a shallow view past the model: the model depth');
-  assert.equal(P(null,100,400),100,'sky: the model depth');
-  assert.equal(P(12,100,400),12,'a detail closer than the model');
-  assert.equal(P(5000,null,480),480,'no model in view: limited');
-  assert.equal(P(null,null,400),null);
+  assert.equal(P(95,null,100),95,'the surface at the centre, near the model');
+  assert.equal(P(1700,null,100),100,'a shallow view past the model: the model depth');
+  assert.equal(P(null,null,100),100,'sky: the model depth');
+  assert.equal(P(12,null,100),12,'a detail closer than the model');
+  assert.equal(P(1700,150,null),150,'no model in view: the distance last focused on');
+  assert.equal(P(400,150,null),400);assert.equal(P(5000,null,null,480),480,'nothing known: limited');
+  assert.equal(P(41000,150,null,41000),150,'unloaded map far away never becomes the turning point');
+  assert.equal(P(null,null,null),null);
 });
 test('a pinch has to be meant: the small pinches of scrolling or resting fingers are dropped, a real pinch zooms at once',()=>{
   const l=new N.WheelLatch();let t=0;

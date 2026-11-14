@@ -155,13 +155,17 @@
     get busy() { return Object.values(this.v).some(Boolean); }
   }
 
-  /* How far along the centre of the view the pivot is. pick: distance to the surface there (null: none).
-     focus: depth of the visible model when it is in view (null: none). limit: the farthest surface that still
-     counts as what you are looking at (a shallow view reaches the horizon). */
-  function pivotDistance(pick, focus, limit = Infinity) {
-    if (pick != null && pick <= limit) return pick;
-    if (focus != null) return focus;
-    return pick != null ? limit : null;
+  /* How far along the centre of the view the pivot is (Rhino's camera target: it keeps its depth, and is put back
+     "where the objects are" after a pan or a zoom). pick: distance to the surface there (null: none).
+     target: the distance last turned around or zoomed to (null: unknown). focus: depth of the visible model when
+     it is in view (null: none). limit: farthest pivot accepted when nothing else is known. A surface far behind
+     what you are looking at (a shallow view, the horizon, map detail that has not loaded yet) is not what you are
+     turning around; anything nearer is. */
+  function pivotDistance(pick, target, focus, limit = Infinity) {
+    const ref = focus ?? target;
+    if (pick != null && pick <= (ref != null ? 4 * ref : limit)) return pick;
+    if (ref != null) return ref;
+    return pick != null ? Math.min(pick, limit) : null;
   }
 
   /* The ground rule, in heights above the ellipsoid. `top` is the map's upper surface at the camera's position and
@@ -226,6 +230,7 @@
     const v3 = () => new C3();
     let pivot = null, anchor = null, pointer = null, hold = 0, holdStart = 0, last = 0, raf = 0, anim = null;
     let grounded_ = false;                               // this gesture's tilt has reached the ground
+    let target = null, mine = null;                      // the distance last focused on; the pose this module set last
     let held = null, groundAt = null, rec = null;        // the pivot kept between rotations; last ground check; input recording
     const floor = new Floor();
     const ssc = scene.screenSpaceCameraController;
@@ -280,8 +285,13 @@
         const span = f ? 3 * Math.max(f.radius, cam.frustum.width) : Infinity;
         d = dp != null && (depth == null || Math.abs(dp - depth) <= span) ? dp : depth ?? dp;
       } else {
-        d = pivotDistance(dp, depth, Math.max(300, 8 * Math.max(0, height() - (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0))));
+        // The ground under the camera where it is known: a far hit on map detail that has not loaded yet lies deep
+        // below the real ground and must not stretch the limit.
+        const under = floor.known && floor.top != null ? floor.top : (p ? Cesium.Cartographic.fromCartesian(p)?.height ?? 0 : 0);
+        if (!mine || C3.distance(mine, cam.positionWC) > 0.01) target = null;   // something else moved the camera (a flight, a saved view): focus anew
+        d = pivotDistance(dp, target, depth, Math.max(300, 8 * Math.max(0, height() - under)));
         if (within) d = clamp(d ?? depth, within[0], within[1]);
+        if (d != null) target = d;
       }
       if (d == null) d = Math.max(50, height() * 2);
       return Cesium.Ray.getPoint(ray, d, v3());
@@ -318,6 +328,7 @@
         cam.frustum._elShift = Math.tan(pitch);
         cam.setView({ destination: pos, orientation: { direction: C3.normalize(flat, flat), up: n } });
       } else cam.setView({ destination: pos, orientation: { direction: dir, up: level(dir, up) } });
+      mine = cam.positionWC.clone();
     }
     // The ground rule (Floor): one ray down onto the map's upper surface where the camera is going.
     function grounded(pos) {
@@ -418,7 +429,7 @@
       const pitch = Math.asin(clamp(C3.dot(dir, n), -1, 1)), next = clamp(pitch + Cesium.Math.toRadians(dt), Math.min(pitch, -lim), Math.max(pitch, lim));
       const right = C3.normalize(C3.cross(dir, n, v3()), v3());
       dir = rotate(Cesium.Quaternion.fromAxisAngle(right, next - pitch), dir);
-      pivot = null; held = null;                           // the view turned where it stands: the old turning point is no longer ahead
+      pivot = null; held = null; target = null;            // the view turned where it stands: the old turning point is no longer ahead
       setPose(P.pos, dir, P.up);
     }
     function zoom(logFactor) {                             // > 0 zooms out
@@ -441,6 +452,8 @@
       if (Cesium.Cartographic.fromCartesian(pos)?.height > 4e7) return;
       pos = grounded(pos).pos;
       cam.setView({ destination: pos, orientation: { direction: cam.directionWC, up: cam.upWC } });   // no re-levelling: the image never turns
+      if (target != null) target = clamp(target * nd / (d || 1), 0.4, 4e7);   // the focus comes closer with the camera
+      mine = cam.positionWC.clone();
     }
 
     // ---- frame loop: ease pending motion, continuous zoom, short animations
