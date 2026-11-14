@@ -382,7 +382,10 @@
         const elev = Math.asin(clamp(C3.dot(off, n) / (d || 1), -1, 1));
         // from straight down to straight up: below the pivot is fine (looking up at a facade), as in Rhino
         const lim = twoPoint() ? TWO_POINT_MAX : Cesium.Math.toRadians(89.9);
-        const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, -lim), Math.max(elev, lim));
+        // Without a map under the camera (not loaded yet, or none) nothing would stop it going under the ground:
+        // it then comes down no lower than what it turns around.
+        const low = floor.known ? -lim : 0;
+        const next = clamp(elev - Cesium.Math.toRadians(dt), Math.min(elev, low), Math.max(elev, lim));
         if (next > elev) grounded_ = false;                // tilting up again
         if (Math.abs(next - elev) > 1e-9 && !(next < elev && grounded_)) {
           const right = C3.normalize(C3.cross(dir, up, v3()), v3());
