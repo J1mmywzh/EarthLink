@@ -77,6 +77,6 @@ def test_map_keys_are_copied_once_and_never_overwritten(tmp_path):
 def test_the_launchers_compile():
     import build_dev
     for title, command, _ in build_dev.COMMANDS:
-        compile(build_dev.LAUNCHER % {"title": title, "what": "x", "command": command, "repo": build_dev.REPO}, title, "exec")
+        compile(build_dev.LAUNCHER % {"title": title, "what": "x", "command": command, "repo": build_dev.REPO, "first": build_dev.FIRST_BRANCH}, title, "exec")
     assert len({c[2] for c in build_dev.COMMANDS}) == len(build_dev.COMMANDS)
     assert all(t.startswith("Dev") for t, _, _ in build_dev.COMMANDS)

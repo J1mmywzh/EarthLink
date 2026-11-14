@@ -18,6 +18,7 @@ from build import RHINOCODE  # noqa: E402
 
 VERSION = "1.0.0"
 REPO = "https://github.com/J1mmywzh/EarthLink.git"
+FIRST_BRANCH = "beta13"     # what a new checkout starts on (it must contain tools/devloader.py)
 COMMANDS = [   # (Dev command, released command it runs, id)
     ("DevSendToEarth", "SendToEarth", "a1e5c0d2-3b4f-4a6e-8c7d-1f2e3a4b5c61"),
     ("DevEarthLinkViewer", "EarthLinkViewer", "b2f6d1e3-4c5a-4b7f-9d8e-2a3f4b5c6d72"),
@@ -34,6 +35,7 @@ import scriptcontext as sc
 
 COMMAND = %(command)r
 REPO = %(repo)r
+FIRST = %(first)r
 SRC = os.environ.get("EARTHLINK_DEV_SRC") or os.path.join(os.path.expanduser("~"), "EarthLinkDev")
 
 
@@ -47,7 +49,7 @@ def git(*args, cwd=None):
 
 def branch():
     p = os.path.join(SRC, ".devbranch")
-    return open(p).read().strip() if os.path.isfile(p) else "main"
+    return open(p).read().strip() if os.path.isfile(p) else FIRST
 
 
 def checkout(name):
@@ -67,7 +69,7 @@ def ensure():
         return True
     Rhino.RhinoApp.WriteLine("EarthLink Dev: getting the source into %%s ..." %% SRC)
     git("clone", "--quiet", REPO, SRC, cwd=os.path.dirname(SRC))
-    Rhino.RhinoApp.WriteLine("EarthLink Dev: at " + checkout("main"))
+    Rhino.RhinoApp.WriteLine("EarthLink Dev: at " + checkout(FIRST))
     return True
 
 
@@ -109,7 +111,7 @@ def main():
     for title, command, cid in COMMANDS:
         what = "runs %s" % command if command else "moves the source checkout to a branch of the repository"
         with open(os.path.join(tmp, "commands", title + ".py"), "w", encoding="utf-8") as fh:
-            fh.write(LAUNCHER % {"title": title, "what": what, "command": command, "repo": REPO})
+            fh.write(LAUNCHER % {"title": title, "what": what, "command": command, "repo": REPO, "first": FIRST_BRANCH})
         code = {"id": cid, "language": {"id": "*.*.python", "version": "3.*.*"}, "title": title, "uri": "commands/%s.py" % title}
         if images.get(command or "EarthLinkSettings"):
             code["image"] = images[command or "EarthLinkSettings"]
