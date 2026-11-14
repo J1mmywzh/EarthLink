@@ -200,3 +200,14 @@ def test_files_with_non_ascii_names_are_served_and_nothing_outside_the_folders_i
             urllib.request.urlopen(base + bad, timeout=2); raise AssertionError("served " + bad)
         except urllib.error.HTTPError as e:
             assert e.code in (403, 404)
+
+
+def test_the_server_knows_whether_rhino_is_running(tmp_path, monkeypatch):
+    from earthlink import env, server
+    data = tmp_path / "data"; (data / "live").mkdir(parents=True)
+    monkeypatch.setattr(env, "data_dir", lambda: str(data))
+    assert server._rhino_alive() is False, "no heartbeat yet"
+    env.write_json(env.live_file("rhino.json"), {"t": time.time()})
+    assert server._rhino_alive() is True
+    old = time.time() - 30; os.utime(env.live_file("rhino.json"), (old, old))
+    assert server._rhino_alive() is False, "a heartbeat older than six seconds means Rhino stopped"

@@ -17,5 +17,8 @@ else:
             sync.send_sets(doc, reason="this file's sets, as it was left")
     except Exception as ex:
         Rhino.RhinoApp.WriteLine("EarthLinkViewer: could not send this file's sets: %s" % ex)
-    env.open_url(server.url())
-    Rhino.RhinoApp.WriteLine("EarthLinkViewer: %s" % server.url())
+    if st != "started" and server.viewer_open():
+        Rhino.RhinoApp.WriteLine("EarthLinkViewer: the viewer is already open in your browser (%s)." % server.url())
+    else:
+        env.open_url(server.url())
+        Rhino.RhinoApp.WriteLine("EarthLinkViewer: %s" % server.url())

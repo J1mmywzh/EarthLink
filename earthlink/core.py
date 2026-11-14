@@ -254,11 +254,11 @@ def publish_anchor(doc):
 
 
 def set_objects(doc, name):
-    """Live RhinoObjects of a set (objects that were deleted are skipped)."""
+    """Live RhinoObjects of a set (deleted objects, hidden objects and objects on layers that are off are skipped)."""
     out = []
     for sid in get_sets(doc).get(name, {}).get("ids", []):
         o = doc.Objects.FindId(System.Guid(sid))
-        if o is not None and not o.IsDeleted:
+        if o is not None and not o.IsDeleted and o.Visible:      # hidden objects and objects on layers that are off stay out
             out.append(o)
     return out
 

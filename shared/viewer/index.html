@@ -55,7 +55,7 @@
   #gkeyBox { margin-top: 8px; font-size: 12.5px; color: var(--fg2); } #gkeyBox input { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
   #mapLink { margin-left: auto; white-space: nowrap; }
   #dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); flex: none; margin-top: 2px; }
-  #dot.live { background: var(--green); } #dot.flash { background: var(--orange); }
+  #dot.live { background: var(--green); } #dot.flash, #dot.wait { background: var(--orange); }
   #sideBody { overflow-y: auto; padding: 0 10px 12px; flex: 1; }
   .group { margin-top: 14px; }
   .ghead { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 6px; font-size: 13px; font-weight: 650; gap: 6px; }
@@ -485,6 +485,8 @@
       $("keys").classList.add("open"); setTimeout(() => $("itok").focus(), 50);
     });
   }
+  let serverUp = false, rhinoUp = false;
+  function showLink() { $("dot").className = !RHINO || (serverUp && rhinoUp) ? "live" : serverUp ? "wait" : ""; $("dot").title = !RHINO ? "Shared copy" : serverUp && rhinoUp ? "Linked to Rhino" : "Rhino is not linked: run EarthLinkViewer in Rhino"; }
   let cfg = await api("/api/config");
   if (!cfg.google_key && !cfg.ion_token && !store.get("skipKeys")) cfg = (await askKeys()) || {};
   if (cfg.ion_token) Cesium.Ion.defaultAccessToken = cfg.ion_token;
@@ -1306,7 +1308,7 @@
       if (left) applyView(left, 0); else if (!restoreCamera() || projectChanged) flyTo(0);
       sampleGround(false); refreshViews();
     }
-    setTimeout(() => {if(generation===modelGeneration)$("dot").className = "live";}, 400);
+    setTimeout(() => { if (generation === modelGeneration) showLink(); }, 400);
   }
   function renderSets() {
     const names = meta ? Object.keys(meta.sets || {}) : [];
@@ -2459,8 +2461,10 @@
     });
     es.addEventListener("sun", e => { const j = JSON.parse(e.data); if (j.source === "rhino" && S.sync_sun !== false) sunFromUtc(j.utc,j.enabled); });
     es.addEventListener("pick", e => { pickReq = JSON.parse(e.data) || {}; if (pickReq.project) openSite(true); });
-    es.onopen = () => { $("dot").className = "live"; $("dot").title = "Linked to Rhino"; };
-    es.onerror = () => { $("dot").className = ""; $("dot").title = "Rhino is not linked: run EarthLinkViewer in Rhino"; };
+    // The dot: green while Rhino's side is running, amber when only the viewer's server answers, grey when nothing does.
+    es.addEventListener("rhino", e => { rhinoUp = !!JSON.parse(e.data).alive; showLink(); });
+    es.onopen = () => { serverUp = true; showLink(); };
+    es.onerror = () => { serverUp = false; showLink(); };
     if (pickReq && pickReq.project) openSite(true);
     else if (!(await api("/api/meta")).sets) refreshViews();
   } else {

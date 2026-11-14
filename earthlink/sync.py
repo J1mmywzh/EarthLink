@@ -374,6 +374,12 @@ def _tick(sender, e):
                 push_camera(force=not _S["was_linked"])
             _S["was_linked"] = linked
             now = time.time()
+            if now - _S.get("beat", 0.0) > 1.0:              # the viewer shows whether Rhino's side is running
+                _S["beat"] = now
+                try:
+                    env.write_json(env.live_file("rhino.json"), {"t": now, "project": core.project_id(doc)})
+                except Exception:
+                    pass
             if now - _S["slow"] > 0.5:
                 _S["slow"] = now
                 _watch_anchor(doc)

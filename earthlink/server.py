@@ -32,6 +32,18 @@ def port_in_use(port=None):
         return False
 
 
+def _rhino_alive():
+    """True while Rhino's sync timer is running: it writes live/rhino.json every second."""
+    t = _mtime(env.live_file("rhino.json"))
+    return bool(t) and time.time() - t < 6.0
+
+
+def viewer_open():
+    """True when a viewer page is connected to the running server (so no new tab is needed)."""
+    info = _ping(full=True)
+    return bool(info and info.get("clients"))
+
+
 def _ping(full=False):
     try:
         import urllib.request
@@ -383,7 +395,8 @@ def serve(viewer_dir, port):
                 query = self.path[1:] if self.path.startswith("/?") else ""   # keep options such as ?controls=mac
                 self.send_response(302); self.send_header("Location", "/viewer/" + query); self.end_headers()
             elif path == "/api/ping":
-                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir, "version": earthlink.__version__})
+                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir, "version": earthlink.__version__,
+                            "clients": state.get("clients", 0), "rhino": _rhino_alive()})
             elif path == "/api/config":
                 s = env.load_settings()
                 self._json({"ion_token": s.get("ion_token", ""), "google_key": s.get("google_key", "")})
@@ -488,6 +501,8 @@ def serve(viewer_dir, port):
             self.end_headers()
             meta, cam = os.path.join(live, "meta.json"), env.camera_path()
             last_m, last_c, last_v, first_v, beat = None, _mtime(cam), None, True, time.time()
+            rhino, rhino_at = None, 0.0
+            state["clients"] = state.get("clients", 0) + 1          # an open viewer page: no second tab is opened
             watch = {"sun": _mtime(env.live_file("sun.json")), "pick": "unset"}
             try:
                 while state["alive"]:
@@ -511,12 +526,20 @@ def serve(viewer_dir, port):
                         if not first_v:
                             self.wfile.write(b"event: views\ndata: {}\n\n"); self.wfile.flush()
                         last_v, first_v = v, False
+                    if time.time() - rhino_at > 1.0:              # is Rhino's side running? (it writes a heartbeat every second)
+                        rhino_at = time.time()
+                        alive = _rhino_alive()
+                        if alive != rhino:
+                            rhino = alive
+                            self.wfile.write(("event: rhino\ndata: %s\n\n" % json.dumps({"alive": alive})).encode()); self.wfile.flush()
                     if time.time() - beat > 15:
                         self.wfile.write(b": keepalive\n\n"); self.wfile.flush()
                         beat = time.time()
                     time.sleep(0.05)
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
+            finally:
+                state["clients"] = max(0, state.get("clients", 1) - 1)
 
     httpd = ThreadingHTTPServer(("127.0.0.1", port), H)
     httpd.daemon_threads = True

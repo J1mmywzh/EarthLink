@@ -31,7 +31,7 @@ def _open_viewer(doc, first_time_msg=None):
         Rhino.RhinoApp.WriteLine("SendToEarth: port %d is used by another program - viewer not started." % env.PORT)
         return False
     sync.start(doc)
-    if st == "started" or first_time_msg:
+    if st == "started" or first_time_msg or not server.viewer_open():     # the tab was closed: open it again
         env.open_url(server.url())
     return True
 
