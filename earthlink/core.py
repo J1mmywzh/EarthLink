@@ -19,7 +19,7 @@ from earthlink import env, collada, geometry
 KEEP_VERSIONS = 3
 SECTION = "EarthLink"
 DEFAULT_SET = "Main"
-EXPORT_FORMAT = 2     # 2: see-through materials and texture mappings (0.2.0-beta.10); older exports are sent once more
+EXPORT_FORMAT = 2     # 2: see-through materials, texture mappings, materials without a render material (0.2.0-beta.10); older exports are sent once more
 
 
 # ----------------------------------------------------------------- anchor / frames
@@ -252,6 +252,19 @@ def _effective_material(obj, parent_obj=None):
         return obj.RenderMaterial
 
 
+def _legacy_material(obj, parent_obj=None):
+    """The object's material from the document's material table, for objects that have no render material
+    (materials made by scripts, Grasshopper bakes and some importers). Rhino's Rendered mode draws these."""
+    src = obj.Attributes.MaterialSource
+    if parent_obj is not None and src == Rhino.DocObjects.ObjectMaterialSource.MaterialFromParent:
+        obj = parent_obj
+    try:
+        m = obj.GetMaterial(True)
+        return m if m is not None and m.Index >= 0 else None
+    except Exception:
+        return None
+
+
 def _display_color(doc, obj, parent_obj=None):
     a = obj.Attributes
     if a.ColorSource == Rhino.DocObjects.ObjectColorSource.ColorFromObject:
@@ -453,6 +466,19 @@ def _copy_texture_mappings(src, dst, xform):
         pass
 
 
+def _legacy_copy(tmp, material, mats):
+    """A render material made from a material-table material, added to the export document once."""
+    key = "legacy:%d" % material.Index
+    if key not in mats:
+        try:
+            c = Rhino.Render.RenderMaterial.CreateBasicMaterial(material, tmp)
+            tmp.RenderMaterials.Add(c)
+            mats[key] = c
+        except Exception:
+            mats[key] = None
+    return mats[key]
+
+
 def _export_glb(doc, objs, path):
     """Write `objs`, re-oriented to east/north/up, to a GLB. Returns their bounding box (model units, ENU)."""
     xf = enu_transform(doc)
@@ -474,6 +500,7 @@ def _export_glb(doc, objs, path):
             g.Transform(xf)
             attrs = Rhino.DocObjects.ObjectAttributes()
             rm = _effective_material(src_obj, parent)
+            legacy = _legacy_material(src_obj, parent) if rm is None else None
             if rm is not None:
                 key = str(rm.Id)
                 if key not in mats:
@@ -481,6 +508,8 @@ def _export_glb(doc, objs, path):
                     tmp.RenderMaterials.Add(c)
                     mats[key] = c
                 attrs.RenderMaterial = mats[key]
+            elif legacy is not None and _legacy_copy(tmp, legacy, mats) is not None:
+                attrs.RenderMaterial = mats["legacy:%d" % legacy.Index]
             else:
                 attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
                 attrs.ObjectColor = _display_color(doc, src_obj, parent)
