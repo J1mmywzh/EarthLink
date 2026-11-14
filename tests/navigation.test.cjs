@@ -61,15 +61,23 @@ test('the pivot is what is at the centre of the view; at the horizon, the model 
   assert.equal(P(5000,null,480),480,'no model in view: limited');
   assert.equal(P(null,null,400),null);
 });
-test('a pinch that sneaks into a two-finger rotation is ignored; a real pinch takes over',()=>{
+test('a pinch has to be meant: the small pinches of scrolling or resting fingers are dropped, a real pinch zooms at once',()=>{
   const l=new N.WheelLatch();let t=0;
   assert.equal(l.read(pad(0,6),'perspective',t).mode,'orbit');
-  for(let i=0;i<10;i++){t+=16;assert.equal(l.read(pad(1,5),'perspective',t).mode,'orbit');
-    t+=1;const z=l.read(pad(0,-2,{ctrlKey:true}),'perspective',t);assert.equal(z.skip,true,'stray pinch skipped');}
-  for(let i=0;i<5;i++){t+=16;l.read(pad(0,-3,{ctrlKey:true}),'perspective',t);}        // 80 ms of pinch only: still the rotation's tail
-  for(let i=0;i<5;i++){t+=16;l.read(pad(0,-3,{ctrlKey:true}),'perspective',t);}
-  const z=l.read(pad(0,-3,{ctrlKey:true}),'perspective',t+16);assert.equal(z.mode,'zoom');assert.ok(!z.skip,'the pinch took over');
-  const s=l.read(pad(3,0),'perspective',t+20);assert.equal(s.skip,true,'and a stray scroll during the pinch is skipped');
+  for(let i=0;i<40;i++){t+=16;assert.equal(l.read(pad(1,5),'perspective',t).mode,'orbit');           // two fingers tilting, drifting apart a little
+    t+=1;assert.equal(l.read(pad(0,-0.5,{ctrlKey:true}),'perspective',t).skip,true,'stray pinch dropped while scrolling');}
+  for(let i=0;i<30;i++){t+=16;assert.equal(l.read(pad(0,i%2?0.15:-0.15,{ctrlKey:true}),'perspective',t).skip,true,'fingers resting on the pad: their drift is dropped');}
+  t+=16;assert.equal(l.read(pad(0,4),'perspective',t).mode,'orbit','and the rotation carries on');
+  t+=400;                                                                                               // fingers lifted
+  let z=l.read(pad(0,-2,{ctrlKey:true}),'perspective',t);assert.equal(z.skip,true,'the first 3 % of a pinch decide that it is one');
+  t+=16;z=l.read(pad(0,-2,{ctrlKey:true}),'perspective',t);assert.equal(z.mode,'zoom');assert.ok(!z.skip&&z.start,'the pinch zooms');
+  t+=16;assert.equal(l.read(pad(3,0),'perspective',t).skip,true,'a stray scroll during the pinch is dropped');
+  t+=16;assert.equal(l.read(pad(0,-2,{ctrlKey:true}),'perspective',t).mode,'zoom');
+  t+=200;assert.equal(l.read(pad(0,5),'perspective',t).mode,'orbit','scrolling takes over once the pinch is quiet');
+  for(let i=0;i<4;i++){t+=16;l.read(pad(0,5),'perspective',t);}
+  let took=false;for(let i=0;i<6&&!took;i++){t+=16;took=!l.read(pad(0,-6,{ctrlKey:true}),'perspective',t).skip;}   // a firm pinch right after a flick, its glide still running
+  assert.ok(took,'a firm pinch takes over from a scroll that is still running');
+  assert.equal(new N.WheelLatch().read({deltaX:0,deltaY:-100,deltaMode:0,ctrlKey:true,shiftKey:false},'perspective',0).mode,'zoom','Ctrl + mouse wheel zooms from the first notch');
 });
 test('the device is corrected when the first event misleads, and remembered',()=>{
   const ev=(deltaY,wheelDeltaY,deltaX=0)=>({deltaX,deltaY,deltaMode:0,wheelDeltaY,ctrlKey:false,shiftKey:false});

@@ -169,3 +169,13 @@ test("Rhino lights: a light brightens the faces turned to it, follows its set an
  assert.equal(await p.evaluate(()=>EL.lamps.n),3,'spot, rectangular and directional lights are all drawn');
  const kinds=await p.evaluate(()=>[0,1,2].map(i=>EL.lamps.data[i*16+3]));assert.deepEqual(kinds,[1,0,2],'a rectangular light is a point at its centre, as in Rhino');
  assert.deepEqual(await p.evaluate(()=>Array.from(EL.lamps.data.slice(16,19))),[-99,-99,-50]);});
+
+// ---- beta.10: turning about the model, not about the ground far behind it
+test('the pivot stays within the model while it is in the middle of the view, though the centre of the view passes over it',async t=>{const p=await pageFor(t,null,'mac');await p.evaluate(()=>EL.setProjection('perspective'));
+ await view(p,[15,-70,60],[15,10,34]);                    // the centre of the view clears the roof by 4 m and lands on the ground 190 m away
+ const s=await p.evaluate(()=>{const b=Cesium.BoundingSphere.fromBoundingSpheres(Object.values(EL.models).filter(m=>m.show).map(m=>m.boundingSphere));return{far:Cesium.Cartesian3.distance(b.center,EL.viewer.camera.positionWC),r:b.radius};});
+ const size=()=>p.evaluate(()=>{const s=EL.viewer.scene,M=EL.models.Main.modelMatrix,W=a=>s.cartesianToCanvasCoordinates(Cesium.Matrix4.multiplyByPoint(M,new Cesium.Cartesian3(...a),new Cesium.Cartesian3()));const a=W([0,0,0]),b=W([30,0,0]);return Math.hypot(a.x-b.x,a.y-b.y);});
+ const before=await size(),r=await swipe(p,0,-4,14),after=await size();
+ assert.ok(r.pivot<=s.far+s.r+1&&r.pivot>=s.far-s.r-1,'the pivot is within the model: '+JSON.stringify({pivot:r.pivot,...s}));
+ assert.ok(Math.abs(after/before-1)<0.12,'tilting does not make the model rush away or closer: '+(after/before).toFixed(3));
+ const again=await swipe(p,3,0,10);assert.ok(Math.abs(again.pivot-r.pivot)<Math.max(1,0.02*r.pivot),'and the next rotation turns about the same point');});
