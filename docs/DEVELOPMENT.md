@@ -35,6 +35,23 @@ This command uploads externally and requires Yak authentication. Production publ
 
 0.1.0 is the initial public preview number. Earlier internal development builds used 0.2.0; they are not part of a published upgrade sequence. If a higher EarthLink version has already been published to Yak, check ownership/version history before using a lower public number.
 
+## Trying changes in Rhino: EarthLink Dev
+
+EarthLink Dev is a second, separate plugin for trying changes before a release, beside the released EarthLink.
+
+- Build it once on a computer with Rhino 8 running: `python3 tools/build_dev.py`, then drag `build_dev/EarthLinkDev.rhp`
+  into a Rhino window. It rarely needs rebuilding: its commands are launchers.
+- Commands: `DevSendToEarth`, `DevEarthLinkViewer`, `DevEarthLinkSync`, `DevEarthLinkSettings` (the released commands,
+  run from the source) and `DevEarthLinkUpdate` (moves the source to a branch: type its name, e.g. `beta13`).
+- The source lives in `~/EarthLinkDev` (set `EARTHLINK_DEV_SRC` to use another checkout); it is cloned from GitHub on
+  first use. After an update, or after editing files there, the next Dev command loads the new code: no restart.
+- It is its own plugin in everything EarthLink keeps: viewer on port 8766, data in `EarthLink Dev` (settings, views,
+  live files; the map keys are copied once from the released settings), its own section in the .3dm (`EarthLinkDev`)
+  and its own sync timer. Shared, because Rhino holds them: the EarthAnchorPoint, named views and the Sun. Placing a
+  file with DevSendToEarth therefore sets the file's site for the released EarthLink too.
+- To switch it off, untick EarthLinkDev in Rhino's Options > Plug-ins (after a restart its commands are gone), or
+  uninstall it there. `tools/devloader.py` holds the rules that keep the copy apart; `tests/test_devloader.py` checks them.
+
 ## Working across computers
 
 Use a GitHub clone on each computer. Pull before editing; review, commit, and push after a completed change; pull on the other computer before continuing. GitHub Desktop provides these actions without Terminal. Git transfers committed source, not unsaved edits, ignored private notes, local credentials, or Rhino runtime data.
