@@ -169,23 +169,26 @@
      - A gesture never starts by lifting the camera, and a surface that appears beside it (a wall, a tree) is entered.
      - The camera rests on a surface it descends onto, and rides up ground that rises no faster than it moves.
      - Under a tree it rests on the ground beneath. Inside something solid (a building, a hillside) it can move
-       sideways and up, not further down: there is no way deep under the map. */
+       sideways and up, not further down: there is no way deep under the map.
+     - `base` (set by the controller): the camera came down into something that stands out of its surroundings
+       (a tree, a pole); it may go down to the height around it. */
   class Floor {
     constructor(clear = 0.3) { this.clear = clear; this.reset(); }
-    reset() { this.known = false; this.inside = false; this.top = null; this.h = null; }
+    reset() { this.known = false; this.inside = false; this.top = null; this.h = null; this.base = null; }
     step(h, top, moved = 0, below = null) {
       const was = this.h;
       const out = v => (this.h = v);
       if (top == null) { this.known = false; return out(h); }
       const before = this.top, first = !this.known;
       this.known = true; this.top = top;
-      if (h >= top + this.clear) { this.inside = false; return out(h); }
+      if (h >= top + this.clear) { this.inside = false; this.base = null; return out(h); }
       if (first) this.inside = true;
       else if (!this.inside) {
         if (top - before > Math.max(0.5, moved)) this.inside = true;
         else return out(top + this.clear);
       }
       if (below != null) return out(Math.max(h, below + this.clear));
+      if (this.base != null) return out(Math.max(h, this.base + this.clear));   // inside a tree or the like: down to the ground around it
       return out(was == null ? h : Math.max(h, was));
     }
   }
@@ -330,12 +333,13 @@
         const u = hooks.ground(new Cesium.Ray(pos, C3.negate(n, v3()))); below = u ? Cesium.Cartographic.fromCartesian(u)?.height ?? null : null;
         // Coming down onto something that stands out of its surroundings (a tree, a pole, a chimney): the camera
         // passes through it, as it does when it meets one from the side. Only ground and broad roofs carry it.
-        if (floor.known && !floor.inside && c.height >= top - 1 && bump(pos, n, top)) floor.inside = true;
+        if (floor.known && !floor.inside && c.height >= top - 1) { const around = bump(pos, n, top); if (around != null) { floor.inside = true; floor.base = around; } }
       }
       const h = floor.step(c.height, top, moved, below);
       return h === c.height ? { pos, rests: false } : { pos: C3.add(pos, C3.multiplyByScalar(n, h - c.height, v3()), v3()), rests: true };
     }
     // Does the map's surface at `pos` stand at least BUMP m above most of what is around it (BUMP_R m away)?
+    // Returns the height around it, or null.
     const BUMP = 2.5, BUMP_R = 8;
     function bump(pos, n, top) {
       let e = C3.cross(C3.UNIT_Z, n, v3()); if (C3.magnitude(e) < 1e-6) e = C3.cross(C3.UNIT_X, n, v3()); C3.normalize(e, e);
@@ -348,7 +352,8 @@
       }
       if (hs.length < 4) return false;
       hs.sort((x, y) => x - y);
-      return top - hs[Math.floor(hs.length / 2)] >= BUMP;      // above the upper middle of them: more than half lie lower
+      const around = hs[Math.floor(hs.length / 2)];           // the upper middle: more than half lie lower
+      return top - around >= BUMP ? around : null;
     }
     const rotate = (q, v) => Cesium.Matrix3.multiplyByVector(Cesium.Matrix3.fromQuaternion(q), v, v3());
 

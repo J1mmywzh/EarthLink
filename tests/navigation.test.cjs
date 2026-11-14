@@ -82,6 +82,13 @@ test('a pinch has to be meant: the small pinches of scrolling or resting fingers
   {const s=new N.WheelLatch();let u=0,any=false;for(let i=0;i<300;i++){u+=16;any=any||!s.read(pad(0,i%2?0.4:-0.4,{ctrlKey:true}),'perspective',u).skip;}assert.equal(any,false,'jitter back and forth never zooms, however long');}
   assert.equal(new N.WheelLatch().read({deltaX:0,deltaY:-100,deltaMode:0,ctrlKey:true,shiftKey:false},'perspective',0).mode,'zoom','Ctrl + mouse wheel zooms from the first notch');
 });
+test('inside a tree the camera may come down to the ground around it, no further',()=>{
+  const f=new N.Floor(0.3);
+  assert.equal(f.step(40,20),40);assert.equal(f.step(30,20),30);                       // above a 20 m tree
+  f.inside=true;f.base=8;                                                               // the controller found it stands out of ground at 8 m
+  assert.equal(f.step(18,20),18);assert.equal(f.step(12,20),12);assert.equal(f.step(5,20),8.3,'the ground around it carries the camera');
+  assert.equal(f.step(9,8),9);assert.equal(f.base,null,'out of it: forgotten');
+});
 test('the device is corrected when the first event misleads, and remembered',()=>{
   const ev=(deltaY,wheelDeltaY,deltaX=0)=>({deltaX,deltaY,deltaMode:0,wheelDeltaY,ctrlKey:false,shiftKey:false});
   let l=new N.WheelLatch();                                // a zoomed page: a trackpad step of 40 looks like a wheel notch
