@@ -104,7 +104,7 @@ def _put(doc, key, value):
 
 # What the viewer shows for this file, kept in the .3dm so that the file reopens as it was left: the site's height
 # offset and ground sample, each set's display and cut-out, the sun, the lights switch, the last camera and lens.
-STATE_KEYS = ("nudge", "ground_h", "clip", "clip_sets", "hidden_sets", "set_styles", "style", "ghost", "shadows",
+STATE_KEYS = ("nudge", "ground_h", "ground_at", "clip", "clip_sets", "hidden_sets", "set_styles", "style", "ghost", "shadows",
               "sun_enabled", "sun_utc", "lights", "view")
 
 
@@ -807,10 +807,24 @@ def send_set(doc, name, to_earthpro=False):
     return meta, msgs, master
 
 
-def export_preview(doc, ids):
+def set_pending_base(doc, base):
+    """The base point chosen for a first placement (None: forget it). It becomes the model base point of the
+    EarthAnchorPoint when the spot on the map is applied."""
+    _put(doc, "pending_base", None if base is None else [base.X, base.Y, base.Z])
+
+
+def pending_base(doc):
+    v = _get(doc, "pending_base")
+    try:
+        return rg.Point3d(float(v[0]), float(v[1]), float(v[2])) if v else None
+    except Exception:
+        return None
+
+
+def export_preview(doc, ids, base=None):
     """The model as it will stand on the spot picked on the map, for a file that has no site yet: the same export as
-    a send, around the point that will sit on that spot (the bottom centre of the objects, or EarthAnchorPoint's
-    base point when it has one). Returns {"glb": path under live/, "bbox_m": ...} or None."""
+    a send, around the point that will sit on that spot (`base`; without one the bottom centre of the objects, or
+    EarthAnchorPoint's base point when it has one). Returns {"glb": path under live/, "bbox_m": ...} or None."""
     objs = []
     for i in ids or []:
         try:
@@ -822,9 +836,10 @@ def export_preview(doc, ids):
     if not objs:
         return None
     ep = doc.EarthAnchorPoint
-    base = ep.ModelBasePoint
-    if base.DistanceTo(rg.Point3d.Origin) < 1e-9:
-        base = base_point_for(doc, ids) or base
+    if base is None:
+        base = ep.ModelBasePoint
+        if base.DistanceTo(rg.Point3d.Origin) < 1e-9:
+            base = base_point_for(doc, ids) or base
     n = ep.ModelNorth
     alpha = math.atan2(-n.X, n.Y) if not n.IsZero else 0.0
     xf = rg.Transform.Rotation(-alpha, rg.Vector3d.ZAxis, rg.Point3d.Origin) * rg.Transform.Translation(rg.Point3d.Origin - base)

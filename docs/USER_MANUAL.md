@@ -101,7 +101,7 @@ Collisions use what is drawn: your exported model mesh (both face sides) and the
 
 ## Surroundings to Rhino
 
-The **Surroundings to Rhino** tool imports terrain, building massing and road centre lines for a rectangle you drag on the map (20 m to 3 km a side). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
+The **Surroundings to Rhino** tool imports terrain, building massing and road centre lines for a rectangle you mark on the map with two clicks, one corner and then the opposite one (20 m to 3 km a side; with a mouse you can also press and drag it; Esc forgets the first corner). Rhino must be running with this file linked; the model must be placed (SendToEarth) first, because the import is positioned from the EarthAnchorPoint.
 
 | Layer | Content |
 | --- | --- |

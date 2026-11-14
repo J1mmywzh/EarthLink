@@ -12,7 +12,7 @@ DEFAULTS = {
     # command defaults
     "viewer": True, "earthpro": False,
     # viewer placement settings (also edited from the viewer page)
-    "nudge": 0.0, "geoid_offset": -33.5, "ground_h": None,
+    "nudge": 0.0, "geoid_offset": -33.5, "ground_h": None, "ground_at": None,   # ground_at: [lat, lon] the ground height was measured at
     "clip": False, "clip_sets": [], "clip_margin": 0.0, "shadows": True, "sun_enabled": True, "sun_utc": None,
     # where viewer screenshots go ("" = Pictures/EarthLink); save_mode "folder" or "ask"
     "snapshot_dir": "", "save_mode": "folder",

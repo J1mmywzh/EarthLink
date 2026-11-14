@@ -78,13 +78,15 @@ def _apply_anchor_request(doc):
     except OSError:
         pass
     first = not core.anchor_ok(doc)
-    # A file placed for the first time stands on the picked spot: the bottom centre of what was sent becomes the
-    # model base point (unless EarthAnchorPoint already has one), wherever the geometry is in the Rhino file.
-    base = None
-    if first and doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9:
+    # A file placed for the first time stands on the picked spot with its base point: the one chosen in SendToEarth
+    # (as for a block), else the bottom centre of what was sent, wherever the geometry is in the Rhino file.
+    base = core.pending_base(doc) if first else None       # the base point chosen in SendToEarth, as for a block
+    if first and base is None and doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9:
         sets = core.get_sets(doc)
         waiting = [v for v in sets.values() if v.get("pending")] or list(sets.values())
         base = core.base_point_for(doc, [i for v in waiting for i in v.get("ids", [])])
+    if core.pending_base(doc) is not None:
+        core.set_pending_base(doc, None)
     # A new file gets "ground level, 0 m". An existing anchor keeps its elevation and reference;
     # with a ground-level reference the picked spot's ground height is used directly.
     core.set_anchor(doc, lat=req.get("lat"), lon=req.get("lon"), rotate_deg=float(req.get("rotate") or 0.0),
@@ -94,6 +96,7 @@ def _apply_anchor_request(doc):
         patch = {"nudge": 0.0}
         if req.get("ground_h") is not None and str(doc.EarthAnchorPoint.EarthBasepointElevationZero) == "GroundLevel":
             patch["ground_h"] = float(req["ground_h"])
+            patch["ground_at"] = [float(req["lat"]), float(req["lon"])]     # the height belongs to this place
         env.save_settings(patch)
     log("site location updated from the viewer (%.6f, %.6f%s). EarthAnchorPoint shows the same values."
         % (doc.EarthAnchorPoint.EarthBasepointLatitude, doc.EarthAnchorPoint.EarthBasepointLongitude,

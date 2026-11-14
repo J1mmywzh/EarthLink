@@ -7,7 +7,8 @@ Options
   Live=Off|On    re-send this set automatically about a second after its objects change
   Viewer, EarthPro  where to show it
 
-A file without a site location can be placed by clicking on the map (writes the EarthAnchorPoint).
+A file without a site location asks for a base point, like a block, and then for the spot on the map where
+that point goes (this writes the EarthAnchorPoint). Later sets of the same file keep their position in Rhino.
 """
 import Rhino
 import scriptcontext as sc
@@ -78,27 +79,36 @@ def run(doc):
 
     ids = [go.Object(i).ObjectId for i in range(go.ObjectCount)]
 
-    # ---- no site location yet: place it on the map
+    # ---- no site location yet: choose a base point, as for a block, then put it on the map
     if not core.anchor_ok(doc):
-        gk = Rhino.Input.Custom.GetOption()
-        gk.SetCommandPrompt("This file has no site location. Pick it on the map in the viewer?")
-        gk.AddOption("PickOnMap")
-        gk.AddOption("UseEarthAnchorPoint")
-        if gk.Get() != Rhino.Input.GetResult.Option or gk.Option().EnglishName != "PickOnMap":
-            Rhino.RhinoApp.WriteLine("SendToEarth: run EarthAnchorPoint to set the site location, then SendToEarth again.")
+        default = core.base_point_for(doc, ids) or Rhino.Geometry.Point3d.Origin
+        if doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) > 1e-9:
+            default = doc.EarthAnchorPoint.ModelBasePoint       # EarthAnchorPoint already names one
+        Rhino.RhinoApp.WriteLine("SendToEarth: this file has no site location yet. Choose the point of the model that goes "
+                                 "on the spot you will click on the map (like a block base point).")
+        gp = Rhino.Input.Custom.GetPoint()
+        gp.SetCommandPrompt("Base point (Enter = bottom centre of what you selected)")
+        gp.AcceptNothing(True)
+        res = gp.Get()
+        if res == Rhino.Input.GetResult.Point:
+            base = gp.Point()
+        elif res == Rhino.Input.GetResult.Nothing:
+            base = default
+        else:
             return Rhino.Commands.Result.Cancel
         core.put_set(doc, set_name, ids, live=live, pending=True)
-        req = {"project": core.project_id(doc), "name": core.project_name(doc), "set": set_name}
-        try:                                  # the viewer shows the model itself under the cursor while you choose the spot
-            req["preview"] = core.export_preview(doc, ids)
+        core.set_pending_base(doc, base)
+        req = {"project": core.project_id(doc), "name": core.project_name(doc), "set": set_name,
+               "base": [base.X, base.Y, base.Z]}
+        try:                                  # the viewer shows the model itself on the spot you click
+            req["preview"] = core.export_preview(doc, ids, base)
         except Exception as ex:
             Rhino.RhinoApp.WriteLine("SendToEarth: no preview on the map (%s); the model is sent after Apply." % ex)
         env.write_json(env.live_file("pick_request.json"), req)
         if _open_viewer(doc, first_time_msg=True):
-            at_origin = doc.EarthAnchorPoint.ModelBasePoint.DistanceTo(Rhino.Geometry.Point3d.Origin) < 1e-9
-            Rhino.RhinoApp.WriteLine("SendToEarth: in the viewer, find the site (search or lat, lon), click where the model "
-                                     "should stand (%s goes there), then Apply. It is sent right after."
-                                     % ("the bottom centre of what you selected" if at_origin else "the EarthAnchorPoint base point"))
+            Rhino.RhinoApp.WriteLine("SendToEarth: in the viewer, find the site (search field, or type lat, lon), click where the "
+                                     "base point goes, then Apply to Rhino. The model is sent right after. "
+                                     "(To type coordinates in Rhino instead, cancel and run EarthAnchorPoint first.)")
         return Rhino.Commands.Result.Success
 
     # ---- normal send

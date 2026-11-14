@@ -18,7 +18,7 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from earthlink import env, geometry, context  # noqa: E402
 import earthlink  # noqa: E402
 
-SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
+SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "ground_at", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc", "lights", "view")
 VIEWER_ASSETS = ("index.html", "navigation.js", "walk.js", "footprints.js", "footprint-worker.js")
 

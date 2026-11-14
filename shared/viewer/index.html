@@ -162,9 +162,13 @@
   .sheet input[type=text] { width: 100%; }
   #measureLbl { position: absolute; z-index: 8; pointer-events: none; border-radius: 8px; padding: 4px 8px; font-weight: 600; font-variant-numeric: tabular-nums; display: none; }
   .cesium-viewer-bottom { left: auto !important; right: 14px !important; bottom: 4px !important; }
-  .cesium-widget-credits { left: auto !important; right: 14px !important; bottom: 4px !important; font-size: 9px !important; opacity: .72; line-height: 1; }
-  .cesium-widget-credits img { height: 13px !important; width: auto !important; vertical-align: middle; }
-  .cesium-widget-credits a { font-size: 9px !important; }
+  /* The map's credits: one row, every logo and every text in a box of the same height, all standing on one line. */
+  .cesium-widget-credits { left: auto !important; right: 14px !important; bottom: 5px !important; opacity: .72;
+    display: flex !important; align-items: flex-end; gap: 6px; font-size: 9px !important; line-height: 12px !important; }
+  .cesium-widget-credits .cesium-credit-logoContainer, .cesium-widget-credits .cesium-credit-textContainer,
+  .cesium-widget-credits .cesium-credit-wrapper, .cesium-widget-credits .cesium-credit-wrapper a { display: inline-flex !important; align-items: flex-end; gap: 6px; line-height: 12px !important; }
+  .cesium-widget-credits img { height: 12px !important; width: auto !important; display: block !important; vertical-align: bottom !important; margin: 0 !important; }
+  .cesium-widget-credits a, .cesium-widget-credits span { font-size: 9px !important; line-height: 12px !important; padding: 0 !important; margin: 0 !important; }
   .cesium-widget-credits:hover { opacity: 1; }
   body.picking .cesium-widget canvas { cursor: crosshair; }
   body.measuring .cesium-widget canvas, body.cropping .cesium-widget canvas { cursor: crosshair; }
@@ -291,7 +295,7 @@
 </div>
 <div id="contextCard" class="glass pop">
   <h3>Surroundings to Rhino <button class="mini" data-close="contextCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <div class="cxSize" id="cxSize">Drag a rectangle on the map</div>
+  <div class="cxSize" id="cxSize">Click two corners on the map</div>
   <div class="row" style="margin-top:10px">
     <label class="chip"><input type="checkbox" id="cxTerrain" checked>Terrain</label>
     <label class="chip"><input type="checkbox" id="cxBuildings" checked>Buildings</label>
@@ -355,7 +359,7 @@
 
 <div id="siteCard" class="glass pop">
   <h3><span id="siteTitle">Site Location</span><button class="mini" data-close="siteCard" title="Close"><svg class="i" style="width:14px;height:14px"><use href="#i-x"/></svg></button></h3>
-  <p class="hint">Search above, or click where the model should stand.</p>
+  <p class="hint" id="siteHint">Search above, or click where the model should stand.</p>
   <div class="lbl">Picked point</div>
   <div class="t" id="pickedLbl">Click on the map</div>
   <p class="hint">To turn a set on the map, use Edit on the set. Rhino's north is not changed.</p>
@@ -903,11 +907,25 @@
     }
     return false;
   }
+  // The ground height belongs to the place it was measured at. "sample": none yet, or the site was moved in Rhino
+  // (EarthAnchorPoint) since: the old height would leave the model deep under the map or high above it.
+  // "check": a file from before the place was recorded: measured again, replaced only when it is clearly wrong.
+  function groundMode() {
+    const a = anchor();
+    if (!a || a.zero !== "GroundLevel" || !tileset) return null;
+    if (S.ground_h == null) return "sample";
+    const at = S.ground_at;
+    if (Array.isArray(at) && Math.abs(at[0] - a.lat) < 1e-6 && Math.abs(at[1] - a.lon) < 1e-6) return null;
+    return Array.isArray(at) ? "sample" : "check";
+  }
+  let sampling = false, touched = 0;                    // touched: counts the person's own camera moves
   async function sampleGround(force) {
     const a = anchor();
     if (!a || a.zero !== "GroundLevel" || !tileset) return;
-    if (S.ground_h != null && !force) return;
-    msg("Sampling ground height…");
+    const mode = force ? "sample" : groundMode();
+    if (!mode || sampling) return;
+    sampling = true; const touchedBefore = touched; let moved = false;
+    msg(mode === "check" ? "" : "Sampling ground height…");
     cutPause(true);                                      // measure the map as it is, not as it is graded
     try {
       await tilesSettled(8000);
@@ -924,11 +942,18 @@
         }
       }
       const hs = (await scene.sampleHeightMostDetailed(pts, Object.values(models))).map(c => c && c.height).filter(Number.isFinite).sort((x, y) => x - y);
-      if (hs.length) { saveS({ ground_h: hs[Math.floor(hs.length / 2)] }); msg(""); }
-      else msg("No ground found. Adjust Height.");
-    } catch (e) { msg("Ground sampling failed: " + e.message); }
-    cutPause(false);
+      const now = anchor();
+      if (!now || Math.abs(now.lat - a.lat) > 1e-6 || Math.abs(now.lon - a.lon) > 1e-6) { /* the site moved meanwhile: the next call measures there */ }
+      else if (hs.length) {
+        const h = hs[Math.floor(hs.length / 2)], keep = mode === "check" && Math.abs(h - S.ground_h) <= 5;
+        moved = !keep && (S.ground_h == null || Math.abs(h - S.ground_h) > 5);
+        saveS(keep ? { ground_at: [a.lat, a.lon] } : { ground_h: h, ground_at: [a.lat, a.lon] }); msg("");
+      } else if (mode !== "check") msg("No ground found. Adjust Height.");
+    } catch (e) { if (mode !== "check") msg("Ground sampling failed: " + e.message); }
+    cutPause(false); sampling = false;
     placeModels(); showSite();
+    if (moved && !force && touched === touchedBefore && !picking) flyTo(0.8);   // the model went to where the ground is: look at it there
+    if (!force && groundMode()) sampleGround(false);
   }
   /* EarthLink placement: where a set sits on the map, on top of its position in Rhino.
      { rot: degrees clockwise on the map, t: [east, north, up] metres }. The exported geometry is always where it is
@@ -1387,6 +1412,7 @@
       if (left) applyView(left, 0); else if (switched || !restoreCamera()) flyTo(0);
       sampleGround(false); refreshViews();
     }
+    sampleGround(false);                               // also when the site was moved in Rhino: the ground is somewhere else
     setTimeout(() => { if (generation === modelGeneration) showLink(); }, 400);
   }
   function renderSets() {
@@ -1564,6 +1590,9 @@
     if (first) loadGhost(); else dropGhost();
     document.body.classList.add("picking");
     $("siteTitle").textContent = first ? `Place “${pickReq.name || "model"}”` : "Site Location";
+    $("siteHint").textContent = first ? "Find the site with the search field (top left), then click where the base point you chose in Rhino goes. Click again to move it."
+      : "Search above, or click where the model's base point should go.";
+    if (first) setTimeout(() => { try { $("q").focus(); $("q").select(); } catch { /* no search field */ } }, 50);
     $("pickedLbl").textContent = first || !anchor() ? "Click on the map" : "Current location — click to move";
     $("siteApply").disabled = true;
     closePops("siteCard"); $("siteCard").classList.add("open");
@@ -1596,7 +1625,7 @@
     const a = anchor(), spot = picked;
     const r = await api("/api/anchor", { lat: spot.lat, lon: spot.lon, ground_h: spot.h });
     if (r.error) return msg(r.error);
-    Object.assign(S, !a || a.zero === "GroundLevel" ? { ground_h: spot.h, nudge: 0 } : { nudge: 0 });   // what Rhino saves with the new site
+    Object.assign(S, !a || a.zero === "GroundLevel" ? { ground_h: spot.h, ground_at: [spot.lat, spot.lon], nudge: 0 } : { nudge: 0 });   // what Rhino saves with the new site
     msg("Updating Rhino…", 6000);
     closeSite(true);
   };
@@ -1942,7 +1971,7 @@
   showSaveUi();
 
   // ---------------------------------------------------------------- panels, toggles
-  const cx = { a: null, b: null, ent: null, drag: false, timer: 0, busy: false };   // the rectangle of "Surroundings to Rhino"
+  const cx = { a: null, b: null, ent: null, dot: null, drag: false, down: null, timer: 0, busy: false };   // the rectangle of "Surroundings to Rhino"
   const closePops = except => { document.querySelectorAll(".pop").forEach(p => { if (p.id !== except) p.classList.remove("open"); }); if (except !== "navCard") $("northBtn").classList.remove("on"); if (except !== "contextCard") cxLeave(); };
   const toggleCapture = open => { closePops("captureCard"); $("captureCard").classList.toggle("open", open); $("captureBtn").classList.toggle("on", open); if (!open) { $("showFrame").checked = false; drawFrame(); } };
   $("captureBtn").onclick = () => toggleCapture(!$("captureCard").classList.contains("open"));
@@ -2010,7 +2039,7 @@
   }
   $("fbGithub").onclick = () => fbHandOver("github");
   $("fbEmail").onclick = () => fbHandOver("email");
-  /* Surroundings to Rhino: drag a rectangle on the map; the local server fetches open data for it (OpenStreetMap
+  /* Surroundings to Rhino: mark a rectangle on the map (two clicks); the local server fetches open data for it (OpenStreetMap
      buildings and roads, open elevation tiles) and Rhino adds it as terrain, massing and road lines, in place.
      Google's map itself is never exported: its terms forbid it. Nothing is fetched until Import is pressed. */
   const CX = { max: 3000, min: 20 };                         // metres a side: the server's limits
@@ -2040,7 +2069,7 @@
     const b = cxBounds(), size = b && cxSize(b), ft = m => Math.round(m / 0.3048).toLocaleString();
     const big = size && Math.max(...size) > CX.max, small = size && Math.min(...size) < CX.min;
     $("cxSize").classList.toggle("none", !size || big || small);
-    $("cxSize").innerHTML = !size ? "Drag a rectangle on the map" : big ? `Too large (limit ${CX.max / 1000} km a side)` : small ? `Too small (at least ${CX.min} m a side)`
+    $("cxSize").innerHTML = !size ? (cx.a ? "Click the opposite corner" : "Click two corners on the map") : big ? `Too large (limit ${CX.max / 1000} km a side)` : small ? `Too small (at least ${CX.min} m a side)`
       : `${Math.round(size[0]).toLocaleString()} × ${Math.round(size[1]).toLocaleString()} m<span class="s">${ft(size[0])} × ${ft(size[1])} ft</span>`;
     const any = $("cxTerrain").checked || $("cxBuildings").checked || $("cxRoads").checked || $("cxContours").checked;
     $("cxImport").disabled = cx.busy || cx.drag || !size || big || small || !any;
@@ -2049,8 +2078,9 @@
   }
   function cxLeave() {                                        // the tool is put away; a running import carries on in Rhino
     document.body.classList.remove("cropping"); $("contextBtn").classList.remove("on");
-    cx.drag = false; cx.a = cx.b = null;
-    if (cx.ent) { viewer.entities.remove(cx.ent); cx.ent = null; scene.requestRender(); }
+    cx.drag = false; cx.a = cx.b = null; cx.down = null;
+    for (const k of ["ent", "dot"]) if (cx[k]) { viewer.entities.remove(cx[k]); cx[k] = null; }
+    scene.requestRender();
   }
   function toggleContext(open) {
     if (open) {
@@ -2066,20 +2096,34 @@
   $("cxTerrain").onchange = $("cxBuildings").onchange = $("cxRoads").onchange = $("cxContours").onchange = () => cxSync();
   { const o = store.get("contextOptions") || {};            // the panel's options are remembered
     for (const [id, k] of [["cxInterval", "interval"], ["cxHeight", "height"], ["cxLevel", "level"]]) { if (o[k] > 0) $(id).value = o[k]; $(id).onchange = () => store.set("contextOptions", { interval: +$("cxInterval").value, height: +$("cxHeight").value, level: +$("cxLevel").value }); } }
-  const cxHandler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+  // The rectangle: click one corner, then the opposite one (two fingers on a trackpad move the map, so nothing is
+  // dragged there). Pressing and dragging with a mouse draws it in one go. A further click starts a new one.
+  const cxHandler = new Cesium.ScreenSpaceEventHandler(scene.canvas), cxBlue = Cesium.Color.fromCssColorString("#0a84ff");
+  function cxShapes() {
+    if (!cx.ent) cx.ent = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(cxOutline, false), width: 3, material: cxBlue, depthFailMaterial: cxBlue } });   // seen through buildings too
+    if (!cx.dot) cx.dot = viewer.entities.add({ position: new Cesium.CallbackProperty(() => (cx.a ? Cesium.Cartesian3.fromRadians(cx.a.longitude, cx.a.latitude, cx.a.height + 1) : undefined), false),
+      point: { pixelSize: 10, color: cxBlue, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY } });
+  }
+  cxHandler.setInputAction(e => { cx.down = cxOpen() && !cx.busy && !modal() ? Cesium.Cartesian2.clone(e.position) : null; }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
   cxHandler.setInputAction(e => {
-    if (!cxOpen() || cx.busy || modal()) return;
-    const p = cxPoint(e.position); if (!p) return msg("Start the rectangle on the map.", 2500);
-    cx.a = p; cx.b = null; cx.drag = true;
-    if (!cx.ent) cx.ent = viewer.entities.add({ polyline: { positions: new Cesium.CallbackProperty(cxOutline, false), width: 3,
-      material: Cesium.Color.fromCssColorString("#0a84ff"), depthFailMaterial: Cesium.Color.fromCssColorString("#0a84ff") } });   // seen through buildings too
-    cxSync("");
-  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
-  cxHandler.setInputAction(e => {
+    if (cx.down && !cx.drag && Cesium.Cartesian2.distance(e.endPosition, cx.down) > 8) {      // the button is held and the mouse moves: drag it
+      const p = cxPoint(cx.down); if (p) { cx.a = p; cx.b = null; cx.drag = "press"; cxShapes(); }
+    }
     if (!cx.drag) return;
     const p = cxPoint(e.endPosition); if (p) { cx.b = p; cxSync(); scene.requestRender(); }
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
-  cxHandler.setInputAction(() => { if (cx.drag) { cx.drag = false; cxSync(); } }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  cxHandler.setInputAction(e => {
+    const down = cx.down; cx.down = null;
+    if (!down || !cxOpen() || cx.busy || modal()) return;
+    if (cx.drag === "press") { cx.drag = false; cxSync(); return; }                           // dragged: done
+    const p = cxPoint(e.position); if (!p) return msg("Click on the map.", 2500);
+    if (cx.drag === "click") { cx.b = p; cx.drag = false; cxSync(); scene.requestRender(); return; }   // the opposite corner
+    cx.a = p; cx.b = null; cx.drag = "click"; cxShapes(); cxSync(""); scene.requestRender();   // the first corner
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  document.addEventListener("keydown", e => {                // Esc: forget a first corner
+    if (e.key !== "Escape" || !cxOpen() || !cx.drag) return;
+    cx.drag = false; cx.a = cx.b = null; cx.down = null; cxSync(""); scene.requestRender(); e.stopPropagation();
+  }, true);
   const cxWords = c => c ? [c.terrain && "terrain", c.buildings && `${c.buildings} building${c.buildings === 1 ? "" : "s"}`, c.roads && `${c.roads} road line${c.roads === 1 ? "" : "s"}`, c.contours && `${c.contours} contour line${c.contours === 1 ? "" : "s"}`].filter(Boolean).join(", ") : "";
   async function cxWatch() {                                  // follow the import: the server fetches, then Rhino adds
     clearTimeout(cx.timer);
@@ -2238,6 +2282,7 @@
 
   // ---------------------------------------------------------------- navigation (navigation.js) and walking (walk.js)
   const freeCamera = () => {
+    touched++;
     if (S.link_viewport) { saveS({ link_viewport: false }); $("follow").checked = false; toggledAt = Date.now(); }
     viewer.camera.cancelFlight();
   };
