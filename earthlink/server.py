@@ -15,6 +15,7 @@ if __name__ == "__main__" and __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from earthlink import env, geometry  # noqa: E402
+import earthlink  # noqa: E402
 
 SETTING_KEYS = ("nudge", "geoid_offset", "ground_h", "clip", "clip_sets", "clip_margin", "shadows", "save_mode",
                 "link_viewport", "sync_views", "sync_sun", "style", "ghost", "hidden_sets", "set_styles", "sun_enabled", "sun_utc")
@@ -305,7 +306,7 @@ def serve(viewer_dir, port):
                 query = self.path[1:] if self.path.startswith("/?") else ""   # keep options such as ?controls=mac
                 self.send_response(302); self.send_header("Location", "/viewer/" + query); self.end_headers()
             elif path == "/api/ping":
-                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir})
+                self._json({"earthlink": True, "pid": os.getpid(), "viewer": viewer_dir, "version": earthlink.__version__})
             elif path == "/api/config":
                 s = env.load_settings()
                 self._json({"ion_token": s.get("ion_token", ""), "google_key": s.get("google_key", "")})
