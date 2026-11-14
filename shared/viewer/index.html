@@ -111,7 +111,7 @@
   #controls.folded #tools { display: none; }
   #toolsFold { height: 22px; color: var(--fg2); } #toolsFold .i { width: 14px; height: 14px; transition: transform .15s; }
   #controls.folded #toolsFold .i { transform: rotate(180deg); }
-  .num { width: 64px !important; text-align: right; font-variant-numeric: tabular-nums; }
+  .typed { width: 64px !important; text-align: right; font-variant-numeric: tabular-nums; }
   .bar { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; margin: 12px 0 6px; } .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width .35s ease; }
   .stack button:hover { background: var(--fill); }
   .stack button.on { color: var(--accent); }
@@ -230,7 +230,7 @@
       <div class="ghead">Camera</div>
       <div class="card">
         <div class="item"><div class="seg" id="projSeg" style="width:100%"><button data-v="perspective" style="flex:1">Perspective</button><button data-v="two_point" style="flex:1">Two-Point</button><button data-v="parallel" style="flex:1">Parallel</button></div></div>
-        <div class="item" id="fovRow"><span class="grow">Lens</span><input type="number" id="lensMm" class="num" min="6" max="1200" step="1" aria-label="Lens length in millimetres"><span class="val">mm</span></div>
+        <div class="item" id="fovRow"><span class="grow">Lens</span><input type="number" id="lensMm" class="typed" min="6" max="1200" step="1" aria-label="Lens length in millimetres"><span class="val">mm</span></div>
         <div class="item" id="fovSlider"><input type="range" id="fov" min="0" max="1000" step="1" aria-label="Lens length"></div>
         <div class="item rhinoOnly"><span class="grow"><div class="t">Follow Rhino's viewport</div></span><label class="switch"><input type="checkbox" id="follow"><span></span></label></div>
         
@@ -269,11 +269,11 @@
 </div>
 <div id="navCard" class="glass pop">
   <h3>Compass <button class="link" id="northUp">North up</button></h3>
-  <div class="item"><span class="grow">Heading</span><input type="number" id="headingN" class="num" min="0" max="359" step="1" aria-label="Heading in degrees"><span class="val">°</span></div>
+  <div class="item"><span class="grow">Heading</span><input type="number" id="headingN" class="typed" min="0" max="359" step="1" aria-label="Heading in degrees"><span class="val">°</span></div>
   <input id="navHeading" aria-label="Heading" type="range" min="0" max="359.5" value="0" step="0.5">
-  <div class="item"><span class="grow" id="tiltTitle">Tilt</span><input type="number" id="tiltN" class="num" step="1" aria-label="Tilt in degrees"><span class="val">°</span></div>
+  <div class="item"><span class="grow" id="tiltTitle">Tilt</span><input type="number" id="tiltN" class="typed" step="1" aria-label="Tilt in degrees"><span class="val">°</span></div>
   <input id="navTilt" aria-label="Tilt" type="range" min="0" max="175" value="45" step="0.5">
-  <div class="item"><span class="grow">Sensitivity</span><input type="number" id="sensN" class="num" min="25" max="200" step="5" aria-label="Sensitivity in percent"><span class="val">%</span></div>
+  <div class="item"><span class="grow">Sensitivity</span><input type="number" id="sensN" class="typed" min="25" max="200" step="5" aria-label="Sensitivity in percent"><span class="val">%</span></div>
   <input id="sens" aria-label="Sensitivity" type="range" min="25" max="200" step="5" value="100">
 </div>
 <div id="feedbackCard" class="glass pop">
@@ -411,7 +411,7 @@
       mk(cancel, "pill", () => null);
       if (extra) mk(extra.label, "pill", () => extra.value);
       mk(ok, "primary" + (danger ? " danger" : ""), () => value === null ? true : $("askInput").value.trim());
-      const key = e => { if (e.key === "Escape") close(null); if (e.key === "Enter") close(value === null ? true : $("askInput").value.trim()); };
+      const key = e => { if (e.key === "Escape") close(null); if (e.key === "Enter" && e.target?.tagName !== "BUTTON") close(value === null ? true : $("askInput").value.trim()); };   // Enter on a focused button is that button
       document.addEventListener("keydown", key);
       $("ask").classList.add("open");
       if (value !== null) setTimeout(() => { $("askInput").focus(); $("askInput").select(); }, 30);
@@ -1542,12 +1542,17 @@
     return `${m.toFixed(2)} m · ${f}′ ${inch}″`;
   }
 
+  function mapPoint(pos) {                                 // the map's surface under a screen point, your model ignored
+    const ray = viewer.camera.getPickRay(pos), t = ray && tileset ? surfaceHit(ray, 1e5, false) : null;
+    return t == null ? null : Cesium.Ray.getPoint(ray, t, new Cesium.Cartesian3());
+  }
   // ---------------------------------------------------------------- clicks (site picking, measuring)
   const handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
   handler.setInputAction(e => {
     if(walk?.placing){placeWalker(e.position);return;}
     if (!picking && !measuring) return;
-    const p = scene.pickPositionSupported ? scene.pickPosition(e.position) : undefined;
+    // A site is picked on the map itself, never on your own model standing on it (its roof is not the ground).
+    const p = (picking && mapPoint(e.position)) || (scene.pickPositionSupported ? scene.pickPosition(e.position) : undefined);
     if (!p) return msg("Click on the map surface");
     if (picking) {
       const c = Cesium.Cartographic.fromCartesian(p);
@@ -1858,7 +1863,7 @@
   const CX = { max: 3000, min: 20 };                         // metres a side: the server's limits
   const cxOpen = () => $("contextCard").classList.contains("open");
   function cxPoint(pos) {                                     // the map point under the mouse (the site's ground plane without a map)
-    let p = scene.pickPositionSupported && tileset ? scene.pickPosition(pos) : undefined;
+    let p = mapPoint(pos) || (scene.pickPositionSupported && tileset ? scene.pickPosition(pos) : undefined);
     if (!p && anchor()) { const g = groundPoint(pos, 0); if (g && g.far < 30000) p = Cesium.Matrix4.multiplyByPoint(frame(), g.p, new Cesium.Cartesian3()); }
     return p ? Cesium.Cartographic.fromCartesian(p) : null;
   }
