@@ -36,10 +36,10 @@ test('easing releases exactly what was added, smoothly, and stops',()=>{
   e.add('px',NaN);assert.equal(e.take(1/60),null,'non-finite input is ignored');
 });
 test('one sensitivity scale: the same swipe turns the same angle at any distance',()=>{
-  assert.ok(N.RATE.orbit>0&&N.RATE.orbit<0.3);assert.ok(N.RATE.tilt<N.RATE.orbit);assert.ok(N.RATE.pan>0.75&&N.RATE.pan<=1);
+  assert.ok(N.RATE.orbit>0&&N.RATE.orbit<0.3);assert.ok(N.RATE.tilt<N.RATE.orbit);assert.ok(N.RATE.pan>0.65&&N.RATE.pan<=1);
   assert.ok(Math.abs(N.RATE.orbit/0.144-0.81)<0.01&&Math.abs(N.RATE.tilt/0.13-0.81)<0.01&&Math.abs(N.RATE.orbitMouse/0.27-0.81)<0.01,'two steps of 10% less than beta.9: rotate and tilt');
-  assert.ok(Math.abs(N.RATE.pan/1.1-0.729)<0.01,'pan: three steps of 10 % less (2026-11-14)');
-  assert.ok(Math.abs(N.RATE.pinch/0.0135-1.0247)<0.01&&Math.abs(N.RATE.wheel/0.0032-1.0247)<0.02&&Math.abs(N.RATE.scroll/0.0068-1.0247)<0.01,'zoom: then 10 % and 15 % faster (2026-11-14)');
+  assert.ok(Math.abs(N.RATE.pan/1.1-0.656)<0.01,'pan: four steps of 10 % less (2026-11-14)');
+  assert.ok(Math.abs(N.RATE.pinch/0.0135-1.127)<0.01&&Math.abs(N.RATE.wheel/0.0032-1.127)<0.02&&Math.abs(N.RATE.scroll/0.0068-1.127)<0.01,'zoom: then 10 %, 15 % and 10 % faster (2026-11-14)');
 });
 test('neutral light is a unit vector from behind the viewer',()=>{
   const d=N.neutralDirection([0,1,0],[0,0,1]);assert.ok(Math.abs(Math.hypot(...d)-1)<1e-12);assert.ok(d[2]<0&&d[1]>0);

@@ -34,11 +34,11 @@
   const RATE = {
     orbit: 0.117, tilt: 0.105,         // two fingers
     orbitMouse: 0.219, tiltMouse: 0.197, // right-drag
-    pan: 0.80,                         // x the distance under the fingers (1 = exact follow); 10 % slower (the author, 2026-11-14)
-    // zoom: 10 % and then 15 % faster than beta.12 (the author, 2026-11-14); turning and panning are as they like them
-    pinch: 0.01383, scroll: 0.00696,   // zoom: log-distance per wheel delta unit (trackpad)
-    wheel: 0.00329, dragZoom: 0.00557, // mouse wheel, Ctrl + right-drag
-    hold: Math.LN2 / 0.60,             // +/- held: distance halves every 0.60 s
+    pan: 0.72,                         // x the distance under the fingers (1 = exact follow); twice 10 % slower (the author, 2026-11-14)
+    // zoom: 10 %, 15 % and 10 % faster than beta.12 (the author, 2026-11-14)
+    pinch: 0.01521, scroll: 0.00766,   // zoom: log-distance per wheel delta unit (trackpad)
+    wheel: 0.00362, dragZoom: 0.00613, // mouse wheel, Ctrl + right-drag
+    hold: Math.LN2 / 0.545,            // +/- held: distance halves every 0.545 s
     look: 0.072, lookMouse: 0.135,     // walking
   };
   /* How far the view may tilt from straight down at a height (m): freely near the ground, less and less higher up,
