@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-beta.13 — preview, in progress
+- **Coming to rest**: measured on a MacBook trackpad, strokes follow each other every third of a second and each new touch cuts the last one's glide while the view is still moving fast, so the view stopped dead again and again. A trackpad stroke that ends at speed now comes to rest over about a quarter of a second and the next stroke blends in. While the fingers move the view stays exactly under them (on the recording the path grew by 3 %; 16 hard stops became 1). The system's glide counts in full again.
+- **Turning point**: it is the surface you see at the centre of the view. The remembered focus distance of beta.12 is gone (it could put the turning point in mid-air), and your model's depth never moves it behind what you see: a model sitting under the map made every tilt swing in and out.
+- **A model under the map**: the ground height is now kept with the place it was measured at. When the site is moved in Rhino (EarthAnchorPoint), or the file is older, the ground is measured again by itself, first quickly at the site and then with care, and the view follows the model to the ground.
+- **Placing a file**: SendToEarth asks for a base point, as the Block command does (Enter: bottom centre of the selection). The viewer's Place panel then puts the cursor in the search field; the base point goes where you click. Later sets of the same file keep their position in Rhino.
+- **Surroundings to Rhino**: the rectangle is two clicks, a corner and the opposite one (two fingers on a trackpad move the map, so it could not be dragged there). Press and drag still works with a mouse; Esc forgets the first corner.
+- The map's credits stand on one line: logos and text are the same height.
+
 ## 0.2.0-beta.12 — preview, 2026-11-14
 - **Turning and tilting**: the view turns around what you are looking at, as in beta.9: the turning point keeps the distance you last focused on (Rhino's camera target) and no longer jumps to ground far behind your model, to the horizon, or to map detail that has not loaded yet. That jump made the scene swing in and out while tilting.
 - **Coming to rest**: after two fingers lift, the system's glide now runs its whole length (beta.10 cut it short, so a turn stopped abruptly); only a long flick counts for a little less. Moving fingers always count in full. A pinch or a wheel zoom is released more slowly instead of stopping dead.
