@@ -1609,8 +1609,8 @@
   /* Feedback: a comment, an optional screenshot and system details, handed to GitHub (a filled-in issue) or to the
      mail app. Nothing leaves the computer until the person presses one of the two buttons; there is no EarthLink
      server. A web page cannot attach a file to an issue or an email, so the screenshot goes on the clipboard (to
-     paste) and into the Downloads folder (to attach). FEEDBACK.email is empty until the author publishes one. */
-  const FEEDBACK = { github: "J1mmywzh/EarthLink", email: "" };
+     paste) and into the Downloads folder (to attach). */
+  const FEEDBACK = { github: "J1mmywzh/EarthLink", email: "rhinoearthlink@gmail.com" };
   let fbBlob = null;
   const fbDetails = () => {
     let gpu = ""; try { const gl = scene.context._gl, x = gl.getExtension("WEBGL_debug_renderer_info"); gpu = x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : ""; } catch { /* not exposed */ }

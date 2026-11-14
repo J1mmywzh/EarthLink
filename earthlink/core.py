@@ -261,6 +261,113 @@ def _display_color(doc, obj, parent_obj=None):
     return doc.Layers[a.LayerIndex].Color
 
 
+# ----------------------------------------------------------------- site context from open data
+CONTEXT_LAYER = "EarthLink Context"
+
+
+def _layer(doc, path, color):
+    """Index of the layer `A::B` (created with its parents if missing)."""
+    i = doc.Layers.FindByFullPath(path, -1)
+    if i >= 0:
+        return i
+    parent, index = System.Guid.Empty, -1
+    for part in path.split("::"):
+        full = part if index < 0 else doc.Layers[index].FullPath + "::" + part
+        j = doc.Layers.FindByFullPath(full, -1)
+        if j < 0:
+            layer = Rhino.DocObjects.Layer()
+            layer.Name, layer.Color = part, color
+            if parent != System.Guid.Empty:
+                layer.ParentLayerId = parent
+            j = doc.Layers.Add(layer)
+        index, parent = j, doc.Layers[j].Id
+    return index
+
+
+def add_context(doc, data):
+    """Add terrain, buildings and roads from context.build() to the document, on EarthLink Context layers, as one
+    undo step. `data` is in metres east/north/up of the model base point. Returns what was added, as a sentence."""
+    scale = Rhino.RhinoMath.UnitScale(Rhino.UnitSystem.Meters, doc.ModelUnitSystem)
+    ok, inv = enu_transform(doc).TryGetInverse()
+    if not ok:
+        raise ValueError("the site transform cannot be inverted")
+    pt = lambda p: inv * rg.Point3d(p[0] * scale, p[1] * scale, (p[2] if len(p) > 2 else 0.0) * scale)
+    tol = doc.ModelAbsoluteTolerance
+    C = System.Drawing.Color
+    undo = doc.BeginUndoRecord("EarthLink context")
+    ids, counts = [], {"terrain": 0, "buildings": 0, "roads": 0}
+    try:
+        note = lambda a, kind: (a.SetUserString("EarthLink", "context"), a.SetUserString("source", kind))
+        t = data.get("terrain")
+        if t and t.get("points"):
+            mesh, nx, ny = rg.Mesh(), int(t["nx"]), int(t["ny"])
+            for p in t["points"]:
+                mesh.Vertices.Add(pt(p))
+            for j in range(ny - 1):
+                for i in range(nx - 1):
+                    a = j * nx + i
+                    mesh.Faces.AddFace(a, a + 1, a + nx + 1, a + nx)
+            mesh.Normals.ComputeNormals()
+            mesh.Compact()
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Terrain", C.FromArgb(120, 140, 110)), "Terrain"
+            note(at, "Terrain Tiles (Mapzen, AWS Open Data)")
+            ids.append(doc.Objects.AddMesh(mesh, at))
+            counts["terrain"] = mesh.Faces.Count
+        for b in data.get("buildings") or []:
+            base, up = b.get("base", 0.0), b.get("height", 0.0)
+            loops = []
+            for ring in [b["outer"]] + list(b.get("inners") or []):
+                pts = [pt((p[0], p[1], base)) for p in ring]
+                if len(pts) >= 3:
+                    loops.append(rg.Polyline(pts + [pts[0]]).ToNurbsCurve())
+            if not loops:
+                continue
+            path = rg.LineCurve(pt((0, 0, base)), pt((0, 0, base + up)))
+            path.Translate(loops[0].PointAtStart - path.PointAtStart)
+            solid = None
+            faces = rg.Brep.CreatePlanarBreps(System.Array[rg.Curve](loops), tol)
+            if faces and len(faces) > 0:
+                solid = faces[0].Faces[0].CreateExtrusion(path, True)
+            if solid is None:                             # a footprint Rhino cannot make planar: extrude its outline
+                solid = rg.Surface.CreateExtrusion(loops[0], path.PointAtEnd - path.PointAtStart).ToBrep().CapPlanarHoles(tol)
+            if solid is None:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            layer = "::Buildings (height assumed)" if b.get("assumed") else "::Buildings"
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + layer, C.FromArgb(200, 200, 195)), b.get("name") or ""
+            note(at, "OpenStreetMap")
+            at.SetUserString("height_m", "%.2f" % up)
+            ids.append(doc.Objects.AddBrep(solid, at))
+            counts["buildings"] += 1
+        for r in data.get("roads") or []:
+            pts = [pt(p) for p in r["pts"]]
+            if len(pts) < 2:
+                continue
+            at = Rhino.DocObjects.ObjectAttributes()
+            at.LayerIndex, at.Name = _layer(doc, CONTEXT_LAYER + "::Roads", C.FromArgb(90, 90, 95)), r.get("name") or r.get("kind") or ""
+            note(at, "OpenStreetMap")
+            if r.get("kind"):
+                at.SetUserString("highway", r["kind"])
+            ids.append(doc.Objects.AddCurve(rg.Polyline(pts).ToNurbsCurve(), at))
+            counts["roads"] += 1
+        ids = [i for i in ids if i != System.Guid.Empty]
+        if ids:
+            doc.Groups.Add("EarthLink context", System.Array[System.Guid](ids))
+        doc.Layers[_layer(doc, CONTEXT_LAYER, C.FromArgb(120, 120, 120))].SetUserString("attribution", data.get("attribution", ""))
+    finally:
+        doc.EndUndoRecord(undo)
+    doc.Views.Redraw()
+    parts = []
+    if counts["terrain"]:
+        parts.append("terrain (%d faces)" % counts["terrain"])
+    if counts["buildings"]:
+        parts.append("%d building%s" % (counts["buildings"], "" if counts["buildings"] == 1 else "s"))
+    if counts["roads"]:
+        parts.append("%d road line%s" % (counts["roads"], "" if counts["roads"] == 1 else "s"))
+    return ("added " + ", ".join(parts) + " on layer '%s'" % CONTEXT_LAYER) if parts else "nothing was found in that rectangle"
+
+
 def _copy_texture_mappings(src, dst, xform):
     """Carry an object's texture mappings (box, planar, ...) to its copy, which was moved by `xform`.
     Without them a mapped texture falls back to the surface's own UVs: the wrong size and direction."""

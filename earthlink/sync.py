@@ -212,6 +212,23 @@ def _apply_requests(doc):
             if core.place_set(doc, name, req.get("dx", 0), req.get("dy", 0), req.get("dz", 0), req.get("rot", 0), req.get("pivot", (0, 0, 0))) is not None:
                 core.publish_placement(doc, name)
                 placed.add(name)
+        elif req.get("type") == "context":                   # terrain, buildings and roads the viewer asked for (context.py)
+            cpath = env.live_file(os.path.basename(str(req.get("file", ""))))
+            result = {"file": req.get("file"), "ok": False, "message": "The context data was not found."}
+            try:
+                data = env.read_json(cpath)
+                if data:
+                    text = core.add_context(doc, data)
+                    result.update(ok=True, message="Rhino " + text + ".")
+                    log(text + ". " + data.get("attribution", ""))
+            except Exception as e:
+                result["message"] = "Rhino could not add it: %s" % (e,)
+                log("context import failed: %s" % (e,))
+            try:
+                os.remove(cpath)
+            except OSError:
+                pass
+            env.write_json(env.live_file("context_result.json"), result)
         elif req.get("type") == "unplace_set":
             core.reset_placement(doc, name)
             core.publish_placement(doc, name)
