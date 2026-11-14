@@ -500,7 +500,13 @@
     homeButton: false, sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false,
     infoBox: false, selectionIndicator: false, shadows: true,
     contextOptions: { webgl: { preserveDrawingBuffer: true, alpha: true } },
+    // Draw when something changes, not sixty times a second while nothing does: the map and its shadows are heavy,
+    // and Rhino shares the graphics card. Cesium draws by itself when the camera moves or tiles and models arrive;
+    // anything done in the interface asks for a frame below, and a frame twice a second catches whatever is left.
+    requestRenderMode: true, maximumRenderTimeChange: Infinity,
   });
+  for (const n of ["input", "change", "click", "pointerup", "keyup"]) document.addEventListener(n, () => viewer.scene.requestRender(), true);
+  setInterval(() => { if (!document.hidden) viewer.scene.requestRender(); }, 500);
   const scene = viewer.scene;
   viewer.camera._adjustOrthographicFrustum = () => {};   // Parallel width is set by EarthLink only (Cesium 1.140 ties it to camera height)
   scene.globe.baseColor = Cesium.Color.fromCssColorString(dark() ? "#2c2d30" : "#dfe3e6");
