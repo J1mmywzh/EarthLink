@@ -25,9 +25,12 @@ flowchart LR
 | `shared/viewer/navigation.js` | Rhino navigation on the globe: one action per gesture (pinch/scroll latching, device correction, glide fade), a pivot kept between rotations, easing, level horizon, Two-Point as a level-axis rendering of the same camera, scale-aware pan/zoom; also `daylight()` (tint, shadow strength and sky colour by sun height) |
 | `shared/viewer/footprints.js` | Plan outline of each set's base for "Hide map underneath": triangles cut 1 cm above the lowest point, painted on a grid, edges traced and straightened, in a worker; returns the base's boundary rings, which `buildCutMask` in index.html rasterises into the map shader's mask |
 | `shared/viewer/walk.js` | Walking: a 1.80 m person on whatever is drawn (map or model), probed by rays each frame |
+| `earthlink/context.py` | "Surroundings to Rhino": open data for a rectangle (OpenStreetMap's map download, Overpass as fallback; terrarium elevation tiles), pure Python in the server process, returned in metres east/north/up of the model base point; `core.add_context` turns it into Rhino geometry on the UI timer |
 | `earthlink/collada.py` | GLB to Z-up COLLADA conversion for Earth Pro |
 | `shared/viewer/index.html` | Viewer UI and CesiumJS integration; no frontend build step |
 | `tools/build.py` | Rhino Script Editor build and Yak manifest/package finishing |
+
+Lights: `core.lights_info` lists the document's enabled lights in the same frame; `sync._watch_lights` keeps `meta.json`'s `lights` equal to it (no export). The viewer packs them into one float texture row per light and adds them in two shaders: the map's `CustomShader` (with the cut-out and the time-of-day tint) and a model `CustomShader` attached only while lights are on. The formulas are Rhino's Rendered mode's, measured: see `LAMPS` in `index.html`. With the model shader on, the time-of-day tint is applied inside it (a model colour is multiplied after Cesium's tone curve and would cap the lights).
 
 Geometry is exported in metres in a local east/north/up frame around the EarthAnchorPoint. Project identity and design-set membership are stored in Document User Text. Local runtime settings, credentials, views, and exchange files live in the user's application-data folder, outside the repository.
 
